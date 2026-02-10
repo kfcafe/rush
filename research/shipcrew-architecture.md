@@ -813,7 +813,320 @@ By the time the user reaches the chat interface, the mVM is already running.
 
 ---
 
-## 12. Phase 2: Channels
+## 12. Agent Automation
+
+The agent is not just a chatbot that responds when spoken to. It is an autonomous system that can schedule its own work, react to external events, monitor the world, manage long-running tasks, and evolve its own capabilities. This section defines the automation primitives the agent has access to.
+
+### 12.1 Cron: Scheduled Execution
+
+The agent can schedule tasks to run at specified times using cron expressions.
+
+**Harness tool:**
+```
+schedule_set(name: string, cron: string, prompt: string) → Schedule
+schedule_list() → Schedule[]
+schedule_remove(name: string) → void
+```
+
+**How it works:**
+1. Agent calls `schedule_set("morning-briefing", "0 7 * * *", "Check GitHub PRs, review overnight email, summarize key items, send me a briefing")`
+2. Schedule is written to `/data/config/schedules.json` on the persistent disk
+3. The control plane's cron service reads customer schedules and wakes the mVM at the right time
+4. mVM boots → harness delivers the scheduled prompt to Pi → agent executes → mVM sleeps
+5. Output is stored in conversation history and/or sent via notify_owner
+
+**What this enables:**
+- Morning briefings (news, PRs, emails, calendar)
+- Recurring reports (weekly analytics, monthly summaries)
+- Periodic monitoring (check competitor pricing page every 6 hours)
+- Knowledge base maintenance (review stale documents weekly)
+- Content generation (draft weekly newsletter every Friday)
+- Self-maintenance (compact old conversations, clean up temp files)
+
+**Guardrails:**
+- Each scheduled run is budgeted against the owner's token ceiling
+- Circuit breakers apply to scheduled runs identically to interactive sessions
+- Owner can view, pause, or delete schedules from the dashboard
+- Max 50 active schedules per agent
+
+### 12.2 Hooks: Event-Driven Reactions
+
+The agent can register webhooks that wake it when external events occur.
+
+**Harness tool:**
+```
+hook_register(name: string, prompt: string) → { webhook_url: string }
+hook_list() → Hook[]
+hook_remove(name: string) → void
+```
+
+**How it works:**
+1. Agent calls `hook_register("github-pr-opened", "A new PR was opened. Review the changes, summarize them, and notify me with your assessment.")`
+2. Harness generates a unique webhook URL: `https://hooks.platform.com/{customer_id}/{hook_id}`
+3. Agent (or owner) configures the external service (GitHub, Stripe, etc.) to POST to this URL
+4. When the webhook fires, the control plane wakes the mVM and delivers the payload + the agent's prompt
+5. Agent processes the event and takes action
+
+**Webhook payload is delivered as a tool result**, not a user message. The agent sees:
+```
+[HOOK: github-pr-opened]
+Payload: { "action": "opened", "pull_request": { "title": "...", ... } }
+Your instructions: "Review the changes, summarize them, and notify me."
+```
+
+**What this enables:**
+- GitHub: PR opened → agent reviews code, posts summary
+- Stripe: Payment failed → agent drafts a follow-up email to the customer
+- Uptime monitor: Site down → agent investigates, checks status pages, notifies owner with context
+- Form submission: New lead → agent researches the company, drafts a personalized response
+- Calendar: Event starting soon → agent pulls relevant docs and sends a prep briefing
+- CI/CD: Build failed → agent reads the logs, identifies the issue, suggests a fix
+- Custom: any service that can POST a webhook
+
+**Guardrails:**
+- Each hook invocation is budgeted and circuit-broken
+- Hooks are rate-limited (max 10 invocations per hook per hour, configurable)
+- Webhook URL includes a secret token for authentication (reject unsigned requests)
+- Owner can view hook invocation history in the activity feed
+- Max 25 active hooks per agent
+
+### 12.3 Watchers: Continuous Monitoring
+
+The agent can set up watchers that periodically check a resource and react to changes. Watchers are built on top of cron but with built-in state tracking (what changed since last check).
+
+**Harness tool:**
+```
+watcher_set(name: string, target: string, interval: string, prompt: string) → Watcher
+watcher_list() → Watcher[]
+watcher_remove(name: string) → void
+```
+
+**How it works:**
+1. Agent calls `watcher_set("competitor-pricing", "https://competitor.com/pricing", "6h", "Compare the current page to the last snapshot. If anything changed, summarize the changes and notify me.")`
+2. Harness creates a cron schedule at the specified interval
+3. On each run: agent fetches the target, compares to the saved snapshot at `/data/watchers/{name}/last.md`
+4. If changed: agent executes the prompt with a diff of old vs. new
+5. If unchanged: agent logs "no change" and goes back to sleep
+
+**What this enables:**
+- Price monitoring (competitor pricing pages, product listings)
+- Content tracking (blog posts, documentation changes, news pages)
+- API monitoring (check an endpoint, alert on different response)
+- Regulatory tracking (watch a government page for policy updates)
+- Job board monitoring ("Watch Y Combinator's job board for ML roles")
+- Dependency tracking ("Watch this GitHub repo's releases page for new versions")
+
+**Guardrails:**
+- Minimum interval: 1 hour (prevent accidental DoS of external sites)
+- Snapshot storage counts against disk quota
+- Watcher runs are budgeted like any scheduled execution
+- Owner can see all watchers and their last-check status in the dashboard
+
+### 12.4 Pipelines: Multi-Step Workflows
+
+The agent can define and run multi-step workflows that chain actions together. A pipeline is a sequence of steps where each step's output feeds the next.
+
+**Implementation:** The agent builds pipelines as scripts on the persistent disk. No special harness tool needed — this is self-extension using bash, Python, or any language the agent chooses. The harness provides a `pipeline_run` convenience tool for common patterns.
+
+**Harness tool:**
+```
+pipeline_run(name: string, steps: PipelineStep[]) → PipelineResult
+
+PipelineStep:
+  action: string      // "search", "fetch", "summarize", "write", "notify"
+  params: object      // action-specific parameters
+  on_failure: string  // "stop" | "skip" | "retry"
+```
+
+**Example — Weekly newsletter pipeline:**
+```
+pipeline_run("weekly-newsletter", [
+  { action: "search", params: { query: "AI agent news this week", count: 10 } },
+  { action: "summarize", params: { format: "bullet points per article" } },
+  { action: "fetch", params: { url: "owner's bookmarked articles from /data/files/bookmarks.md" } },
+  { action: "summarize", params: { format: "integrate bookmarks with search results" } },
+  { action: "write", params: { path: "/data/files/newsletter-2026-02-10.md" } },
+  { action: "notify", params: { message: "Weekly newsletter draft is ready for your review." } }
+])
+```
+
+**What this enables:**
+- Research workflows (search → read → synthesize → write report)
+- Content pipelines (gather sources → draft → refine → save)
+- Data processing (fetch CSV → analyze → generate chart description → save)
+- Onboarding automations (new employee? → generate welcome doc → compile relevant links → send)
+- Due diligence (given a company name → search → fetch website → analyze → write brief)
+
+**Guardrails:**
+- Each step is individually circuit-broken (a step that fails N times stops the pipeline)
+- Total pipeline execution time capped (default: 5 minutes, configurable)
+- Each step's output is logged in the audit trail
+- Pipeline can be paused or cancelled by the owner mid-execution
+
+### 12.5 Daemons: Long-Running Background Tasks
+
+The agent can start background tasks that run alongside the main conversation. A daemon is a process the agent starts that continues working while the agent handles other messages.
+
+**Harness tool:**
+```
+daemon_start(name: string, prompt: string) → Daemon
+daemon_status(name: string) → DaemonStatus
+daemon_stop(name: string) → void
+daemon_list() → Daemon[]
+```
+
+**How it works:**
+1. Owner: "Index all 200 files in my knowledge base and create a summary document"
+2. Agent starts a daemon: `daemon_start("kb-indexing", "Read every file in /data/knowledge/, create a summary index at /data/knowledge/INDEX.md with a one-paragraph description of each file")`
+3. The daemon runs as a separate Pi session inside the same mVM
+4. Agent responds immediately: "I've started indexing your knowledge base in the background. I'll notify you when it's done."
+5. Owner can keep chatting about other things while the daemon works
+6. When the daemon completes, the harness sends a notification
+
+**What this enables:**
+- Large-scale file processing without blocking conversation
+- Long research tasks ("Research these 20 companies and write a brief on each")
+- Bulk operations ("Rename and reorganize all files in /data/files/ by topic")
+- Data migration ("Read this CSV, create individual markdown files for each row")
+- Knowledge base bootstrapping ("Read all these URLs and build a knowledge base")
+
+**Guardrails:**
+- Max 3 concurrent daemons per mVM (resource limits)
+- Daemon budget counts against the same token ceiling as the main agent
+- Daemons have a maximum runtime (default: 30 minutes)
+- Daemons cannot interact with the owner directly — only via notify_owner
+- Daemon activity appears in the activity feed
+- Owner can stop any daemon from the dashboard
+
+### 12.6 Chains: Conditional Automation
+
+The agent can set up if-this-then-that rules that fire based on conditions within the agent's own environment.
+
+**Harness tool:**
+```
+chain_set(name: string, trigger: ChainTrigger, action: string) → Chain
+chain_list() → Chain[]
+chain_remove(name: string) → void
+
+ChainTrigger:
+  type: "file_changed" | "budget_threshold" | "schedule_completed" | "hook_received" | "keyword"
+  params: object
+```
+
+**Examples:**
+- `chain_set("auto-backup-notes", { type: "file_changed", params: { path: "/data/files/notes/*" } }, "Copy the changed file to /data/backups/ with a timestamp")`
+- `chain_set("budget-warning", { type: "budget_threshold", params: { percent: 50 } }, "Notify the owner that we've used 50% of the monthly budget and summarize what it was spent on")`
+- `chain_set("pr-digest-followup", { type: "schedule_completed", params: { schedule: "morning-briefing" } }, "If any PRs need urgent review, send a separate high-priority notification")`
+- `chain_set("customer-mention", { type: "keyword", params: { keyword: "urgent", source: "hooks" } }, "Escalate: immediately notify the owner with full context")`
+
+**What this enables:**
+- Reactive file management (auto-organize, auto-backup)
+- Budget awareness (progressive warnings, automatic throttling)
+- Workflow chaining (schedule completes → trigger follow-up action)
+- Keyword alerting (urgent messages get special handling)
+- Self-healing (if a watcher fails, automatically re-register it)
+
+**Guardrails:**
+- Chains cannot trigger other chains (prevents infinite loops)
+- Each chain execution is budgeted and circuit-broken
+- Max 25 active chains per agent
+- Owner can view and manage all chains in the dashboard
+
+### 12.7 Delegation: Sub-Agent Tasks
+
+The agent can spawn focused sub-tasks that operate in isolation with a specific goal.
+
+**Harness tool:**
+```
+delegate(task: string, context?: string[], timeout?: number) → DelegationResult
+```
+
+**How it works:**
+1. Agent decides a task is self-contained and would benefit from focused execution
+2. Calls `delegate("Research the top 5 competitors in the AI assistant space and write a comparison table", ["/data/knowledge/company-brief.md"])`
+3. Harness starts a separate Pi session with a fresh context, injecting only the specified context files
+4. Sub-task runs to completion (or timeout), produces output
+5. Output is returned to the main agent session as a tool result
+6. Main agent continues its conversation with the research done
+
+**Why delegation matters:**
+- **Context window efficiency**: The main conversation isn't polluted with intermediate research steps
+- **Parallel work**: Agent can delegate multiple research tasks simultaneously
+- **Focused execution**: Sub-tasks have clean context, reducing hallucination from irrelevant conversation history
+- **Reliability**: If a sub-task fails, it doesn't crash the main session
+
+**What this enables:**
+- Deep research without losing conversational context
+- Parallel analysis ("Compare these 3 approaches" → delegate each comparison)
+- Code generation in isolation (write a tool, test it, return the result)
+- Document generation (delegate a full report, get it back as a finished file)
+
+**Guardrails:**
+- Max 3 concurrent delegations
+- Each delegation has a timeout (default: 5 minutes)
+- Delegated tasks share the owner's token budget
+- Delegated tasks have access to the persistent disk but inherit all harness protections
+- Delegation results are logged in the audit trail
+
+### 12.8 Memory Evolution: Learning and Adaptation
+
+The agent continuously improves by observing patterns in its own behavior and the owner's preferences.
+
+**Built-in behaviors (no tool needed — system prompt instructs the agent):**
+
+- **Preference learning**: Agent notices "the owner always asks me to format things as bullet points" and writes to memory: "Owner prefers bullet point format"
+- **Shortcut creation**: Agent notices "the owner asks for a PR summary every morning" and proposes: "Want me to schedule this as an automatic morning briefing?"
+- **Tool evolution**: Agent notices a self-built tool fails often and iterates: rewrites it, tests it, deploys the improved version
+- **Knowledge gap detection**: Agent notices it can't answer certain questions and suggests: "I don't have information about X. Want to upload some docs or should I research it?"
+
+**Harness support:**
+- `memory_write` and `memory_read` tools for persistent preferences
+- Agent's memory is loaded into the system prompt on every boot
+- Memory file at `/data/memory/preferences.md` is human-readable and editable by the owner
+
+**What this enables:**
+- The agent gets better over time without explicit training
+- Owner doesn't have to repeat preferences
+- Agent proactively suggests automations based on observed patterns
+- Agent maintains and improves its own tools
+
+**Guardrails:**
+- Memory file size capped (prevent unbounded growth — default 50KB)
+- Owner can view and edit the memory file in the dashboard
+- Agent cannot modify its own system prompt — only the memory file
+- Memory is included in backups
+
+### 12.9 Summary: Automation Primitives
+
+| Primitive | Trigger | What It Does | Key Enablement |
+|-----------|---------|-------------|----------------|
+| **Cron** | Time-based | Run a task on a schedule | Proactive work without being asked |
+| **Hooks** | External event | React to webhooks from services | Integration with the outside world |
+| **Watchers** | Change detection | Monitor a resource, alert on changes | Awareness of external state |
+| **Pipelines** | Agent-initiated | Chain multi-step workflows | Complex tasks as composable steps |
+| **Daemons** | Agent-initiated | Background processing | Long tasks without blocking chat |
+| **Chains** | Internal event | If-this-then-that within the agent's environment | Reactive self-management |
+| **Delegation** | Agent-initiated | Spawn focused sub-tasks | Parallel work, clean context |
+| **Memory** | Continuous | Learn and adapt over time | Gets better without explicit training |
+
+**Combined power example:**
+
+> Owner: "I want to stay on top of AI news."
+>
+> Agent:
+> 1. Sets up a **watcher** on 5 key AI news sources
+> 2. Creates a **cron** job every morning to compile changes into a briefing
+> 3. Builds a **pipeline**: gather changes → search for related context → summarize → write digest → notify
+> 4. Uses **delegation** to research each major story in parallel
+> 5. Learns the owner's preferences via **memory**: "Owner cares most about agent frameworks and open-source models"
+> 6. Sets a **chain**: if any story mentions the owner's company, send a high-priority notification immediately
+> 7. Over time, refines which sources are most relevant and adjusts the watchers
+
+The owner said one sentence. The agent built an entire automation system. That's the product.
+
+---
+
+## 13. Phase 2: Channels
 
 Not in MVP, but the architecture supports it. Documented here for completeness.
 
@@ -847,7 +1160,7 @@ The agent is not restricted in what tools it can use for external messages — b
 
 ---
 
-## 13. Development Roadmap
+## 14. Development Roadmap
 
 ### Phase 0: MVP (6-8 weeks)
 
@@ -864,18 +1177,25 @@ The agent is not restricted in what tools it can use for external messages — b
 **MVP exit criteria:**
 - User signs up and chats with their agent in <2 minutes
 - Agent searches the web, manages files, creates tools
+- Agent can set cron schedules and they execute correctly
+- Agent can register webhooks and react to events
 - Data is encrypted at rest
 - Circuit breakers and journaling work
 - Dashboard shows chat + activity feed
-- mVM sleeps and wakes correctly
+- mVM sleeps and wakes correctly (on message, on cron, on hook)
 
-### Phase 1: Polish (6-8 weeks)
+### Phase 1: Polish + Automation (6-8 weeks)
 - Knowledge base upload UI
 - Seatbelt notification UI (inline countdown, confirmation)
 - Settings page (budget, breakers, personality, egress rules)
 - Key rotation and recovery phrase
 - Billing integration (Stripe)
-- Scheduled tool execution
+- Watchers (change detection on URLs)
+- Pipelines (multi-step workflows)
+- Daemons (background processing)
+- Delegation (sub-agent tasks)
+- Memory evolution (preference learning, shortcut suggestion)
+- Dashboard: automation management (view/edit/delete schedules, hooks, watchers, chains)
 - Onboarding improvements based on beta feedback
 
 ### Phase 2: Channels + Retrieval (6-8 weeks)
@@ -883,6 +1203,7 @@ The agent is not restricted in what tools it can use for external messages — b
 - WhatsApp integration (Meta Business API)
 - Email integration (IMAP/SMTP or SendGrid)
 - Context tagging for external messages
+- Chains (conditional if-this-then-that automation)
 - Vector search for knowledge base (embeddings + local vector store)
 - Integration framework (OAuth-gated API calls)
 
@@ -895,7 +1216,7 @@ The agent is not restricted in what tools it can use for external messages — b
 
 ---
 
-## 14. Technical Decisions Log
+## 15. Technical Decisions Log
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
