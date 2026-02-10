@@ -813,9 +813,315 @@ By the time the user reaches the chat interface, the mVM is already running.
 
 ---
 
-## 12. Agent Automation
+## 12. Personal Assistant Capabilities
 
-The agent is not just a chatbot that responds when spoken to. It is an autonomous system that can schedule its own work, react to external events, monitor the world, manage long-running tasks, and evolve its own capabilities. This section defines the automation primitives the agent has access to.
+The automation primitives (section 13) are the engine. This section defines what the engine drives — the capabilities that make someone say "I can't imagine going back to not having this."
+
+A great personal assistant is valuable because they **know you, remember everything, anticipate needs, and handle the work you don't want to think about.** The tools below are designed to replicate that.
+
+### 12.1 People: Relationship Intelligence
+
+The agent maintains a private CRM — a living map of every person the owner interacts with.
+
+**Harness tools:**
+```
+people_remember(name: string, details: string) → void
+people_lookup(name: string) → PersonRecord
+people_list(filter?: string) → PersonRecord[]
+people_update(name: string, details: string) → void
+```
+
+**What the agent tracks (in `/data/people/`):**
+- Name, role, organization, how the owner knows them
+- Key facts mentioned in conversation ("Sarah is allergic to shellfish", "Marcus prefers morning meetings")
+- Last interaction date and context
+- Communication preferences
+- Relationship notes ("warm intro from David", "met at re:Invent 2025")
+- Important dates (birthdays, work anniversaries — if shared by the owner)
+
+**How it works:**
+- The agent naturally extracts people information from conversations and stores it
+- When the owner mentions someone, the agent silently looks them up and uses that context
+- "Draft an email to Sarah" → agent already knows Sarah's communication style, recent topics, and relationship context
+
+**What this enables:**
+- "What do I know about Marcus Chen?" → full relationship context
+- "When did I last talk to the Acme team?" → interaction history
+- "Who do I know at Google?" → filtered relationship search
+- "Remind me to follow up with Sarah after her vacation" → relationship + scheduling
+- Before a meeting: agent pulls up attendees' profiles and recent interactions
+- "It's been 3 weeks since you connected with David. Want me to draft a check-in?" → proactive relationship maintenance
+
+**Why this matters:** This is the tool that makes the agent feel like it *knows you*. Every other PA capability gets better when the agent understands who the people are.
+
+### 12.2 Commitments: Promise Tracking
+
+The agent tracks every commitment the owner makes (and commitments made to the owner) and follows up.
+
+**Harness tools:**
+```
+commitment_add(description: string, who: string, due?: string, direction: "made" | "received") → Commitment
+commitment_list(filter?: string) → Commitment[]
+commitment_complete(id: string) → void
+commitment_snooze(id: string, until: string) → void
+```
+
+**How it works:**
+- Agent detects commitments in conversation: "I'll send that to you by Friday" → auto-creates a commitment
+- Agent detects commitments received: "Alice said she'd review the doc this week" → tracks it
+- Daily or weekly, the agent reviews open commitments and nudges the owner
+- Overdue commitments get escalated in priority
+
+**What this enables:**
+- "What have I promised this week?" → see all outstanding commitments
+- "What are people supposed to get back to me on?" → track inbound commitments
+- Agent: "You told Marcus you'd send the proposal by Friday. It's Thursday. Want me to draft it?" → proactive nudge
+- Agent: "Alice was supposed to review the doc by Wednesday. It's Friday. Want me to send a follow-up?" → accountability
+- Nothing falls through the cracks
+
+**Why this matters:** The #1 thing that makes a human PA invaluable is that they remember what you said you'd do — and make sure you do it. This is the tool that builds that trust.
+
+### 12.3 Briefings: Contextual Preparation
+
+The agent prepares the owner for what's coming — meetings, deadlines, events — without being asked.
+
+**Built on top of:** Cron + People + Commitments + Knowledge + Web Search
+
+**How it works:**
+- Agent checks the owner's calendar (when connected) or scheduled events
+- Before a meeting: agent looks up attendees (people tool), pulls relevant docs (knowledge), checks for open commitments with those people, and searches for recent news about their company
+- Sends a briefing via notify_owner (or displays when the owner opens the chat)
+
+**Example briefing:**
+```
+Meeting in 30 minutes: "Q1 Planning" with Sarah (VP Eng, Acme Corp)
+
+People:
+- Sarah Chen — VP Engineering at Acme. You met at re:Invent.
+  Last spoke Jan 28 about the API partnership.
+- She prefers concise agendas and dislikes open-ended discussions.
+
+Open items:
+- You promised to send pricing tiers (due today)
+- Sarah was going to share their API usage data (overdue by 3 days)
+
+Relevant docs:
+- /data/knowledge/acme-partnership-brief.md
+- /data/files/pricing-tiers-draft.md
+
+Recent news:
+- Acme announced Series C funding ($45M) on Feb 3
+```
+
+**What this enables:**
+- Never walk into a meeting unprepared
+- Relationship context is always at hand
+- Open commitments are surfaced at the right moment
+- Owner can ask "anything I should know before my 2pm?" and get a complete answer
+
+### 12.4 Inbox Intelligence: Communication Triage
+
+The agent helps the owner manage the firehose of incoming communication. Not by taking over their inbox, but by helping them process it.
+
+**Phase 2 capability (requires email channel integration), but the mental model matters now.**
+
+**How it works:**
+- Agent reads incoming email (when connected via IMAP or webhook)
+- Classifies each message: urgent / needs response / FYI / spam
+- Drafts responses for straightforward messages
+- Surfaces important items via the briefing system
+- Tracks response commitments ("You opened this email 3 days ago and haven't replied")
+
+**What this enables:**
+- "What emails need my attention today?" → triaged, prioritized list
+- "Draft a reply to Tom's email" → agent has full context
+- "Anything urgent from the last 2 hours?" → agent filters and summarizes
+- Agent: "You have 3 emails waiting for a response, the oldest is 4 days old. Want me to draft replies?" → proactive inbox management
+
+**For MVP (web chat only):** The agent can't read email, but the owner can forward emails into the chat or paste them. Agent processes and files them. This is a manual version of the same capability that validates the value before building the integration.
+
+### 12.5 Decision Support: Structured Thinking
+
+The agent helps the owner think through decisions with structured analysis, not just freeform conversation.
+
+**Harness tools:**
+```
+compare(options: string[], criteria?: string[]) → ComparisonMatrix
+pros_cons(topic: string) → Analysis
+decision_record(title: string, context: string, decision: string, reasoning: string) → void
+decision_history(filter?: string) → DecisionRecord[]
+```
+
+**How it works:**
+- Owner: "Should we go with Postgres or DynamoDB?"
+- Agent: builds a comparison matrix based on the owner's specific context (from knowledge base and conversation history), researches current benchmarks (web search), and presents a structured analysis
+- Owner makes the decision → agent records it with context and reasoning
+- Months later: "Why did we choose Postgres?" → agent retrieves the decision record with full reasoning
+
+**What this enables:**
+- Structured comparisons that account for the owner's specific situation
+- Pros/cons that reference actual constraints from previous conversations
+- Decision journal that captures reasoning at the time of the decision (not reconstructed months later)
+- "What decisions have we made about infrastructure?" → searchable decision history
+- Pattern recognition: "You tend to prioritize simplicity over performance in your decisions"
+
+### 12.6 Content Workspace: Writing Partner
+
+The agent is a collaborative writing partner, not just a text generator. It maintains working documents that evolve through conversation.
+
+**Harness tools:**
+```
+draft_create(name: string, type: string, brief?: string) → Draft
+draft_revise(name: string, instructions: string) → Draft
+draft_list() → Draft[]
+draft_export(name: string, format: "md" | "txt" | "html") → string
+```
+
+**How it works:**
+- Owner: "Start a blog post about our approach to AI safety"
+- Agent creates a draft at `/data/drafts/ai-safety-post.md`
+- Owner: "Make the intro punchier" → agent revises
+- Owner: "Add a section about the mVM architecture" → agent expands
+- Owner: "OK, that's good. Polish it and save the final version" → agent finalizes
+- Draft history is preserved — the owner can go back to any version (via the journal)
+
+**What this enables:**
+- Long-form writing that evolves through conversation
+- The agent maintains state between sessions ("Where were we on that blog post?")
+- Style learning over time: the agent learns how the owner writes
+- Templates: "Draft an investor update in the same format as last month's"
+- Multi-session editing: start a document today, refine it tomorrow, publish next week
+
+### 12.7 Daily Digest: Autonomous Summarization
+
+The agent produces a daily summary of everything that happened — what it did, what changed, what needs attention.
+
+**Built on top of:** Cron + Audit Trail + Commitments + Watchers
+
+**Example daily digest (sent automatically at a configured time):**
+
+```
+Good morning. Here's your daily digest for Feb 10:
+
+What I did overnight:
+- Morning briefing prepared (3 meetings today)
+- PR digest: 2 new PRs on rush, 1 needs your review
+- Competitor watcher: no changes detected
+
+Needs your attention:
+- Overdue: send pricing tiers to Sarah (due yesterday)
+- 3 unread emails flagged as important
+- Budget: 43% used this month, on track
+
+Today's schedule:
+- 10:00 — Q1 Planning with Sarah Chen (briefing ready)
+- 14:00 — Team standup
+- 16:30 — 1:1 with David (no prep needed)
+
+Pending commitments:
+- Pricing tiers for Sarah (overdue)
+- Architecture review for Marcus (due Thursday)
+- Blog post draft (no deadline, last edited Feb 7)
+```
+
+**What this enables:**
+- Start the day knowing exactly what needs attention
+- No context switching to check different tools
+- Agent accountability — see what it did and what it chose to flag
+- Passive awareness — even if the owner doesn't chat all day, they get a digest
+
+### 12.8 Quick Capture: Frictionless Input
+
+The agent accepts quick, messy input and organizes it properly.
+
+**How it works (system prompt behavior, no special tool):**
+- Owner: "remind me sarah birthday march 15" → agent creates a reminder AND updates Sarah's people record
+- Owner: "save this: API rate limit is 1000/min for pro tier" → agent writes to knowledge AND memory
+- Owner: "todo: review marcus proposal by thursday" → agent creates a commitment with deadline
+- Owner: "thought: what if we offered per-seat pricing instead?" → agent saves to a dedicated thoughts/ideas file
+- Owner: [pastes a URL with no context] → agent fetches it, summarizes it, asks if the owner wants to save it
+
+**The principle:** The owner should be able to throw raw thoughts at the agent like Post-It notes, and the agent sorts them into the right place. Zero friction for the human, the agent does the organizing.
+
+**What this enables:**
+- The agent becomes the single place to dump thoughts, tasks, reminders, ideas
+- Nothing gets lost because the owner didn't format it properly
+- The agent's organizational structure emerges from the owner's actual behavior
+- Mobile-friendly: quick messages on the go, agent handles the rest
+
+### 12.9 Context Awareness: Wearing Multiple Hats
+
+Many owners have multiple roles — founder, parent, community organizer, investor. The agent should understand which hat the owner is wearing and behave accordingly.
+
+**Harness tools:**
+```
+context_set(name: string, instructions?: string) → void
+context_get() → string
+context_list() → Context[]
+```
+
+**How it works:**
+- Owner defines contexts: "work", "personal", "board member", "side project"
+- Each context can have its own instructions, knowledge files, people, and automations
+- Owner switches context: "Switch to personal" or the agent detects it from conversation cues
+- In "work" context: agent is professional, references work knowledge base, uses work people records
+- In "personal" context: agent is casual, references personal notes, different set of reminders
+
+**What this enables:**
+- Clean separation between work and personal without separate accounts
+- Different automation behavior per context (work watchers don't fire personal notifications)
+- The agent knows which hat you're wearing and adjusts tone, knowledge, and behavior
+- "As a board member, what should I prepare for the next meeting?" → agent uses board context
+
+### 12.10 Proactive Intelligence: Anticipation
+
+The highest-value PA capability: doing things before being asked.
+
+**Built on top of:** Memory + Commitments + People + Cron + Chains
+
+**Behaviors (system prompt + automation primitives):**
+
+- **Deadline awareness**: "Your proposal for Marcus is due tomorrow. The draft is 60% complete. Want to finish it now?"
+- **Relationship nudges**: "You haven't heard from Alice in 3 weeks. Last time you spoke, she was deciding on the vendor. Want me to check in?"
+- **Pattern recognition**: "You usually review PRs on Monday morning. There are 4 waiting. Want me to summarize them?"
+- **Opportunity surfacing**: "Based on your interest in AI safety, there's a new paper from Anthropic published today that's relevant to your blog post draft."
+- **Conflict detection**: "Your 2pm meeting overlaps with the deadline for Sarah's pricing tiers. Want to address the pricing first?"
+- **Resource preparation**: "You're meeting with a new contact, Jamie Torres, tomorrow. I don't have any info on them. Want me to research?"
+
+**What this enables:**
+- The agent anticipates instead of waiting
+- Important things surface at the right time
+- The owner feels like someone is looking out for them
+- Over time, the agent gets better at knowing what's worth surfacing (via memory)
+
+**Guardrails:**
+- Proactive messages are rate-limited (max 5 unsolicited nudges per day, configurable)
+- Owner can adjust proactiveness level: "less proactive" / "more proactive"
+- Each proactive action is logged — owner can see why the agent decided to act
+- Agent never acts autonomously on proactive insights — it suggests, the owner decides
+
+### 12.11 Summary: Personal Assistant Tool Map
+
+| Capability | What It Replaces | Key Value |
+|------------|-----------------|-----------|
+| **People** | CRM, contact notes, mental memory | Agent knows who everyone is |
+| **Commitments** | Task lists, sticky notes, forgotten promises | Nothing falls through the cracks |
+| **Briefings** | Manual meeting prep, scrambling for context | Always prepared |
+| **Inbox Intelligence** | Email triage, response drafting | Communication under control |
+| **Decision Support** | Spreadsheets, pro/con lists, forgotten reasoning | Better decisions, remembered reasoning |
+| **Content Workspace** | Google Docs, drafting from scratch | Collaborative writing partner |
+| **Daily Digest** | Morning routine of checking 5 apps | One place, everything you need |
+| **Quick Capture** | Notes apps, voice memos, Post-Its | Dump thoughts, agent organizes |
+| **Context Awareness** | Mental context switching, separate tools per role | One agent, multiple hats |
+| **Proactive Intelligence** | A human assistant who knows your patterns | Anticipation, not just reaction |
+
+**The compound effect:** Each capability is useful alone. Together, they compound. The agent that knows your people, tracks your commitments, prepares your briefings, and learns your patterns becomes something that's genuinely hard to replace. That's the retention moat.
+
+---
+
+## 13. Agent Automation
+
+The automation primitives are the engine that drives the personal assistant capabilities above. The agent is not just a chatbot that responds when spoken to. It is an autonomous system that can schedule its own work, react to external events, monitor the world, manage long-running tasks, and evolve its own capabilities. This section defines the automation primitives the agent has access to.
 
 ### 12.1 Cron: Scheduled Execution
 
@@ -1126,11 +1432,11 @@ The owner said one sentence. The agent built an entire automation system. That's
 
 ---
 
-## 13. Phase 2: Channels
+## 14. Phase 2: Channels
 
 Not in MVP, but the architecture supports it. Documented here for completeness.
 
-### 12.1 Channel Gateway Extension
+### 14.1 Channel Gateway Extension
 
 Phase 2 adds external channels alongside the web chat:
 
@@ -1148,7 +1454,7 @@ The Channel Gateway:
 - Forwards to the customer's mVM via the same internal protocol as the web gateway
 - Relays agent responses back to the originating channel
 
-### 12.2 External Input Security
+### 14.2 External Input Security
 
 When external input arrives, the harness:
 1. Injects the context tag into the message before Pi sees it
@@ -1160,7 +1466,7 @@ The agent is not restricted in what tools it can use for external messages — b
 
 ---
 
-## 14. Development Roadmap
+## 15. Development Roadmap
 
 ### Phase 0: MVP (6-8 weeks)
 
@@ -1179,12 +1485,15 @@ The agent is not restricted in what tools it can use for external messages — b
 - Agent searches the web, manages files, creates tools
 - Agent can set cron schedules and they execute correctly
 - Agent can register webhooks and react to events
+- People tracking works (agent remembers who you mention)
+- Quick capture works (dump thoughts, agent organizes)
+- Commitment tracking works (agent detects and tracks promises)
 - Data is encrypted at rest
 - Circuit breakers and journaling work
 - Dashboard shows chat + activity feed
 - mVM sleeps and wakes correctly (on message, on cron, on hook)
 
-### Phase 1: Polish + Automation (6-8 weeks)
+### Phase 1: Polish + PA Capabilities (6-8 weeks)
 - Knowledge base upload UI
 - Seatbelt notification UI (inline countdown, confirmation)
 - Settings page (budget, breakers, personality, egress rules)
@@ -1195,6 +1504,11 @@ The agent is not restricted in what tools it can use for external messages — b
 - Daemons (background processing)
 - Delegation (sub-agent tasks)
 - Memory evolution (preference learning, shortcut suggestion)
+- Briefing system (meeting prep, daily digest)
+- Decision support (comparison, pros/cons, decision journal)
+- Content workspace (collaborative drafting)
+- Context awareness (multiple hats/roles)
+- Proactive intelligence (anticipation, nudges)
 - Dashboard: automation management (view/edit/delete schedules, hooks, watchers, chains)
 - Onboarding improvements based on beta feedback
 
@@ -1203,6 +1517,7 @@ The agent is not restricted in what tools it can use for external messages — b
 - WhatsApp integration (Meta Business API)
 - Email integration (IMAP/SMTP or SendGrid)
 - Context tagging for external messages
+- Inbox intelligence (email triage, draft responses)
 - Chains (conditional if-this-then-that automation)
 - Vector search for knowledge base (embeddings + local vector store)
 - Integration framework (OAuth-gated API calls)
@@ -1216,7 +1531,7 @@ The agent is not restricted in what tools it can use for external messages — b
 
 ---
 
-## 15. Technical Decisions Log
+## 16. Technical Decisions Log
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
