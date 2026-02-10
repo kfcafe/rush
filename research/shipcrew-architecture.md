@@ -124,6 +124,60 @@ Responsibilities:
 
 The gateway is the only component that needs to be always-on. It is stateless (mVM assignments come from Supabase) and horizontally scalable.
 
+#### Internal Message Format
+
+All messages between components (browser → gateway → mVM, and reverse) use a single JSON envelope:
+
+```json
+{
+  "id": "msg_uuid",
+  "type": "user_message | agent_response | agent_activity | system_event",
+  "timestamp": "2026-02-10T14:32:01Z",
+  "payload": {
+    "content": "...",
+    "attachments": [],
+    "metadata": {}
+  },
+  "source": {
+    "channel": "web | telegram | whatsapp | email | cron | hook",
+    "trust": "owner | external | system",
+    "identity": "user_id or sender_id"
+  }
+}
+```
+
+Message types:
+- `user_message`: Owner or external sender input. Payload contains text and optional attachments.
+- `agent_response`: Agent's reply. Payload contains text, optionally tool call indicators for the activity feed.
+- `agent_activity`: Real-time tool call / status updates streamed to the dashboard activity feed. Not stored in conversation history.
+- `system_event`: mVM lifecycle events (waking, sleeping, error, circuit breaker trip). Routed to the dashboard, not to Pi.
+
+The gateway forwards `user_message` payloads to the mVM and relays `agent_response` and `agent_activity` back to the browser. It does not inspect payload content.
+
+#### mVM Communication Protocol
+
+The gateway communicates with running mVMs over a local HTTP/WebSocket connection on the host's internal network:
+
+```
+Gateway ──HTTP POST──▶ mVM Scheduler (wake request)
+Gateway ──WebSocket──▶ mVM :9100 (message relay, bidirectional)
+mVM     ──HTTP POST──▶ Control Plane API (usage reports, status updates)
+```
+
+- **Wake**: Gateway sends `POST /wake` to the mVM scheduler with the customer ID. Scheduler boots the mVM and returns when it signals ready.
+- **Relay**: Gateway opens a WebSocket to `ws://{host}:{mvm_port}/relay`. Messages flow bidirectionally using the internal message format above.
+- **Usage reporting**: The mVM's harness sends periodic usage updates (token counts, storage used) to `POST /api/usage` on the control plane. Payload contains only metrics, never conversation content.
+- **Health**: mVM scheduler polls each running mVM at `GET /health` every 30 seconds. Expected response: `200 OK` with uptime and memory usage.
+
+#### Connection Loss Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| Browser disconnects (tab closed, network drop) | Gateway holds the mVM connection open for 60 seconds. If the browser reconnects within that window, it resumes. After 60 seconds, gateway closes the mVM connection. mVM continues running until its inactivity timeout. |
+| Gateway → mVM connection drops | Gateway retries 3 times over 10 seconds. On failure, returns `system_event` to browser: "Your agent is temporarily unreachable. Reconnecting..." and asks the scheduler to restart the mVM. |
+| mVM crashes mid-response | Scheduler detects via failed health check. Restarts the mVM (up to 3 attempts). Gateway queues the user's last message and re-delivers after restart. Browser sees: "Your agent restarted. Resuming..." |
+| Scheduler is down | Gateway cannot wake sleeping mVMs. Running mVMs continue working. Gateway returns: "Unable to wake your agent. Please try again shortly." Scheduler restarts via systemd watchdog. |
+
 ### 3.2 mVM Scheduler
 
 Manages the lifecycle of Firecracker microVMs on the bare metal hosts.
@@ -411,6 +465,22 @@ Pi's built-in tools run as-is inside the mVM. The harness observes but does not 
 - `journal_list` — list recent journaled operations
 - `notify_owner` — send a notification to the owner (rate-limited)
 
+**Personal assistant tools (harness-managed, structured data):**
+- `people_remember`, `people_lookup`, `people_list`, `people_update` — relationship intelligence (section 13.1)
+- `commitment_add`, `commitment_list`, `commitment_complete`, `commitment_snooze` — promise tracking (section 13.2)
+- `compare`, `pros_cons`, `decision_record`, `decision_history` — decision support (section 13.5)
+- `draft_create`, `draft_revise`, `draft_list`, `draft_export` — content workspace (section 13.6)
+- `context_set`, `context_get`, `context_list` — context awareness (section 13.9)
+
+**Automation tools (harness-managed):**
+- `schedule_set`, `schedule_list`, `schedule_remove` — cron scheduling (section 14.1)
+- `hook_register`, `hook_list`, `hook_remove` — webhook registration (section 14.2)
+- `watcher_set`, `watcher_list`, `watcher_remove` — change monitoring (section 14.3)
+- `pipeline_run` — multi-step workflows (section 14.4)
+- `daemon_start`, `daemon_status`, `daemon_stop`, `daemon_list` — background tasks (section 14.5)
+- `chain_set`, `chain_list`, `chain_remove` — conditional automation (section 14.6)
+- `delegate` — sub-agent tasks (section 14.7)
+
 ### 4.3 System Prompt
 
 The system prompt is constructed from layers:
@@ -594,8 +664,7 @@ The persistent disk is mounted at `/data` inside the mVM. This is the agent's en
 │   └── egress.json                  # Egress allowlist/blocklist (optional)
 │
 ├── conversations/                   # Pi conversation history
-│   ├── session-{id}.jsonl           # Append-only JSONL trees (Pi native format)
-│   ├── session-{id}.jsonl           # One file per session
+│   ├── session-{id}.jsonl           # Append-only JSONL trees, one file per session (Pi native format)
 │   └── ...
 │
 ├── knowledge/                       # Owner's knowledge base
@@ -765,7 +834,7 @@ The persistent disk is mounted at `/data` inside the mVM. This is the agent's en
 
 ## 8. Knowledge Base
 
-### 7.1 Ingestion
+### 8.1 Ingestion
 
 The agent itself handles knowledge base ingestion — there is no separate pipeline. The owner uploads files through the dashboard, files are written to `/data/knowledge/` on the persistent disk, and the agent indexes them.
 
@@ -787,7 +856,7 @@ The agent itself handles knowledge base ingestion — there is no separate pipel
 4. Agent is notified: "New knowledge file uploaded: {filename}"
 5. Agent reads and indexes the file (using its own tools — grep, read, etc.)
 
-### 7.2 Retrieval
+### 8.2 Retrieval
 
 For MVP, the agent uses its native tools to search the knowledge base:
 - `grep` for keyword search across `/data/knowledge/`
@@ -802,7 +871,7 @@ The agent can build its own indexing tools as needed (self-extension). For examp
 
 ## 9. Self-Extension
 
-### 8.1 How It Works
+### 9.1 How It Works
 
 The agent can create tools by writing code to the persistent disk and executing it. This is not a special mechanism — it's what Pi already does with bash and file tools.
 
@@ -820,14 +889,14 @@ The agent can create tools by writing code to the persistent disk and executing 
 - Circuit breakers prevent runaway execution
 - Seatbelt notification fires on the first run of a new tool ("I've built a new tool: pr_digest. Running it now. Here's what it does...")
 
-### 8.2 Boundaries
+### 9.2 Boundaries
 
 - Tools can only access the mVM's filesystem and network
 - Tools share the agent's budget ceiling (token spend, request rate)
 - Tools are subject to the same circuit breakers as built-in tools
 - The agent cannot modify the harness itself (harness runs as a separate process/layer with different permissions than Pi)
 
-### 8.3 Scheduled Execution
+### 9.3 Scheduled Execution
 
 For tools the agent wants to run on a schedule (like the PR digest example):
 - Agent writes a cron-style schedule to `/data/config/schedules.json`
@@ -839,7 +908,7 @@ For tools the agent wants to run on a schedule (like the PR digest example):
 
 ## 10. Dashboard
 
-### 9.1 Layout
+### 10.1 Layout
 
 The dashboard is a single-page web application. Two main views:
 
@@ -856,7 +925,18 @@ The dashboard is a single-page web application. Two main views:
 - Budget usage bar (tokens consumed vs. ceiling)
 - Journal entries with "roll back" buttons
 
-### 9.2 "Waking Up" UX
+#### Activity Feed Delivery
+
+The activity feed is powered by `agent_activity` messages streamed over the same WebSocket connection used for chat:
+
+1. Harness intercepts each tool call and emits an `agent_activity` message with: tool name, parameters (sanitized — no full file contents), status (started/completed/failed), duration.
+2. Gateway relays these to the browser in real time.
+3. Dashboard renders them as a live feed alongside the chat.
+4. When the browser is not connected, activity events are still written to `/data/audit/trail.jsonl`. On reconnect, the dashboard fetches recent activity from the mVM via a `GET /activity?since={timestamp}` endpoint on the mVM's local HTTP server.
+
+This means the activity feed requires no separate infrastructure — it piggybacks on the existing WebSocket and audit trail.
+
+### 10.2 "Waking Up" UX
 
 When the user sends a message and the mVM is sleeping:
 
@@ -865,9 +945,9 @@ When the user sends a message and the mVM is sleeping:
 3. Animation transitions to "Thinking..." (standard LLM response indicator)
 4. Response streams in
 
-The "waking up" state is distinct from "thinking" — it sets expectations correctly. The animation should feel like the agent is stretching and getting ready, not like something is broken.
+The "waking up" state is visually distinct from "thinking" to set correct expectations. The transition should feel smooth and intentional.
 
-### 9.3 Settings
+### 10.3 Settings
 
 Accessible from the dashboard:
 
@@ -886,7 +966,7 @@ Accessible from the dashboard:
 
 ## 11. Hosting Infrastructure
 
-### 10.1 Bare Metal Hosts
+### 11.1 Bare Metal Hosts
 
 **Provider (MVP):** Hetzner dedicated servers
 
@@ -907,7 +987,7 @@ Accessible from the dashboard:
 - At ~1000 customers: 5-10 hosts, simple round-robin with capacity checking
 - At ~10,000 customers: dedicated scheduler service, multi-region, automated provisioning
 
-### 10.2 Firecracker Configuration
+### 11.2 Firecracker Configuration
 
 Each mVM runs with:
 
@@ -934,7 +1014,7 @@ Each mVM runs with:
 
 **Networking:** Each mVM gets a TAP device NATed through the host. Outbound internet works. Inbound is only from the gateway service. mVMs cannot talk to each other.
 
-### 10.3 Cost Model
+### 11.3 Cost Model
 
 **Per-mVM costs (approximate):**
 - Compute (when running): ~$0.005/hour (fractional share of host)
@@ -957,11 +1037,34 @@ Each mVM runs with:
 - Anthropic API is the variable cost — depends on usage patterns
 - Healthy margins at even modest scale
 
+### 11.4 Ops Monitoring
+
+The platform needs visibility into its own health independent of customer mVMs.
+
+**Metrics collected (mVM scheduler → Supabase + Grafana/Prometheus):**
+- mVM count by state (running, sleeping, errored) per host
+- Boot time p50/p95/p99
+- Host resource usage (CPU, memory, disk, network) per bare metal server
+- Gateway WebSocket connection count and latency
+- mVM crash rate and restart count
+- Cron/hook wake events per hour
+
+**Alerting (PagerDuty or Grafana Alerting):**
+- Host memory >85%: warn. >95%: page.
+- Any mVM in ERRORED state for >5 minutes: page.
+- Gateway error rate >1%: warn.
+- Scheduler unresponsive: page.
+- Backup failure for any customer: warn after 1 missed backup, page after 2.
+
+**Logging:**
+- All control plane components log to stdout, collected by a lightweight agent (Vector or Promtail) and shipped to a central log store (Grafana Loki or similar).
+- mVM internal logs stay on the encrypted disk. The platform sees only lifecycle events (start, stop, crash, resource usage), never conversation content.
+
 ---
 
 ## 12. Onboarding Flow
 
-### 11.1 Sign Up (target: <2 minutes to first message)
+### 12.1 Sign Up (target: <2 minutes to first message)
 
 ```
 1. Land on marketing site → "Get Started" button
@@ -989,7 +1092,7 @@ Each mVM runs with:
 - Set budget ceiling
 - Adjust seatbelt preferences
 
-### 11.2 mVM Provisioning (happens during step 3-5)
+### 12.2 mVM Provisioning (happens during step 3-5)
 
 While the user is completing setup:
 1. mVM scheduler selects a host
@@ -1004,13 +1107,11 @@ By the time the user reaches the chat interface, the mVM is already running.
 
 ## 13. Personal Assistant Capabilities
 
-The automation primitives (section 14) are the engine. This section defines what the engine drives — the capabilities that make someone say "I can't imagine going back to not having this."
-
-A great personal assistant is valuable because they **know you, remember everything, anticipate needs, and handle the work you don't want to think about.** The tools below are designed to replicate that.
+The automation primitives (section 14) provide scheduling, event handling, and background execution. This section defines the domain capabilities those primitives drive.
 
 ### 13.1 People: Relationship Intelligence
 
-The agent maintains a private CRM — a living map of every person the owner interacts with.
+Private CRM stored in `/data/people/`. The agent extracts relationship data from conversations and uses it for context.
 
 **Harness tools:**
 ```
@@ -1020,32 +1121,15 @@ people_list(filter?: string) → PersonRecord[]
 people_update(name: string, details: string) → void
 ```
 
-**What the agent tracks (in `/data/people/`):**
-- Name, role, organization, how the owner knows them
-- Key facts mentioned in conversation ("Sarah is allergic to shellfish", "Marcus prefers morning meetings")
-- Last interaction date and context
-- Communication preferences
-- Relationship notes ("warm intro from David", "met at re:Invent 2025")
-- Important dates (birthdays, work anniversaries — if shared by the owner)
+**Tracked fields:** name, role, organization, relationship origin, key facts from conversation, last interaction date/context, communication preferences, relationship notes, important dates.
 
-**How it works:**
-- The agent naturally extracts people information from conversations and stores it
-- When the owner mentions someone, the agent silently looks them up and uses that context
-- "Draft an email to Sarah" → agent already knows Sarah's communication style, recent topics, and relationship context
+**Behavior:** The agent extracts people information from conversations automatically. When the owner mentions someone, the agent looks them up silently and uses that context. Before meetings, the agent can pull up attendee profiles and recent interactions.
 
-**What this enables:**
-- "What do I know about Marcus Chen?" → full relationship context
-- "When did I last talk to the Acme team?" → interaction history
-- "Who do I know at Google?" → filtered relationship search
-- "Remind me to follow up with Sarah after her vacation" → relationship + scheduling
-- Before a meeting: agent pulls up attendees' profiles and recent interactions
-- "It's been 3 weeks since you connected with David. Want me to draft a check-in?" → proactive relationship maintenance
-
-**Why this matters:** This is the tool that makes the agent feel like it *knows you*. Every other PA capability gets better when the agent understands who the people are.
+**Example queries:** "What do I know about Marcus Chen?", "Who do I know at Google?", "When did I last talk to the Acme team?". Proactive: "It's been 3 weeks since you connected with David. Want me to draft a check-in?"
 
 ### 13.2 Commitments: Promise Tracking
 
-The agent tracks every commitment the owner makes (and commitments made to the owner) and follows up.
+Tracks commitments the owner makes and commitments made to the owner. Stored in `/data/commitments/`.
 
 **Harness tools:**
 ```
@@ -1055,83 +1139,44 @@ commitment_complete(id: string) → void
 commitment_snooze(id: string, until: string) → void
 ```
 
-**How it works:**
-- Agent detects commitments in conversation: "I'll send that to you by Friday" → auto-creates a commitment
-- Agent detects commitments received: "Alice said she'd review the doc this week" → tracks it
-- Daily or weekly, the agent reviews open commitments and nudges the owner
-- Overdue commitments get escalated in priority
+**Behavior:** Agent detects commitments in conversation ("I'll send that by Friday" → auto-creates). Tracks both directions: promises made and promises received. Reviews open commitments daily, nudges the owner on overdue items, escalates by priority.
 
-**What this enables:**
-- "What have I promised this week?" → see all outstanding commitments
-- "What are people supposed to get back to me on?" → track inbound commitments
-- Agent: "You told Marcus you'd send the proposal by Friday. It's Thursday. Want me to draft it?" → proactive nudge
-- Agent: "Alice was supposed to review the doc by Wednesday. It's Friday. Want me to send a follow-up?" → accountability
-- Nothing falls through the cracks
-
-**Why this matters:** The #1 thing that makes a human PA invaluable is that they remember what you said you'd do — and make sure you do it. This is the tool that builds that trust.
+**Example:** "You told Marcus you'd send the proposal by Friday. It's Thursday. Want me to draft it?" or "Alice was supposed to review the doc by Wednesday. It's Friday. Want me to send a follow-up?"
 
 ### 13.3 Briefings: Contextual Preparation
 
-The agent prepares the owner for what's coming — meetings, deadlines, events — without being asked.
+Proactive preparation for meetings, deadlines, and events. Combines data from People, Commitments, Knowledge, and Web Search.
 
-**Built on top of:** Cron + People + Commitments + Knowledge + Web Search
+**Dependencies:** Cron + People + Commitments + Knowledge + Web Search
 
-**How it works:**
-- Agent checks the owner's calendar (when connected) or scheduled events
-- Before a meeting: agent looks up attendees (people tool), pulls relevant docs (knowledge), checks for open commitments with those people, and searches for recent news about their company
-- Sends a briefing via notify_owner (or displays when the owner opens the chat)
+**Behavior:** Before a meeting, the agent looks up attendees (people), pulls relevant docs (knowledge), checks open commitments with those people, and searches for recent news. Delivers via `notify_owner` or inline when the owner opens the chat.
 
-**Example briefing:**
+**Example output:**
 ```
 Meeting in 30 minutes: "Q1 Planning" with Sarah (VP Eng, Acme Corp)
 
 People:
-- Sarah Chen — VP Engineering at Acme. You met at re:Invent.
-  Last spoke Jan 28 about the API partnership.
-- She prefers concise agendas and dislikes open-ended discussions.
+- Sarah Chen — VP Engineering at Acme. Met at re:Invent.
+  Last spoke Jan 28 re: API partnership.
+- Prefers concise agendas.
 
 Open items:
 - You promised to send pricing tiers (due today)
-- Sarah was going to share their API usage data (overdue by 3 days)
+- Sarah was going to share API usage data (overdue 3 days)
 
-Relevant docs:
-- /data/knowledge/acme-partnership-brief.md
-- /data/files/pricing-tiers-draft.md
-
-Recent news:
-- Acme announced Series C funding ($45M) on Feb 3
+Relevant: /data/knowledge/acme-partnership-brief.md
+Recent: Acme announced Series C ($45M) on Feb 3
 ```
-
-**What this enables:**
-- Never walk into a meeting unprepared
-- Relationship context is always at hand
-- Open commitments are surfaced at the right moment
-- Owner can ask "anything I should know before my 2pm?" and get a complete answer
 
 ### 13.4 Inbox Intelligence: Communication Triage
 
-The agent helps the owner manage the firehose of incoming communication. Not by taking over their inbox, but by helping them process it.
+**Phase 2 (requires email channel integration).** Classifies incoming email (urgent / needs response / FYI / spam), drafts responses, surfaces important items via briefings, tracks response commitments.
 
-**Phase 2 capability (requires email channel integration), but the mental model matters now.**
-
-**How it works:**
-- Agent reads incoming email (when connected via IMAP or webhook)
-- Classifies each message: urgent / needs response / FYI / spam
-- Drafts responses for straightforward messages
-- Surfaces important items via the briefing system
-- Tracks response commitments ("You opened this email 3 days ago and haven't replied")
-
-**What this enables:**
-- "What emails need my attention today?" → triaged, prioritized list
-- "Draft a reply to Tom's email" → agent has full context
-- "Anything urgent from the last 2 hours?" → agent filters and summarizes
-- Agent: "You have 3 emails waiting for a response, the oldest is 4 days old. Want me to draft replies?" → proactive inbox management
-
-**For MVP (web chat only):** The agent can't read email, but the owner can forward emails into the chat or paste them. Agent processes and files them. This is a manual version of the same capability that validates the value before building the integration.
+**MVP workaround:** Owner forwards or pastes emails into chat. Agent processes and files them manually.
 
 ### 13.5 Decision Support: Structured Thinking
 
-The agent helps the owner think through decisions with structured analysis, not just freeform conversation.
+Structured analysis tools for decision-making. Decisions are recorded in `/data/decisions/` with context and reasoning for later retrieval.
 
 **Harness tools:**
 ```
@@ -1141,22 +1186,11 @@ decision_record(title: string, context: string, decision: string, reasoning: str
 decision_history(filter?: string) → DecisionRecord[]
 ```
 
-**How it works:**
-- Owner: "Should we go with Postgres or DynamoDB?"
-- Agent: builds a comparison matrix based on the owner's specific context (from knowledge base and conversation history), researches current benchmarks (web search), and presents a structured analysis
-- Owner makes the decision → agent records it with context and reasoning
-- Months later: "Why did we choose Postgres?" → agent retrieves the decision record with full reasoning
-
-**What this enables:**
-- Structured comparisons that account for the owner's specific situation
-- Pros/cons that reference actual constraints from previous conversations
-- Decision journal that captures reasoning at the time of the decision (not reconstructed months later)
-- "What decisions have we made about infrastructure?" → searchable decision history
-- Pattern recognition: "You tend to prioritize simplicity over performance in your decisions"
+**Behavior:** Agent builds comparison matrices using the owner's context (knowledge base, conversation history, web search). When the owner decides, the agent records the decision with full reasoning. Searchable later: "Why did we choose Postgres?" retrieves the original decision record.
 
 ### 13.6 Content Workspace: Writing Partner
 
-The agent is a collaborative writing partner, not just a text generator. It maintains working documents that evolve through conversation.
+Collaborative long-form writing with persistent drafts in `/data/drafts/`. Drafts evolve through conversation across multiple sessions, with full version history via the journal.
 
 **Harness tools:**
 ```
@@ -1166,81 +1200,50 @@ draft_list() → Draft[]
 draft_export(name: string, format: "md" | "txt" | "html") → string
 ```
 
-**How it works:**
-- Owner: "Start a blog post about our approach to AI safety"
-- Agent creates a draft at `/data/drafts/ai-safety-post.md`
-- Owner: "Make the intro punchier" → agent revises
-- Owner: "Add a section about the mVM architecture" → agent expands
-- Owner: "OK, that's good. Polish it and save the final version" → agent finalizes
-- Draft history is preserved — the owner can go back to any version (via the journal)
-
-**What this enables:**
-- Long-form writing that evolves through conversation
-- The agent maintains state between sessions ("Where were we on that blog post?")
-- Style learning over time: the agent learns how the owner writes
-- Templates: "Draft an investor update in the same format as last month's"
-- Multi-session editing: start a document today, refine it tomorrow, publish next week
+**Behavior:** Agent creates, revises, and maintains working documents. Learns the owner's writing style over time. Supports templates ("Draft an investor update in the same format as last month's") and multi-session editing.
 
 ### 13.7 Daily Digest: Autonomous Summarization
 
-The agent produces a daily summary of everything that happened — what it did, what changed, what needs attention.
+Automated daily summary of agent activity, pending items, and upcoming schedule. Sent at a configured time via cron.
 
-**Built on top of:** Cron + Audit Trail + Commitments + Watchers
+**Dependencies:** Cron + Audit Trail + Commitments + Watchers
 
-**Example daily digest (sent automatically at a configured time):**
-
+**Example output:**
 ```
-Good morning. Here's your daily digest for Feb 10:
+Daily digest for Feb 10:
 
-What I did overnight:
+Overnight activity:
 - Morning briefing prepared (3 meetings today)
-- PR digest: 2 new PRs on rush, 1 needs your review
+- PR digest: 2 new PRs on rush, 1 needs review
 - Competitor watcher: no changes detected
 
-Needs your attention:
+Needs attention:
 - Overdue: send pricing tiers to Sarah (due yesterday)
-- 3 unread emails flagged as important
-- Budget: 43% used this month, on track
+- Budget: 43% used this month
 
-Today's schedule:
+Today:
 - 10:00 — Q1 Planning with Sarah Chen (briefing ready)
 - 14:00 — Team standup
-- 16:30 — 1:1 with David (no prep needed)
 
 Pending commitments:
 - Pricing tiers for Sarah (overdue)
 - Architecture review for Marcus (due Thursday)
-- Blog post draft (no deadline, last edited Feb 7)
 ```
-
-**What this enables:**
-- Start the day knowing exactly what needs attention
-- No context switching to check different tools
-- Agent accountability — see what it did and what it chose to flag
-- Passive awareness — even if the owner doesn't chat all day, they get a digest
 
 ### 13.8 Quick Capture: Frictionless Input
 
-The agent accepts quick, messy input and organizes it properly.
+System prompt behavior (no special tool). The agent accepts unstructured input and routes it to the correct store.
 
-**How it works (system prompt behavior, no special tool):**
-- Owner: "remind me sarah birthday march 15" → agent creates a reminder AND updates Sarah's people record
-- Owner: "save this: API rate limit is 1000/min for pro tier" → agent writes to knowledge AND memory
-- Owner: "todo: review marcus proposal by thursday" → agent creates a commitment with deadline
-- Owner: "thought: what if we offered per-seat pricing instead?" → agent saves to a dedicated thoughts/ideas file
-- Owner: [pastes a URL with no context] → agent fetches it, summarizes it, asks if the owner wants to save it
+**Examples:**
+- "remind me sarah birthday march 15" → creates reminder + updates Sarah's people record
+- "save this: API rate limit is 1000/min for pro tier" → writes to knowledge + memory
+- "todo: review marcus proposal by thursday" → creates commitment with deadline
+- "thought: what if we offered per-seat pricing instead?" → saves to `/data/files/thoughts/`
+- [pasted URL with no context] → fetches, summarizes, asks if owner wants to save
 
-**The principle:** The owner should be able to throw raw thoughts at the agent like Post-It notes, and the agent sorts them into the right place. Zero friction for the human, the agent does the organizing.
+### 13.9 Context Awareness: Multiple Roles
 
-**What this enables:**
-- The agent becomes the single place to dump thoughts, tasks, reminders, ideas
-- Nothing gets lost because the owner didn't format it properly
-- The agent's organizational structure emerges from the owner's actual behavior
-- Mobile-friendly: quick messages on the go, agent handles the rest
-
-### 13.9 Context Awareness: Wearing Multiple Hats
-
-Many owners have multiple roles — founder, parent, community organizer, investor. The agent should understand which hat the owner is wearing and behave accordingly.
+Owners can define named contexts (e.g., "work", "personal", "board member") with separate instructions, knowledge scopes, and automation rules. Stored in `/data/config/contexts.json`.
 
 **Harness tools:**
 ```
@@ -1249,45 +1252,27 @@ context_get() → string
 context_list() → Context[]
 ```
 
-**How it works:**
-- Owner defines contexts: "work", "personal", "board member", "side project"
-- Each context can have its own instructions, knowledge files, people, and automations
-- Owner switches context: "Switch to personal" or the agent detects it from conversation cues
-- In "work" context: agent is professional, references work knowledge base, uses work people records
-- In "personal" context: agent is casual, references personal notes, different set of reminders
-
-**What this enables:**
-- Clean separation between work and personal without separate accounts
-- Different automation behavior per context (work watchers don't fire personal notifications)
-- The agent knows which hat you're wearing and adjusts tone, knowledge, and behavior
-- "As a board member, what should I prepare for the next meeting?" → agent uses board context
+**Behavior:** Owner switches context explicitly ("Switch to personal") or agent detects from conversation cues. Each context scopes: tone, knowledge files, people records, and which automations are active.
 
 ### 13.10 Proactive Intelligence: Anticipation
 
-The highest-value PA capability: doing things before being asked.
+Agent takes initiative based on observed patterns and upcoming events. Driven by system prompt instructions combined with automation primitives.
 
-**Built on top of:** Memory + Commitments + People + Cron + Chains
+**Dependencies:** Memory + Commitments + People + Cron + Chains
 
-**Behaviors (system prompt + automation primitives):**
-
-- **Deadline awareness**: "Your proposal for Marcus is due tomorrow. The draft is 60% complete. Want to finish it now?"
-- **Relationship nudges**: "You haven't heard from Alice in 3 weeks. Last time you spoke, she was deciding on the vendor. Want me to check in?"
-- **Pattern recognition**: "You usually review PRs on Monday morning. There are 4 waiting. Want me to summarize them?"
-- **Opportunity surfacing**: "Based on your interest in AI safety, there's a new paper from Anthropic published today that's relevant to your blog post draft."
-- **Conflict detection**: "Your 2pm meeting overlaps with the deadline for Sarah's pricing tiers. Want to address the pricing first?"
-- **Resource preparation**: "You're meeting with a new contact, Jamie Torres, tomorrow. I don't have any info on them. Want me to research?"
-
-**What this enables:**
-- The agent anticipates instead of waiting
-- Important things surface at the right time
-- The owner feels like someone is looking out for them
-- Over time, the agent gets better at knowing what's worth surfacing (via memory)
+**Behaviors:**
+- **Deadline awareness**: surfaces approaching deadlines with draft status
+- **Relationship nudges**: flags stale contacts with last interaction context
+- **Pattern recognition**: detects recurring behavior and offers to automate
+- **Opportunity surfacing**: connects new information to existing interests/projects
+- **Conflict detection**: identifies scheduling or commitment overlaps
+- **Resource preparation**: pre-researches unknown contacts before meetings
 
 **Guardrails:**
-- Proactive messages are rate-limited (max 5 unsolicited nudges per day, configurable)
-- Owner can adjust proactiveness level: "less proactive" / "more proactive"
-- Each proactive action is logged — owner can see why the agent decided to act
-- Agent never acts autonomously on proactive insights — it suggests, the owner decides
+- Rate-limited: max 5 unsolicited nudges per day (configurable)
+- Owner can adjust proactiveness level
+- All proactive actions are logged with reasoning
+- Agent suggests only — does not act autonomously on proactive insights
 
 ### 13.11 Summary: Personal Assistant Tool Map
 
@@ -1304,13 +1289,13 @@ The highest-value PA capability: doing things before being asked.
 | **Context Awareness** | Mental context switching, separate tools per role | One agent, multiple hats |
 | **Proactive Intelligence** | A human assistant who knows your patterns | Anticipation, not just reaction |
 
-**The compound effect:** Each capability is useful alone. Together, they compound. The agent that knows your people, tracks your commitments, prepares your briefings, and learns your patterns becomes something that's genuinely hard to replace. That's the retention moat.
+These capabilities compound: people context improves briefings, commitment tracking feeds the daily digest, memory evolution makes proactive intelligence more accurate over time.
 
 ---
 
 ## 14. Agent Automation
 
-The automation primitives are the engine that drives the personal assistant capabilities above. The agent is not just a chatbot that responds when spoken to. It is an autonomous system that can schedule its own work, react to external events, monitor the world, manage long-running tasks, and evolve its own capabilities. This section defines the automation primitives the agent has access to.
+Eight primitives that enable the agent to operate autonomously: schedule work, react to events, monitor external state, run multi-step workflows, process tasks in the background, chain conditional logic, delegate sub-tasks, and learn over time.
 
 ### 14.1 Cron: Scheduled Execution
 
@@ -1326,23 +1311,16 @@ schedule_remove(name: string) → void
 **How it works:**
 1. Agent calls `schedule_set("morning-briefing", "0 7 * * *", "Check GitHub PRs, review overnight email, summarize key items, send me a briefing")`
 2. Schedule is written to `/data/config/schedules.json` on the persistent disk
-3. The control plane's cron service reads customer schedules and wakes the mVM at the right time
-4. mVM boots → harness delivers the scheduled prompt to Pi → agent executes → mVM sleeps
-5. Output is stored in conversation history and/or sent via notify_owner
+3. Harness also pushes the schedule to the control plane via `POST /api/schedules` (schedule name, cron expression, and customer ID only — the prompt text stays on disk)
+4. The control plane's cron service stores schedule metadata in Supabase and wakes the mVM at the right time
+5. mVM boots → harness reads the full schedule (including prompt) from `/data/config/schedules.json` → delivers the prompt to Pi → agent executes → mVM sleeps
+6. Output is stored in conversation history and/or sent via notify_owner
 
-**What this enables:**
-- Morning briefings (news, PRs, emails, calendar)
-- Recurring reports (weekly analytics, monthly summaries)
-- Periodic monitoring (check competitor pricing page every 6 hours)
-- Knowledge base maintenance (review stale documents weekly)
-- Content generation (draft weekly newsletter every Friday)
-- Self-maintenance (compact old conversations, clean up temp files)
+**Schedule synchronization:** The control plane stores only cron expressions and schedule names — enough to know when to wake a mVM. The prompt text and full schedule details remain on the encrypted disk, accessible only when the mVM is running. When the harness modifies a schedule, it pushes the updated cron expression to the control plane. On mVM boot, the harness reconciles any drift between local and control plane schedule metadata.
 
-**Guardrails:**
-- Each scheduled run is budgeted against the owner's token ceiling
-- Circuit breakers apply to scheduled runs identically to interactive sessions
-- Owner can view, pause, or delete schedules from the dashboard
-- Max 50 active schedules per agent
+**Use cases:** morning briefings, recurring reports, periodic monitoring, knowledge base maintenance, content generation, self-maintenance (compact conversations, clean temp files).
+
+**Guardrails:** budgeted against owner's token ceiling, circuit breakers apply identically to interactive sessions, owner can view/pause/delete from dashboard, max 50 active schedules.
 
 ### 14.2 Hooks: Event-Driven Reactions
 
@@ -1357,10 +1335,12 @@ hook_remove(name: string) → void
 
 **How it works:**
 1. Agent calls `hook_register("github-pr-opened", "A new PR was opened. Review the changes, summarize them, and notify me with your assessment.")`
-2. Harness generates a unique webhook URL: `https://hooks.platform.com/{customer_id}/{hook_id}`
-3. Agent (or owner) configures the external service (GitHub, Stripe, etc.) to POST to this URL
-4. When the webhook fires, the control plane wakes the mVM and delivers the payload + the agent's prompt
-5. Agent processes the event and takes action
+2. Harness registers the hook with the control plane via `POST /api/hooks` (hook name, customer ID). Control plane generates a unique webhook URL: `https://hooks.platform.com/{customer_id}/{hook_id}` and returns it.
+3. Harness writes the full hook definition (including prompt) to `/data/config/hooks.json` on the persistent disk.
+4. Agent (or owner) configures the external service (GitHub, Stripe, etc.) to POST to this URL.
+5. When the webhook fires, the control plane receives the payload, wakes the mVM, and forwards the payload.
+6. Harness reads the hook prompt from disk, combines it with the payload, and delivers it to Pi.
+7. Agent processes the event and takes action.
 
 **Webhook payload is delivered as a tool result**, not a user message. The agent sees:
 ```
@@ -1369,21 +1349,9 @@ Payload: { "action": "opened", "pull_request": { "title": "...", ... } }
 Your instructions: "Review the changes, summarize them, and notify me."
 ```
 
-**What this enables:**
-- GitHub: PR opened → agent reviews code, posts summary
-- Stripe: Payment failed → agent drafts a follow-up email to the customer
-- Uptime monitor: Site down → agent investigates, checks status pages, notifies owner with context
-- Form submission: New lead → agent researches the company, drafts a personalized response
-- Calendar: Event starting soon → agent pulls relevant docs and sends a prep briefing
-- CI/CD: Build failed → agent reads the logs, identifies the issue, suggests a fix
-- Custom: any service that can POST a webhook
+**Use cases:** GitHub PR review, Stripe payment failure follow-up, uptime monitoring, form submission processing, calendar prep briefings, CI/CD failure triage, any service that can POST a webhook.
 
-**Guardrails:**
-- Each hook invocation is budgeted and circuit-broken
-- Hooks are rate-limited (max 10 invocations per hook per hour, configurable)
-- Webhook URL includes a secret token for authentication (reject unsigned requests)
-- Owner can view hook invocation history in the activity feed
-- Max 25 active hooks per agent
+**Guardrails:** budgeted and circuit-broken per invocation, rate-limited (max 10/hook/hour, configurable), webhook URL includes secret token for auth, invocation history visible in activity feed, max 25 active hooks.
 
 ### 14.3 Watchers: Continuous Monitoring
 
@@ -1403,19 +1371,9 @@ watcher_remove(name: string) → void
 4. If changed: agent executes the prompt with a diff of old vs. new
 5. If unchanged: agent logs "no change" and goes back to sleep
 
-**What this enables:**
-- Price monitoring (competitor pricing pages, product listings)
-- Content tracking (blog posts, documentation changes, news pages)
-- API monitoring (check an endpoint, alert on different response)
-- Regulatory tracking (watch a government page for policy updates)
-- Job board monitoring ("Watch Y Combinator's job board for ML roles")
-- Dependency tracking ("Watch this GitHub repo's releases page for new versions")
+**Use cases:** competitor pricing, documentation changes, API endpoint monitoring, regulatory updates, job board tracking, dependency release monitoring.
 
-**Guardrails:**
-- Minimum interval: 1 hour (prevent accidental DoS of external sites)
-- Snapshot storage counts against disk quota
-- Watcher runs are budgeted like any scheduled execution
-- Owner can see all watchers and their last-check status in the dashboard
+**Guardrails:** minimum interval 1 hour (prevent DoS), snapshot storage counts against disk quota, budgeted like scheduled execution, all watchers visible in dashboard with last-check status.
 
 ### 14.4 Pipelines: Multi-Step Workflows
 
@@ -1445,18 +1403,9 @@ pipeline_run("weekly-newsletter", [
 ])
 ```
 
-**What this enables:**
-- Research workflows (search → read → synthesize → write report)
-- Content pipelines (gather sources → draft → refine → save)
-- Data processing (fetch CSV → analyze → generate chart description → save)
-- Onboarding automations (new employee? → generate welcome doc → compile relevant links → send)
-- Due diligence (given a company name → search → fetch website → analyze → write brief)
+**Use cases:** research workflows, content pipelines, data processing, onboarding automations, due diligence.
 
-**Guardrails:**
-- Each step is individually circuit-broken (a step that fails N times stops the pipeline)
-- Total pipeline execution time capped (default: 5 minutes, configurable)
-- Each step's output is logged in the audit trail
-- Pipeline can be paused or cancelled by the owner mid-execution
+**Guardrails:** each step individually circuit-broken, total execution time capped (default 5 minutes), each step logged in audit trail, owner can pause/cancel mid-execution.
 
 ### 14.5 Daemons: Long-Running Background Tasks
 
@@ -1478,20 +1427,9 @@ daemon_list() → Daemon[]
 5. Owner can keep chatting about other things while the daemon works
 6. When the daemon completes, the harness sends a notification
 
-**What this enables:**
-- Large-scale file processing without blocking conversation
-- Long research tasks ("Research these 20 companies and write a brief on each")
-- Bulk operations ("Rename and reorganize all files in /data/files/ by topic")
-- Data migration ("Read this CSV, create individual markdown files for each row")
-- Knowledge base bootstrapping ("Read all these URLs and build a knowledge base")
+**Use cases:** large-scale file processing, long research tasks, bulk operations, data migration, knowledge base bootstrapping.
 
-**Guardrails:**
-- Max 3 concurrent daemons per mVM (resource limits)
-- Daemon budget counts against the same token ceiling as the main agent
-- Daemons have a maximum runtime (default: 30 minutes)
-- Daemons cannot interact with the owner directly — only via notify_owner
-- Daemon activity appears in the activity feed
-- Owner can stop any daemon from the dashboard
+**Guardrails:** max 3 concurrent daemons, budget shared with main agent, maximum runtime 30 minutes (default), no direct owner interaction (only via `notify_owner`), activity appears in feed, owner can stop from dashboard.
 
 ### 14.6 Chains: Conditional Automation
 
@@ -1514,18 +1452,9 @@ ChainTrigger:
 - `chain_set("pr-digest-followup", { type: "schedule_completed", params: { schedule: "morning-briefing" } }, "If any PRs need urgent review, send a separate high-priority notification")`
 - `chain_set("customer-mention", { type: "keyword", params: { keyword: "urgent", source: "hooks" } }, "Escalate: immediately notify the owner with full context")`
 
-**What this enables:**
-- Reactive file management (auto-organize, auto-backup)
-- Budget awareness (progressive warnings, automatic throttling)
-- Workflow chaining (schedule completes → trigger follow-up action)
-- Keyword alerting (urgent messages get special handling)
-- Self-healing (if a watcher fails, automatically re-register it)
+**Use cases:** reactive file management, progressive budget warnings, workflow chaining, keyword alerting, self-healing (failed watcher auto-re-registers).
 
-**Guardrails:**
-- Chains cannot trigger other chains (prevents infinite loops)
-- Each chain execution is budgeted and circuit-broken
-- Max 25 active chains per agent
-- Owner can view and manage all chains in the dashboard
+**Guardrails:** chains cannot trigger other chains (prevents infinite loops), budgeted and circuit-broken, max 25 active chains, owner manages via dashboard.
 
 ### 14.7 Delegation: Sub-Agent Tasks
 
@@ -1544,24 +1473,9 @@ delegate(task: string, context?: string[], timeout?: number) → DelegationResul
 5. Output is returned to the main agent session as a tool result
 6. Main agent continues its conversation with the research done
 
-**Why delegation matters:**
-- **Context window efficiency**: The main conversation isn't polluted with intermediate research steps
-- **Parallel work**: Agent can delegate multiple research tasks simultaneously
-- **Focused execution**: Sub-tasks have clean context, reducing hallucination from irrelevant conversation history
-- **Reliability**: If a sub-task fails, it doesn't crash the main session
+**Benefits:** context window efficiency (main conversation stays clean), parallel work (multiple research tasks simultaneously), focused execution (clean context reduces hallucination), fault isolation (sub-task failure doesn't crash main session).
 
-**What this enables:**
-- Deep research without losing conversational context
-- Parallel analysis ("Compare these 3 approaches" → delegate each comparison)
-- Code generation in isolation (write a tool, test it, return the result)
-- Document generation (delegate a full report, get it back as a finished file)
-
-**Guardrails:**
-- Max 3 concurrent delegations
-- Each delegation has a timeout (default: 5 minutes)
-- Delegated tasks share the owner's token budget
-- Delegated tasks have access to the persistent disk but inherit all harness protections
-- Delegation results are logged in the audit trail
+**Guardrails:** max 3 concurrent delegations, timeout default 5 minutes, shared token budget, full harness protections apply, results logged in audit trail.
 
 ### 14.8 Memory Evolution: Learning and Adaptation
 
@@ -1579,17 +1493,7 @@ The agent continuously improves by observing patterns in its own behavior and th
 - Agent's memory is loaded into the system prompt on every boot
 - Memory file at `/data/memory/preferences.md` is human-readable and editable by the owner
 
-**What this enables:**
-- The agent gets better over time without explicit training
-- Owner doesn't have to repeat preferences
-- Agent proactively suggests automations based on observed patterns
-- Agent maintains and improves its own tools
-
-**Guardrails:**
-- Memory file size capped (prevent unbounded growth — default 50KB)
-- Owner can view and edit the memory file in the dashboard
-- Agent cannot modify its own system prompt — only the memory file
-- Memory is included in backups
+**Guardrails:** memory file size capped at 50KB, owner can view/edit memory in dashboard, agent cannot modify its own system prompt (only the memory file), included in backups.
 
 ### 14.9 Summary: Automation Primitives
 
@@ -1604,20 +1508,7 @@ The agent continuously improves by observing patterns in its own behavior and th
 | **Delegation** | Agent-initiated | Spawn focused sub-tasks | Parallel work, clean context |
 | **Memory** | Continuous | Learn and adapt over time | Gets better without explicit training |
 
-**Combined power example:**
-
-> Owner: "I want to stay on top of AI news."
->
-> Agent:
-> 1. Sets up a **watcher** on 5 key AI news sources
-> 2. Creates a **cron** job every morning to compile changes into a briefing
-> 3. Builds a **pipeline**: gather changes → search for related context → summarize → write digest → notify
-> 4. Uses **delegation** to research each major story in parallel
-> 5. Learns the owner's preferences via **memory**: "Owner cares most about agent frameworks and open-source models"
-> 6. Sets a **chain**: if any story mentions the owner's company, send a high-priority notification immediately
-> 7. Over time, refines which sources are most relevant and adjusts the watchers
-
-The owner said one sentence. The agent built an entire automation system. That's the product.
+**Combined example:** Owner says "I want to stay on top of AI news." Agent responds by: setting **watchers** on key sources, creating a **cron** job for a morning briefing, building a **pipeline** (gather → search context → summarize → notify), using **delegation** for parallel story research, learning preferences via **memory**, and setting a **chain** to escalate company mentions.
 
 ---
 
@@ -1756,7 +1647,7 @@ When external input arrives, the harness applies layered protections:
   - Sudden spike in outbound requests
   - These generate alerts in the activity feed, not automatic blocks
 
-**Residual risk:** Prompt injection via external messages remains possible. The defense is depth — even if one layer fails, subsequent layers limit the damage. The most important protection is Layer 4 (seatbelt escalation) because it limits what the agent can actually *do* when processing external input, regardless of whether injection succeeds.
+**Residual risk:** Prompt injection via external messages remains possible. Defense is in depth — each layer limits damage independently. Layer 4 (seatbelt escalation) is the most critical because it restricts what the agent can *do* during external input processing, regardless of whether injection succeeds.
 
 ### 15.4 Channel Configuration in Dashboard
 
