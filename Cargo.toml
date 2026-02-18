@@ -5,8 +5,8 @@ edition = "2021"
 authors = ["Rush Contributors"]
 description = "A modern Unix shell written in Rust"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/paiml/rush"
-repository = "https://github.com/paiml/rush"
+homepage = "https://github.com/opus-workshop/rush"
+repository = "https://github.com/opus-workshop/rush"
 keywords = ["shell", "posix", "terminal", "rust", "cli"]
 categories = ["command-line-utilities"]
 

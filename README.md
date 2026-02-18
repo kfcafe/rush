@@ -1,6 +1,6 @@
 # Rush
 
-[![CI](https://github.com/paiml/rush/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/paiml/rush/actions/workflows/integration-tests.yml)
+[![CI](https://github.com/opus-workshop/rush/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/opus-workshop/rush/actions/workflows/integration-tests.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
 A high-performance, POSIX-compliant shell written in Rust.
@@ -40,7 +40,7 @@ cargo build --release
 
 ### High-Performance Built-ins
 
-Rush implements 45+ commands natively in Rust, eliminating fork/exec overhead:
+Rush implements 50+ commands natively in Rust, eliminating fork/exec overhead:
 
 **File Operations**
 - `ls` - Directory listing with color, long format, human-readable sizes
@@ -277,16 +277,16 @@ rush/
 │   ├── parser/       # AST construction (nom)
 │   ├── executor/     # Command execution engine
 │   ├── runtime/      # Variable scoping, environment
-│   ├── builtins/     # 45+ native Rust commands
+│   ├── builtins/     # 50+ native Rust commands
 │   ├── daemon/       # Client-server architecture
 │   ├── signal.rs     # POSIX signal handling
 │   └── jobs/         # Job control subsystem
 ├── tests/
-│   ├── posix/        # POSIX compliance suite (133+ tests)
-│   └── *.rs          # Integration tests (48 test files)
+│   ├── posix/        # POSIX compliance suite
+│   └── *.rs          # Integration tests (47 test files, 1,800+ tests)
 ├── benches/          # Criterion benchmarks
 ├── examples/         # 12 example scripts
-└── docs/             # 60+ documentation files
+└── docs/             # 65+ documentation files
 ```
 
 ## Performance
@@ -334,8 +334,8 @@ cargo test --test signal_handling_tests
 ```
 
 **Test Coverage:**
-- 48 integration test files
-- 133+ POSIX compliance tests
+- 47 integration test files with 1,800+ tests
+- POSIX compliance suite
 - Criterion performance benchmarks
 
 ## Documentation
@@ -358,6 +358,8 @@ The `examples/` directory contains practical scripts:
 - `dependency_check.rush` - Check for outdated dependencies
 - `find_todos.rush` - Locate TODO/FIXME comments
 - `git_author_stats.rush` - Contributor statistics
+- `file_stats.rush` - File and directory statistics
+- `performance_profiler.rush` - Profile command performance
 - `security_audit.rush` - Basic security scanning
 - `test_coverage_analyzer.rush` - Analyze test coverage
 
@@ -367,7 +369,7 @@ Rush is under active development with a focus on POSIX compliance and performanc
 
 **Implemented:**
 - Core shell functionality (lexer, parser, executor)
-- 45+ high-performance builtins
+- 50+ high-performance builtins
 - Full job control (fg, bg, jobs, process groups)
 - POSIX control flow (if, while, until, for, case, functions)
 - Signal handling (trap, SIGCHLD, terminal signals)
@@ -376,11 +378,9 @@ Rush is under active development with a focus on POSIX compliance and performanc
 - Daemon mode for fast startup
 - JSON output mode
 - Interactive line editing (reedline)
-
-**In Progress:**
-- Advanced tab completion
-- Command history with fuzzy search
-- Project context detection
+- Tab completion with fuzzy matching and caching
+- Command history with fuzzy search and persistence
+- Project context detection (Rust, Node, Python, Go, Ruby, Java)
 - Undo capability for file operations
 
 ## Contributing
@@ -407,8 +407,6 @@ Rush builds on excellent Rust crates:
 - [reedline](https://github.com/nushell/reedline) - Line editing
 - [git2](https://github.com/rust-lang/git2-rs) - Git operations
 - [grep-*](https://github.com/BurntSushi/ripgrep) - Fast text search
-- [tokio](https://github.com/tokio-rs/tokio) - Async runtime
-
 ---
 
-**~27,000 lines of Rust** | **45+ builtins** | **133+ tests** | **17-427x faster**
+**~46,000 lines of Rust** | **50+ builtins** | **1,800+ tests** | **17-427x faster**
