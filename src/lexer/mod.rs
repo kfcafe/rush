@@ -160,9 +160,10 @@ pub enum Token {
     #[regex(r"[a-zA-Z0-9_.\-/]*\[[^\]]+\][a-zA-Z0-9_.*?\-/]+", |lex| lex.slice().to_string())]
     GlobPattern(String),
 
-    // Identifiers and commands (dots, colons, and tildes allowed so filenames like README.md,
-    // arguments like hello:world or http://url, and git refs like HEAD~1 tokenize as one word)
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_.\-:~]*", |lex| lex.slice().to_string())]
+    // Identifiers and commands (dots, colons, tildes, @, and / allowed so filenames like README.md,
+    // arguments like hello:world or http://url, git refs like HEAD~1, scoped npm packages like
+    // @scope/pkg, and bare paths like src/main.rs all tokenize as one word)
+    #[regex(r"[a-zA-Z_@][a-zA-Z0-9_.\-:~@/]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
     // Command substitution - needs custom parsing for nested cases
