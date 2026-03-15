@@ -160,10 +160,40 @@ pub enum Token {
     #[regex(r"[a-zA-Z0-9_.\-/]*\[[^\]]+\][a-zA-Z0-9_.*?\-/]+", |lex| lex.slice().to_string())]
     GlobPattern(String),
 
-    // Identifiers and commands (dots, colons, tildes, @, and / allowed so filenames like README.md,
-    // arguments like hello:world or http://url, git refs like HEAD~1, scoped npm packages like
-    // @scope/pkg, and bare paths like src/main.rs all tokenize as one word)
-    #[regex(r"[a-zA-Z_@][a-zA-Z0-9_.\-:~@/]*", |lex| lex.slice().to_string())]
+    // Flags — defined before Identifier so flag tokens win on same-length ties
+    // (e.g., +e matches PlusFlag not Identifier, -g matches ShortFlag not Identifier)
+
+    // Bare dash (used in cd - for previous directory)
+    #[token("-")]
+    Dash,
+
+    // Double dash alone (end of options marker, e.g., set -- args)
+    #[token("--")]
+    DoubleDash,
+
+    #[regex(r"-[a-zA-Z0-9]+", |lex| lex.slice().to_string())]
+    ShortFlag(String),
+
+    #[regex(r"--[a-zA-Z0-9][a-zA-Z0-9-]*(=[^\s|;&()<>]+)?", |lex| lex.slice().to_string())]
+    LongFlag(String),
+
+    // Plus flags (for unsetting shell options like +e, +u, +x)
+    #[regex(r"\+[a-zA-Z0-9]+", |lex| lex.slice().to_string())]
+    PlusFlag(String),
+
+    // Identifiers and commands — catch-all for shell words.
+    // In POSIX, a word is any sequence of non-metacharacter chars. This covers:
+    //   filenames: README.md          paths: src/main.rs
+    //   URLs: http://example.com      git refs: HEAD~1, HEAD^, HEAD^^
+    //   npm scopes: @scope/pkg        compilers: g++, c++
+    //   format args: +%Y-%m-%d        job IDs: %1
+    //   mid-word: foo#bar, a,b        emails: user@host
+    //
+    // Priority notes (logos: longest match wins; same length → first defined):
+    //   +e → PlusFlag (same length, PlusFlag defined first)
+    //   +%Y → Identifier (PlusFlag can't match %, Identifier wins by length)
+    //   100% → Integer(100) + Identifier("%") (Integer matches first; known limit)
+    #[regex(r"[a-zA-Z_@+%^][a-zA-Z0-9_.\-:~@/+%^,#]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
     // Command substitution - needs custom parsing for nested cases
@@ -195,25 +225,6 @@ pub enum Token {
     // File paths and arguments
     #[regex(r"[.~/][^\s|;&(){}]+", |lex| lex.slice().to_string())]
     Path(String),
-
-    // Flags
-    // Bare dash (used in cd - for previous directory)
-    #[token("-")]
-    Dash,
-
-    // Double dash alone (end of options marker, e.g., set -- args)
-    #[token("--")]
-    DoubleDash,
-
-    #[regex(r"-[a-zA-Z0-9]+", |lex| lex.slice().to_string())]
-    ShortFlag(String),
-
-    #[regex(r"--[a-zA-Z0-9][a-zA-Z0-9-]*(=[^\s|;&()<>]+)?", |lex| lex.slice().to_string())]
-    LongFlag(String),
-
-    // Plus flags (for unsetting shell options like +e, +u, +x)
-    #[regex(r"\+[a-zA-Z0-9]+", |lex| lex.slice().to_string())]
-    PlusFlag(String),
 
     // Redirects
     #[token(">>")]
