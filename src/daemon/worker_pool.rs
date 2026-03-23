@@ -10,7 +10,7 @@
 //! - Workers reset state between requests
 //! - Monitor worker health and auto-respawn
 
-use crate::daemon::protocol::{Message, SessionInit, ExecutionResult, read_message, write_message};
+use crate::daemon::protocol::{read_message, write_message, ExecutionResult, Message, SessionInit};
 use anyhow::{anyhow, Result};
 use nix::unistd::{fork, ForkResult, Pid};
 use std::collections::VecDeque;
@@ -78,9 +78,7 @@ impl Worker {
                 // Run the worker loop (this never returns)
                 Self::worker_loop(worker_stream);
             }
-            Err(e) => {
-                Err(anyhow!("Failed to fork worker: {}", e))
-            }
+            Err(e) => Err(anyhow!("Failed to fork worker: {}", e)),
         }
     }
 
@@ -123,7 +121,11 @@ impl Worker {
                                 stderr: exec_result.stderr,
                             };
 
-                            if let Err(e) = write_message(&mut stream, &Message::ExecutionResult(result), msg_id) {
+                            if let Err(e) = write_message(
+                                &mut stream,
+                                &Message::ExecutionResult(result),
+                                msg_id,
+                            ) {
                                 eprintln!("Worker: Failed to send result: {}", e);
                                 std::process::exit(1);
                             }
@@ -140,7 +142,11 @@ impl Worker {
                                 stderr: e.to_string(),
                             };
 
-                            if let Err(e) = write_message(&mut stream, &Message::ExecutionResult(error_result), msg_id) {
+                            if let Err(e) = write_message(
+                                &mut stream,
+                                &Message::ExecutionResult(error_result),
+                                msg_id,
+                            ) {
                                 eprintln!("Worker: Failed to send error result: {}", e);
                                 std::process::exit(1);
                             }
@@ -166,8 +172,13 @@ impl Worker {
         executor: &mut crate::executor::Executor,
     ) -> Result<crate::executor::ExecutionResult> {
         // Set working directory
-        std::env::set_current_dir(&init.working_dir)
-            .map_err(|e| anyhow!("Failed to set working directory to '{}': {}", init.working_dir, e))?;
+        std::env::set_current_dir(&init.working_dir).map_err(|e| {
+            anyhow!(
+                "Failed to set working directory to '{}': {}",
+                init.working_dir,
+                e
+            )
+        })?;
 
         // Set environment variables
         for (key, value) in &init.env {
@@ -194,20 +205,18 @@ impl Worker {
             let mut parser = crate::parser::Parser::new(tokens);
 
             match parser.parse() {
-                Ok(ast) => {
-                    match executor.execute(ast) {
-                        Ok(result) => Ok(result),
-                        Err(e) => {
-                            let err_msg = format!("Execution error: {}", e);
-                            Ok(crate::executor::ExecutionResult {
-                                output: crate::executor::Output::Text(String::new()),
-                                stderr: err_msg,
-                                exit_code: 1,
-                                error: None,
-                            })
-                        }
+                Ok(ast) => match executor.execute(ast) {
+                    Ok(result) => Ok(result),
+                    Err(e) => {
+                        let err_msg = format!("Execution error: {}", e);
+                        Ok(crate::executor::ExecutionResult {
+                            output: crate::executor::Output::Text(String::new()),
+                            stderr: err_msg,
+                            exit_code: 1,
+                            error: None,
+                        })
                     }
-                }
+                },
                 Err(e) => {
                     let err_msg = format!("Parse error: {}", e);
                     Ok(crate::executor::ExecutionResult {
@@ -243,7 +252,7 @@ impl Worker {
         match kill(self.pid, None) {
             Ok(_) => true,
             Err(nix::errno::Errno::ESRCH) => false, // No such process
-            Err(_) => true, // Other errors (e.g., permission) assume alive
+            Err(_) => true,                         // Other errors (e.g., permission) assume alive
         }
     }
 }

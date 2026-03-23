@@ -12,7 +12,7 @@ pub fn builtin_test(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
         output: Output::Text(String::new()),
         stderr: String::new(),
         exit_code,
-        error: None,        
+        error: None,
     })
 }
 
@@ -30,7 +30,7 @@ pub fn builtin_bracket(args: &[String], runtime: &mut Runtime) -> Result<Executi
         output: Output::Text(String::new()),
         stderr: String::new(),
         exit_code,
-        error: None,        
+        error: None,
     })
 }
 
@@ -123,11 +123,7 @@ fn evaluate_unary(op: &str, arg: &str, runtime: &Runtime) -> Result<bool> {
         }
         "-s" => {
             let path = resolve_path(arg, runtime);
-            Ok(path.exists() && {
-                fs::metadata(&path)
-                    .map(|m| m.len() > 0)
-                    .unwrap_or(false)
-            })
+            Ok(path.exists() && { fs::metadata(&path).map(|m| m.len() > 0).unwrap_or(false) })
         }
 
         _ => Err(anyhow!("test: unknown unary operator: {}", op)),
@@ -270,15 +266,27 @@ mod tests {
         let mut runtime = test_runtime();
 
         // Equal strings
-        let result = builtin_test(&["hello".to_string(), "=".to_string(), "hello".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["hello".to_string(), "=".to_string(), "hello".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // Not equal strings
-        let result = builtin_test(&["hello".to_string(), "=".to_string(), "world".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["hello".to_string(), "=".to_string(), "world".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 1);
 
         // != operator
-        let result = builtin_test(&["hello".to_string(), "!=".to_string(), "world".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["hello".to_string(), "!=".to_string(), "world".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
     }
 
@@ -287,27 +295,51 @@ mod tests {
         let mut runtime = test_runtime();
 
         // -eq
-        let result = builtin_test(&["5".to_string(), "-eq".to_string(), "5".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["5".to_string(), "-eq".to_string(), "5".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // -ne
-        let result = builtin_test(&["5".to_string(), "-ne".to_string(), "3".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["5".to_string(), "-ne".to_string(), "3".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // -lt
-        let result = builtin_test(&["3".to_string(), "-lt".to_string(), "5".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["3".to_string(), "-lt".to_string(), "5".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // -le
-        let result = builtin_test(&["5".to_string(), "-le".to_string(), "5".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["5".to_string(), "-le".to_string(), "5".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // -gt
-        let result = builtin_test(&["5".to_string(), "-gt".to_string(), "3".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["5".to_string(), "-gt".to_string(), "3".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // -ge
-        let result = builtin_test(&["5".to_string(), "-ge".to_string(), "5".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["5".to_string(), "-ge".to_string(), "5".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
     }
 
@@ -321,11 +353,16 @@ mod tests {
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
         // File exists
-        let result = builtin_test(&["-e".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_test(&["-e".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
         assert_eq!(result.exit_code, 0);
 
         // File doesn't exist
-        let result = builtin_test(&["-e".to_string(), "nonexistent.txt".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["-e".to_string(), "nonexistent.txt".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 1);
     }
 
@@ -339,7 +376,8 @@ mod tests {
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
         // Regular file
-        let result = builtin_test(&["-f".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_test(&["-f".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
         assert_eq!(result.exit_code, 0);
 
         // Directory is not a regular file
@@ -361,7 +399,8 @@ mod tests {
         // File is not a directory
         let file_path = temp_dir.path().join("test.txt");
         File::create(&file_path).unwrap();
-        let result = builtin_test(&["-d".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_test(&["-d".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
         assert_eq!(result.exit_code, 1);
     }
 
@@ -377,13 +416,15 @@ mod tests {
         let mut file = File::create(&file_path).unwrap();
         file.write_all(b"content").unwrap();
 
-        let result = builtin_test(&["-s".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_test(&["-s".to_string(), "test.txt".to_string()], &mut runtime).unwrap();
         assert_eq!(result.exit_code, 0);
 
         // Empty file
         let empty_file = temp_dir.path().join("empty.txt");
         File::create(&empty_file).unwrap();
-        let result = builtin_test(&["-s".to_string(), "empty.txt".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_test(&["-s".to_string(), "empty.txt".to_string()], &mut runtime).unwrap();
         assert_eq!(result.exit_code, 1);
     }
 
@@ -392,11 +433,19 @@ mod tests {
         let mut runtime = test_runtime();
 
         // ! -z with non-empty string (should be true)
-        let result = builtin_test(&["!".to_string(), "-z".to_string(), "hello".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["!".to_string(), "-z".to_string(), "hello".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // ! -z with empty string (should be false)
-        let result = builtin_test(&["!".to_string(), "-z".to_string(), "".to_string()], &mut runtime).unwrap();
+        let result = builtin_test(
+            &["!".to_string(), "-z".to_string(), "".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 1);
     }
 
@@ -405,11 +454,23 @@ mod tests {
         let mut runtime = test_runtime();
 
         // Valid bracket test
-        let result = builtin_bracket(&["5".to_string(), "-eq".to_string(), "5".to_string(), "]".to_string()], &mut runtime).unwrap();
+        let result = builtin_bracket(
+            &[
+                "5".to_string(),
+                "-eq".to_string(),
+                "5".to_string(),
+                "]".to_string(),
+            ],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // Missing closing bracket
-        let result = builtin_bracket(&["5".to_string(), "-eq".to_string(), "5".to_string()], &mut runtime);
+        let result = builtin_bracket(
+            &["5".to_string(), "-eq".to_string(), "5".to_string()],
+            &mut runtime,
+        );
         assert!(result.is_err());
     }
 
@@ -432,16 +493,32 @@ mod tests {
 
         // Both true
         let result = builtin_test(
-            &["-n".to_string(), "hello".to_string(), "-a".to_string(), "5".to_string(), "-eq".to_string(), "5".to_string()],
-            &mut runtime
-        ).unwrap();
+            &[
+                "-n".to_string(),
+                "hello".to_string(),
+                "-a".to_string(),
+                "5".to_string(),
+                "-eq".to_string(),
+                "5".to_string(),
+            ],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // First false
         let result = builtin_test(
-            &["-z".to_string(), "hello".to_string(), "-a".to_string(), "5".to_string(), "-eq".to_string(), "5".to_string()],
-            &mut runtime
-        ).unwrap();
+            &[
+                "-z".to_string(),
+                "hello".to_string(),
+                "-a".to_string(),
+                "5".to_string(),
+                "-eq".to_string(),
+                "5".to_string(),
+            ],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 1);
     }
 
@@ -451,16 +528,32 @@ mod tests {
 
         // First true
         let result = builtin_test(
-            &["-n".to_string(), "hello".to_string(), "-o".to_string(), "5".to_string(), "-eq".to_string(), "3".to_string()],
-            &mut runtime
-        ).unwrap();
+            &[
+                "-n".to_string(),
+                "hello".to_string(),
+                "-o".to_string(),
+                "5".to_string(),
+                "-eq".to_string(),
+                "3".to_string(),
+            ],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         // Both false
         let result = builtin_test(
-            &["-z".to_string(), "hello".to_string(), "-o".to_string(), "5".to_string(), "-eq".to_string(), "3".to_string()],
-            &mut runtime
-        ).unwrap();
+            &[
+                "-z".to_string(),
+                "hello".to_string(),
+                "-o".to_string(),
+                "5".to_string(),
+                "-eq".to_string(),
+                "3".to_string(),
+            ],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 1);
     }
 }

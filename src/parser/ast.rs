@@ -153,7 +153,7 @@ pub struct CaseStatement {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CaseArm {
-    pub patterns: Vec<String>,  // Multiple patterns separated by |
+    pub patterns: Vec<String>, // Multiple patterns separated by |
     pub body: Vec<Statement>,
 }
 
@@ -274,8 +274,18 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ArgumentPart {
+    Literal(String),
+    Variable(String),
+    BracedVariable(String),
+    CommandSubstitution(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Argument {
     Literal(String),
+    SingleQuoted(String),
+    DoubleQuoted(Vec<ArgumentPart>),
     Variable(String),
     BracedVariable(String),
     CommandSubstitution(String),

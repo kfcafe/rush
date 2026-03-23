@@ -1,4 +1,4 @@
-use super::{ExecutionResult, Output, Executor, CallStack};
+use super::{CallStack, ExecutionResult, Executor, Output};
 use crate::builtins::Builtins;
 use crate::executor::suggestions::SuggestionEngine;
 use crate::glob_expansion;
@@ -24,7 +24,7 @@ pub fn execute_pipeline(
     builtins: &Builtins,
 ) -> Result<ExecutionResult> {
     let negated = pipeline.negated;
-    
+
     // Use elements if available, fall back to commands-only for backward compat
     if !pipeline.elements.is_empty() {
         let mut result = execute_pipeline_elements(&pipeline.elements, runtime, builtins)?;
@@ -63,7 +63,11 @@ pub fn execute_pipeline(
 
         // Check if timing is being collected
         let should_time = crate::builtins::time::is_collecting_timing();
-        let stage_start = if should_time { Some(Instant::now()) } else { None };
+        let stage_start = if should_time {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         let result = execute_pipeline_command(
             command,
@@ -160,13 +164,21 @@ fn execute_pipeline_elements(
 
         // Check if timing is being collected
         let should_time = crate::builtins::time::is_collecting_timing();
-        let stage_start = if should_time { Some(Instant::now()) } else { None };
+        let stage_start = if should_time {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         let result = execute_element(
             element,
             runtime,
             builtins,
-            if is_first { None } else { Some(&previous_output) },
+            if is_first {
+                None
+            } else {
+                Some(&previous_output)
+            },
         )?;
 
         // Record stage timing if collecting
@@ -234,9 +246,7 @@ fn execute_element(
     stdin: Option<&[u8]>,
 ) -> Result<ExecutionResult> {
     match element {
-        PipelineElement::Command(cmd) => {
-            execute_pipeline_command(cmd, runtime, builtins, stdin)
-        }
+        PipelineElement::Command(cmd) => execute_pipeline_command(cmd, runtime, builtins, stdin),
         PipelineElement::Subshell(statements) => {
             execute_subshell_in_pipeline(statements, runtime, builtins, stdin)
         }
@@ -280,7 +290,8 @@ fn execute_compound_in_pipeline(
     match child_executor.execute(vec![statement.clone()]) {
         Ok(result) => Ok(result),
         Err(e) => {
-            if let Some(exit_signal) = e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>() {
+            if let Some(exit_signal) = e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>()
+            {
                 Ok(ExecutionResult {
                     exit_code: exit_signal.exit_code,
                     ..ExecutionResult::default()
@@ -334,7 +345,8 @@ fn execute_subshell_in_pipeline(
     match child_executor.execute(statements.to_vec()) {
         Ok(result) => Ok(result),
         Err(e) => {
-            if let Some(exit_signal) = e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>() {
+            if let Some(exit_signal) = e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>()
+            {
                 Ok(ExecutionResult {
                     exit_code: exit_signal.exit_code,
                     ..ExecutionResult::default()
@@ -474,7 +486,8 @@ fn apply_redirects_to_result(
                     result.stderr.clear();
                 }
             }
-            crate::parser::ast::RedirectKind::HereDoc | crate::parser::ast::RedirectKind::HereDocLiteral => {
+            crate::parser::ast::RedirectKind::HereDoc
+            | crate::parser::ast::RedirectKind::HereDocLiteral => {
                 // Here-documents provide stdin - not applicable in pipeline context for output redirection
             }
         }
@@ -512,14 +525,17 @@ fn execute_external_pipeline_command(
         if let Some(mut stdin_handle) = child.stdin.take() {
             // Handle SIGPIPE - if the process exits before reading all input,
             // we don't want to fail the entire pipeline
-            stdin_handle.write_all(input).or_else(|e| {
-                if e.kind() == std::io::ErrorKind::BrokenPipe {
-                    // Process closed pipe, that's OK
-                    Ok(())
-                } else {
-                    Err(e)
-                }
-            }).map_err(|e| anyhow!("Failed to write to stdin of '{}': {}", command.name, e))?;
+            stdin_handle
+                .write_all(input)
+                .or_else(|e| {
+                    if e.kind() == std::io::ErrorKind::BrokenPipe {
+                        // Process closed pipe, that's OK
+                        Ok(())
+                    } else {
+                        Err(e)
+                    }
+                })
+                .map_err(|e| anyhow!("Failed to write to stdin of '{}': {}", command.name, e))?;
         }
     }
 
@@ -568,12 +584,12 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
         Argument::CommandSubstitution(cmd) => {
             // For pipelines, we need to execute command substitution
             // Create a minimal executor for this
-            use crate::lexer::Lexer;
-            use crate::parser::Parser;
-            use crate::executor::Executor;
             use crate::builtins::Builtins;
             use crate::correction::Corrector;
-            
+            use crate::executor::Executor;
+            use crate::lexer::Lexer;
+            use crate::parser::Parser;
+
             let command = if cmd.starts_with("$(") && cmd.ends_with(')') {
                 &cmd[2..cmd.len() - 1]
             } else if cmd.starts_with('`') && cmd.ends_with('`') {
@@ -581,7 +597,7 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
             } else {
                 cmd.as_str()
             };
-            
+
             // Try to execute the command substitution
             if let Ok(tokens) = Lexer::tokenize(command) {
                 let mut parser = Parser::new(tokens);
@@ -603,13 +619,38 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
                     }
                 }
             }
-            
+
             // If execution failed, return empty string
             String::new()
         }
         Argument::Flag(f) => f.clone(),
         Argument::Path(p) => super::expand_tilde(p),
         Argument::Glob(g) => g.clone(),
+        Argument::SingleQuoted(s) => s.clone(),
+        Argument::DoubleQuoted(parts) => {
+            let mut result = String::new();
+            for part in parts {
+                match part {
+                    ArgumentPart::Literal(s) => result.push_str(s),
+                    ArgumentPart::Variable(v) => {
+                        result.push_str(&resolve_argument(&Argument::Variable(v.clone()), runtime));
+                    }
+                    ArgumentPart::BracedVariable(v) => {
+                        result.push_str(&resolve_argument(
+                            &Argument::BracedVariable(v.clone()),
+                            runtime,
+                        ));
+                    }
+                    ArgumentPart::CommandSubstitution(c) => {
+                        result.push_str(&resolve_argument(
+                            &Argument::CommandSubstitution(c.clone()),
+                            runtime,
+                        ));
+                    }
+                }
+            }
+            result
+        }
     }
 }
 
@@ -620,8 +661,11 @@ fn resolve_and_expand_arguments(args: &[Argument], runtime: &Runtime) -> Vec<Str
     for arg in args {
         let should_expand = matches!(
             arg,
-            Argument::Glob(_) | Argument::Path(_) | Argument::Variable(_)
-            | Argument::BracedVariable(_) | Argument::CommandSubstitution(_)
+            Argument::Glob(_)
+                | Argument::Path(_)
+                | Argument::Variable(_)
+                | Argument::BracedVariable(_)
+                | Argument::CommandSubstitution(_)
         );
         let resolved = resolve_argument(arg, runtime);
         if should_expand && glob_expansion::should_expand_glob(&resolved) {

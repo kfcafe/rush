@@ -2,8 +2,7 @@
 ///
 /// Provides queryable interface to the feature compatibility data.
 /// Easy to extend with new features and update support status as Rush evolves.
-
-use super::features::{RushCompatFeature, RushSupportStatus, rush_compat_features};
+use super::features::{rush_compat_features, RushCompatFeature, RushSupportStatus};
 
 /// Database for querying bash feature compatibility in Rush
 pub struct CompatDatabase;
@@ -65,16 +64,29 @@ impl CompatDatabase {
     pub fn summary() -> CompatSummary {
         let features = rush_compat_features();
         let total = features.len();
-        let supported = features.iter().filter(|f| f.rush_status == RushSupportStatus::Supported).count();
-        let planned = features.iter().filter(|f| f.rush_status == RushSupportStatus::Planned).count();
-        let not_supported = features.iter().filter(|f| f.rush_status == RushSupportStatus::NotSupported).count();
+        let supported = features
+            .iter()
+            .filter(|f| f.rush_status == RushSupportStatus::Supported)
+            .count();
+        let planned = features
+            .iter()
+            .filter(|f| f.rush_status == RushSupportStatus::Planned)
+            .count();
+        let not_supported = features
+            .iter()
+            .filter(|f| f.rush_status == RushSupportStatus::NotSupported)
+            .count();
 
         CompatSummary {
             total,
             supported,
             planned,
             not_supported,
-            support_percentage: if total > 0 { (supported * 100) / total } else { 0 },
+            support_percentage: if total > 0 {
+                (supported * 100) / total
+            } else {
+                0
+            },
         }
     }
 
@@ -109,9 +121,15 @@ impl CompatDatabase {
 
         // Supported features
         output.push_str("### Supported Features\n\n");
-        let supported: Vec<_> = features.iter().filter(|f| f.rush_status == RushSupportStatus::Supported).collect();
+        let supported: Vec<_> = features
+            .iter()
+            .filter(|f| f.rush_status == RushSupportStatus::Supported)
+            .collect();
         for feature in supported {
-            output.push_str(&format!("- **{}** (`{}`): {}\n", feature.name, feature.id, feature.description));
+            output.push_str(&format!(
+                "- **{}** (`{}`): {}\n",
+                feature.name, feature.id, feature.description
+            ));
             if let Some(rv) = feature.rush_version {
                 output.push_str(&format!("  - Rush: {}\n", rv));
             }
@@ -120,9 +138,15 @@ impl CompatDatabase {
 
         // Planned features
         output.push_str("### Planned Features\n\n");
-        let planned: Vec<_> = features.iter().filter(|f| f.rush_status == RushSupportStatus::Planned).collect();
+        let planned: Vec<_> = features
+            .iter()
+            .filter(|f| f.rush_status == RushSupportStatus::Planned)
+            .collect();
         for feature in planned {
-            output.push_str(&format!("- **{}** (`{}`): {}\n", feature.name, feature.id, feature.description));
+            output.push_str(&format!(
+                "- **{}** (`{}`): {}\n",
+                feature.name, feature.id, feature.description
+            ));
             if let Some(workaround) = feature.workaround {
                 output.push_str(&format!("  - Workaround: {}\n", workaround));
             }
@@ -131,9 +155,15 @@ impl CompatDatabase {
 
         // Unsupported with workarounds
         output.push_str("### Not Supported (with Workarounds)\n\n");
-        let not_supported: Vec<_> = features.iter().filter(|f| f.rush_status == RushSupportStatus::NotSupported).collect();
+        let not_supported: Vec<_> = features
+            .iter()
+            .filter(|f| f.rush_status == RushSupportStatus::NotSupported)
+            .collect();
         for feature in not_supported {
-            output.push_str(&format!("- **{}** (`{}`): {}\n", feature.name, feature.id, feature.description));
+            output.push_str(&format!(
+                "- **{}** (`{}`): {}\n",
+                feature.name, feature.id, feature.description
+            ));
             output.push_str(&format!("  - Bash Example: `{}`\n", feature.bash_example));
             if let Some(workaround) = feature.workaround {
                 output.push_str(&format!("  - Workaround: {}\n", workaround));
@@ -143,10 +173,19 @@ impl CompatDatabase {
         output.push('\n');
 
         output.push_str("## Statistics\n\n");
-        output.push_str(&format!("- Total Bash Features Catalogued: {}\n", summary.total));
-        output.push_str(&format!("- Supported in Rush: {} ({})%\n", summary.supported, summary.support_percentage));
+        output.push_str(&format!(
+            "- Total Bash Features Catalogued: {}\n",
+            summary.total
+        ));
+        output.push_str(&format!(
+            "- Supported in Rush: {} ({})%\n",
+            summary.supported, summary.support_percentage
+        ));
         output.push_str(&format!("- Planned for Rush: {}\n", summary.planned));
-        output.push_str(&format!("- Not Supported (with workarounds): {}\n", summary.not_supported));
+        output.push_str(&format!(
+            "- Not Supported (with workarounds): {}\n",
+            summary.not_supported
+        ));
 
         output
     }
@@ -177,7 +216,10 @@ mod tests {
 
     #[test]
     fn test_database_count() {
-        assert_eq!(CompatDatabase::all_features().len(), CompatDatabase::summary().total);
+        assert_eq!(
+            CompatDatabase::all_features().len(),
+            CompatDatabase::summary().total
+        );
     }
 
     #[test]
@@ -214,7 +256,10 @@ mod tests {
     fn test_summary() {
         let summary = CompatDatabase::summary();
         assert!(summary.support_percentage <= 100);
-        assert_eq!(summary.total, summary.supported + summary.planned + summary.not_supported);
+        assert_eq!(
+            summary.total,
+            summary.supported + summary.planned + summary.not_supported
+        );
     }
 
     #[test]

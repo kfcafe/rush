@@ -1,10 +1,10 @@
+use crate::executor::Executor;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 use std::time::Instant;
-use crate::executor::Executor;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellTimings {
@@ -94,12 +94,7 @@ impl ComparisonRunner {
         let rush_vs_zsh_ratio = zsh_time.map(|z| z / rush_time);
 
         // Collect all times for min/max/stddev
-        let all_times = [
-            &rush_times[..],
-            &bash_times[..],
-            &zsh_times[..],
-        ]
-        .concat();
+        let all_times = [&rush_times[..], &bash_times[..], &zsh_times[..]].concat();
 
         let min_time = all_times.iter().cloned().fold(f64::INFINITY, f64::min);
         let max_time = all_times.iter().cloned().fold(0.0, f64::max);
@@ -152,11 +147,7 @@ impl ComparisonRunner {
     /// Time command execution in zsh
     fn time_zsh(&self, cmd: &str) -> Result<f64> {
         // Check if zsh is available
-        match Command::new("zsh")
-            .arg("-c")
-            .arg("echo test")
-            .output()
-        {
+        match Command::new("zsh").arg("-c").arg("echo test").output() {
             Ok(_) => {
                 let start = Instant::now();
 
@@ -195,11 +186,8 @@ impl ComparisonRunner {
         }
 
         let mean = Self::mean(values);
-        let variance = values
-            .iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>()
-            / (values.len() as f64 - 1.0);
+        let variance =
+            values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (values.len() as f64 - 1.0);
 
         variance.sqrt()
     }

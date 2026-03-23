@@ -1,7 +1,7 @@
-use rush::lexer::{Lexer, Token, HereDocData};
-use rush::parser::Parser;
-use rush::parser::ast::*;
 use rush::executor::Executor;
+use rush::lexer::{HereDocData, Lexer, Token};
+use rush::parser::ast::*;
+use rush::parser::Parser;
 
 // ──────────────────────────────────────────────
 // Lexer tests
@@ -46,7 +46,10 @@ fn test_lexer_heredoc_quoted_single() {
 
     if let Some(Token::HereDocBody(data)) = heredoc_body {
         assert_eq!(data.body, "hello $VAR\n");
-        assert!(!data.expand_vars, "Single-quoted delimiter should NOT expand vars");
+        assert!(
+            !data.expand_vars,
+            "Single-quoted delimiter should NOT expand vars"
+        );
     }
 }
 
@@ -60,7 +63,10 @@ fn test_lexer_heredoc_quoted_double() {
 
     if let Some(Token::HereDocBody(data)) = heredoc_body {
         assert_eq!(data.body, "hello $VAR\n");
-        assert!(!data.expand_vars, "Double-quoted delimiter should NOT expand vars");
+        assert!(
+            !data.expand_vars,
+            "Double-quoted delimiter should NOT expand vars"
+        );
     }
 }
 
@@ -213,8 +219,11 @@ fn test_executor_heredoc_with_wc() {
     let mut executor = Executor::new_embedded();
     let result = executor.execute(stmts).unwrap();
     // wc -l should report 3 lines
-    assert!(result.stdout().trim().contains("3"),
-        "Expected 3 lines, got: {}", result.stdout());
+    assert!(
+        result.stdout().trim().contains("3"),
+        "Expected 3 lines, got: {}",
+        result.stdout()
+    );
     assert_eq!(result.exit_code, 0);
 }
 
@@ -228,7 +237,9 @@ fn test_executor_heredoc_variable_expansion() {
 
     let mut executor = Executor::new_embedded();
     // Set a variable in the runtime
-    executor.runtime_mut().set_variable("USER".to_string(), "testuser".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("USER".to_string(), "testuser".to_string());
     let result = executor.execute(stmts).unwrap();
     assert_eq!(result.stdout().trim(), "hello testuser");
     assert_eq!(result.exit_code, 0);

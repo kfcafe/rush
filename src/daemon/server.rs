@@ -1,6 +1,8 @@
-use crate::daemon::config::{DaemonConfig, CustomStatConfig};
-use crate::daemon::protocol::{Message, SessionInit, ExecutionResult, StatsResponse, read_message, write_message};
-use crate::daemon::worker_pool::{WorkerPool, PoolConfig};
+use crate::daemon::config::{CustomStatConfig, DaemonConfig};
+use crate::daemon::protocol::{
+    read_message, write_message, ExecutionResult, Message, SessionInit, StatsResponse,
+};
+use crate::daemon::worker_pool::{PoolConfig, WorkerPool};
 use crate::stats::StatsCollector;
 use anyhow::{anyhow, Result};
 use nix::sys::signal::{self, Signal};
@@ -82,10 +84,7 @@ impl CustomStatCached {
 
     /// Update the stat by executing its command
     fn update(&mut self) {
-        let result = Command::new("sh")
-            .arg("-c")
-            .arg(&self.command)
-            .output();
+        let result = Command::new("sh").arg("-c").arg(&self.command).output();
 
         match result {
             Ok(output) => {
@@ -113,7 +112,7 @@ impl CustomStatCached {
 }
 
 /// Stats cache - holds all cached system statistics
-/// 
+///
 /// Provides near-instant stats retrieval for banner display.
 /// Built-in stats are computed once on startup, dynamic stats
 /// are refreshed periodically, and custom stats run user commands
@@ -135,12 +134,12 @@ impl StatsCache {
     pub fn new() -> Self {
         // Collect all built-in stats initially
         let all_builtins = StatsCollector::collect_builtins();
-        
+
         // Split into static and dynamic
         let static_names = ["host", "os", "kernel", "arch", "cpu", "cores"];
         let mut builtin_static = HashMap::new();
         let mut builtin_dynamic = HashMap::new();
-        
+
         for (name, value) in all_builtins {
             if static_names.contains(&name.as_str()) {
                 builtin_static.insert(name, value);
@@ -148,7 +147,7 @@ impl StatsCache {
                 builtin_dynamic.insert(name, value);
             }
         }
-        
+
         Self {
             builtin_static,
             builtin_dynamic,
@@ -156,35 +155,36 @@ impl StatsCache {
             last_builtin_update: Instant::now(),
         }
     }
-    
+
     /// Initialize custom stats from config
     pub fn init_custom_stats(&mut self, configs: &[CustomStatConfig]) {
         self.custom.clear();
         for config in configs {
-            self.custom.insert(config.name.clone(), CustomStatCached::new(config));
+            self.custom
+                .insert(config.name.clone(), CustomStatCached::new(config));
         }
     }
-    
+
     /// Update dynamic built-in stats if enough time has passed
     pub fn update_builtins_if_needed(&mut self) {
         if self.last_builtin_update.elapsed() >= STATS_UPDATE_INTERVAL {
             self.update_builtins();
         }
     }
-    
+
     /// Force update of dynamic built-in stats
     pub fn update_builtins(&mut self) {
         let dynamic_names = ["uptime", "load", "procs", "memory", "time", "date"];
-        
+
         for name in &dynamic_names {
             if let Some(value) = StatsCollector::collect_stat(name) {
                 self.builtin_dynamic.insert(name.to_string(), value);
             }
         }
-        
+
         self.last_builtin_update = Instant::now();
     }
-    
+
     /// Get custom stats that need updating
     pub fn get_stats_needing_update(&self) -> Vec<String> {
         self.custom
@@ -193,21 +193,21 @@ impl StatsCache {
             .map(|(name, _)| name.clone())
             .collect()
     }
-    
+
     /// Update a specific custom stat
     pub fn update_custom_stat(&mut self, name: &str) {
         if let Some(stat) = self.custom.get_mut(name) {
             stat.update();
         }
     }
-    
+
     /// Get all built-in stats as a HashMap
     pub fn get_builtin_stats(&self) -> HashMap<String, String> {
         let mut all = self.builtin_static.clone();
         all.extend(self.builtin_dynamic.clone());
         all
     }
-    
+
     /// Get all custom stats as a HashMap (values only, no errors)
     pub fn get_custom_stats(&self) -> HashMap<String, String> {
         self.custom
@@ -216,7 +216,7 @@ impl StatsCache {
             .map(|(name, stat)| (name.clone(), stat.value.clone()))
             .collect()
     }
-    
+
     /// Get seconds since last built-in update
     pub fn seconds_since_update(&self) -> u64 {
         self.last_builtin_update.elapsed().as_secs()
@@ -349,14 +349,19 @@ impl DaemonServer {
     pub fn new(socket_path: PathBuf) -> Result<Self> {
         // Load initial configuration from .rushrc
         let config = DaemonConfig::from_rushrc();
-        eprintln!("Loaded config: {} custom stats defined", config.custom_stats.len());
-        
+        eprintln!(
+            "Loaded config: {} custom stats defined",
+            config.custom_stats.len()
+        );
+
         // Initialize stats cache
         let mut stats_cache = StatsCache::new();
         stats_cache.init_custom_stats(&config.custom_stats);
-        eprintln!("Initialized stats cache with {} built-in stats", 
-            stats_cache.get_builtin_stats().len());
-        
+        eprintln!(
+            "Initialized stats cache with {} built-in stats",
+            stats_cache.get_builtin_stats().len()
+        );
+
         Ok(Self {
             socket_path,
             listener: None,
@@ -372,15 +377,17 @@ impl DaemonServer {
     /// Enable worker pool mode with the specified configuration
     pub fn with_worker_pool(mut self, config: PoolConfig) -> Result<Self> {
         let pool = WorkerPool::new(config)?;
-        eprintln!("Worker pool enabled with {} workers", pool.stats().total_workers);
+        eprintln!(
+            "Worker pool enabled with {} workers",
+            pool.stats().total_workers
+        );
         self.worker_pool = Some(pool);
         Ok(self)
     }
 
     /// Create the daemon directory with secure permissions
     fn create_daemon_dir() -> Result<PathBuf> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| anyhow!("Could not determine home directory"))?;
+        let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
 
         let daemon_dir = home.join(".rush");
 
@@ -461,59 +468,66 @@ impl DaemonServer {
     }
 
     /// Reload configuration from .rushrc
-    /// 
+    ///
     /// Called when SIGHUP is received or via `rushd reload` command.
     /// Updates custom stat entries: adds new, removes deleted, updates changed.
     pub fn reload_configuration(&mut self) {
         eprintln!("Reloading configuration from .rushrc...");
-        
+
         let old_config = std::mem::take(&mut self.config);
         self.config = DaemonConfig::from_rushrc();
-        
+
         // Log what changed
-        let old_stats: std::collections::HashSet<_> = old_config.custom_stats.iter()
-            .map(|s| &s.name)
-            .collect();
-        let new_stats: std::collections::HashSet<_> = self.config.custom_stats.iter()
-            .map(|s| &s.name)
-            .collect();
-        
+        let old_stats: std::collections::HashSet<_> =
+            old_config.custom_stats.iter().map(|s| &s.name).collect();
+        let new_stats: std::collections::HashSet<_> =
+            self.config.custom_stats.iter().map(|s| &s.name).collect();
+
         // Find added stats
         for name in new_stats.difference(&old_stats) {
             eprintln!("  + Added custom stat: {}", name);
         }
-        
+
         // Find removed stats
         for name in old_stats.difference(&new_stats) {
             eprintln!("  - Removed custom stat: {}", name);
         }
-        
+
         // Find updated stats (same name but different command/interval/timeout)
         for stat in &self.config.custom_stats {
             if let Some(old_stat) = old_config.custom_stats.iter().find(|s| s.name == stat.name) {
-                if old_stat.command != stat.command 
-                    || old_stat.interval != stat.interval 
-                    || old_stat.timeout != stat.timeout 
+                if old_stat.command != stat.command
+                    || old_stat.interval != stat.interval
+                    || old_stat.timeout != stat.timeout
                 {
                     eprintln!("  ~ Updated custom stat: {}", stat.name);
                 }
             }
         }
-        
+
         // Log banner config changes
         if old_config.banner.style != self.config.banner.style {
-            eprintln!("  ~ Banner style: {:?} -> {:?}", old_config.banner.style, self.config.banner.style);
+            eprintln!(
+                "  ~ Banner style: {:?} -> {:?}",
+                old_config.banner.style, self.config.banner.style
+            );
         }
         if old_config.banner.stats != self.config.banner.stats {
-            eprintln!("  ~ Banner stats: {:?} -> {:?}", old_config.banner.stats, self.config.banner.stats);
+            eprintln!(
+                "  ~ Banner stats: {:?} -> {:?}",
+                old_config.banner.stats, self.config.banner.stats
+            );
         }
-        
+
         // Update stats cache with new custom stat configs
         if let Ok(mut cache) = self.stats_cache.lock() {
             cache.init_custom_stats(&self.config.custom_stats);
         }
-        
-        eprintln!("Configuration reloaded: {} custom stats", self.config.custom_stats.len());
+
+        eprintln!(
+            "Configuration reloaded: {} custom stats",
+            self.config.custom_stats.len()
+        );
     }
 
     /// Get the current configuration
@@ -524,7 +538,9 @@ impl DaemonServer {
     /// Main accept loop
     fn accept_loop(&mut self) -> Result<()> {
         // Take ownership of listener temporarily for borrowing
-        let listener = self.listener.take()
+        let listener = self
+            .listener
+            .take()
             .ok_or_else(|| anyhow!("Socket not bound"))?;
 
         // Set non-blocking mode for accept to check shutdown flag
@@ -533,7 +549,7 @@ impl DaemonServer {
         let result = (|| -> Result<()> {
             let mut last_health_check = Instant::now();
             let mut last_stats_update = Instant::now();
-            
+
             while !self.shutdown.load(Ordering::Relaxed) {
                 // Check for config reload request (SIGHUP)
                 if self.reload_config.swap(false, Ordering::Relaxed) {
@@ -546,7 +562,7 @@ impl DaemonServer {
                     self.check_all_workers_health();
                     last_health_check = now;
                 }
-                
+
                 // Update stats cache (every 5 seconds)
                 if now.duration_since(last_stats_update) >= STATS_UPDATE_INTERVAL {
                     self.update_stats_cache();
@@ -562,7 +578,8 @@ impl DaemonServer {
                         // Check session limit
                         if self.sessions.len() >= MAX_CONCURRENT_SESSIONS {
                             eprintln!("Warning: Maximum concurrent sessions reached, rejecting connection");
-                            let _ = Self::send_error(&stream, "Maximum concurrent sessions reached", 0);
+                            let _ =
+                                Self::send_error(&stream, "Maximum concurrent sessions reached", 0);
                             continue;
                         }
 
@@ -633,14 +650,21 @@ impl DaemonServer {
     }
 
     /// Handle a stats request - returns cached stats
-    fn handle_stats_request(&self, stream: &mut UnixStream, msg_id: u32, requested_stats: &[String]) -> Result<()> {
-        let cache = self.stats_cache.lock()
+    fn handle_stats_request(
+        &self,
+        stream: &mut UnixStream,
+        msg_id: u32,
+        requested_stats: &[String],
+    ) -> Result<()> {
+        let cache = self
+            .stats_cache
+            .lock()
             .map_err(|_| anyhow!("Failed to lock stats cache"))?;
-        
+
         // Get all built-in and custom stats from cache
         let mut builtin = cache.get_builtin_stats();
         let mut custom = cache.get_custom_stats();
-        
+
         // If specific stats were requested, filter to only those
         if !requested_stats.is_empty() {
             builtin.retain(|k, _| requested_stats.contains(k));
@@ -658,23 +682,23 @@ impl DaemonServer {
 
         Ok(())
     }
-    
+
     /// Update the stats cache (called periodically from accept loop)
     fn update_stats_cache(&self) {
         let stats_cache = self.stats_cache.clone();
-        
+
         // Update built-in dynamic stats
         if let Ok(mut cache) = stats_cache.lock() {
             cache.update_builtins_if_needed();
         }
-        
+
         // Get custom stats that need updating
         let stats_needing_update: Vec<String> = if let Ok(cache) = stats_cache.lock() {
             cache.get_stats_needing_update()
         } else {
             return;
         };
-        
+
         // Update custom stats in background threads (non-blocking)
         for stat_name in stats_needing_update {
             let cache = stats_cache.clone();
@@ -687,7 +711,12 @@ impl DaemonServer {
     }
 
     /// Accept connection using fork-per-request (legacy mode)
-    fn accept_connection_fork(&mut self, session_init: SessionInit, msg_id: u32, stream: UnixStream) -> Result<()> {
+    fn accept_connection_fork(
+        &mut self,
+        session_init: SessionInit,
+        msg_id: u32,
+        stream: UnixStream,
+    ) -> Result<()> {
         // Fork a worker process
         match unsafe { fork() } {
             Ok(ForkResult::Parent { child }) => {
@@ -713,14 +742,16 @@ impl DaemonServer {
                 // Execute the session init we already received
                 Self::run_worker_with_session(stream, session_init, msg_id);
             }
-            Err(e) => {
-                Err(anyhow!("Failed to fork worker: {}", e))
-            }
+            Err(e) => Err(anyhow!("Failed to fork worker: {}", e)),
         }
     }
 
     /// Run the session worker with a pre-read session init (in child process)
-    fn run_worker_with_session(mut stream: UnixStream, session_init: SessionInit, msg_id: u32) -> ! {
+    fn run_worker_with_session(
+        mut stream: UnixStream,
+        session_init: SessionInit,
+        msg_id: u32,
+    ) -> ! {
         let exit_code = match Self::execute_session(&session_init) {
             Ok(exec_result) => {
                 // Send result back to client
@@ -732,7 +763,9 @@ impl DaemonServer {
                     stderr: exec_result.stderr,
                 };
 
-                if let Err(e) = write_message(&mut stream, &Message::ExecutionResult(result), msg_id) {
+                if let Err(e) =
+                    write_message(&mut stream, &Message::ExecutionResult(result), msg_id)
+                {
                     eprintln!("Failed to send result: {}", e);
                     1
                 } else {
@@ -781,7 +814,8 @@ impl DaemonServer {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof
                     || e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut
-                    || e.kind() == std::io::ErrorKind::ConnectionReset {
+                    || e.kind() == std::io::ErrorKind::ConnectionReset
+                {
                     return Ok(0);
                 }
                 return Err(anyhow!("Failed to read message: {}", e));
@@ -828,13 +862,13 @@ impl DaemonServer {
     }
 
     /// Reset worker state between requests (for worker pooling)
-    /// 
+    ///
     /// This ensures complete isolation between requests by resetting:
     /// - Working directory to original value
     /// - Environment variables to original state
     /// - Exit code (implicit in new executor creation)
     /// - Executor state (created fresh each time)
-    /// 
+    ///
     /// Critical for preventing state leakage when workers handle multiple requests.
     fn reset_worker_state(worker_state: &WorkerState) -> Result<()> {
         worker_state.reset()
@@ -843,8 +877,13 @@ impl DaemonServer {
     /// Execute a session command and return the full execution result
     fn execute_session(init: &SessionInit) -> Result<crate::executor::ExecutionResult> {
         // Set working directory
-        std::env::set_current_dir(&init.working_dir)
-            .map_err(|e| anyhow!("Failed to set working directory to '{}': {}", init.working_dir, e))?;
+        std::env::set_current_dir(&init.working_dir).map_err(|e| {
+            anyhow!(
+                "Failed to set working directory to '{}': {}",
+                init.working_dir,
+                e
+            )
+        })?;
 
         // Set environment variables
         for (key, value) in &init.env {
@@ -870,34 +909,32 @@ impl DaemonServer {
                         output: crate::executor::Output::Text(String::new()),
                         stderr: err_msg,
                         exit_code: 2,
-        error: None,
+                        error: None,
                     });
                 }
             };
             let mut parser = crate::parser::Parser::new(tokens);
 
             match parser.parse() {
-                Ok(ast) => {
-                    match executor.execute(ast) {
-                        Ok(result) => Ok(result),
-                        Err(e) => {
-                            let err_msg = format!("Execution error: {}", e);
-                            Ok(crate::executor::ExecutionResult {
-                                output: crate::executor::Output::Text(String::new()),
-                                stderr: err_msg,
-                                exit_code: 1,
-        error: None,
-                            })
-                        }
+                Ok(ast) => match executor.execute(ast) {
+                    Ok(result) => Ok(result),
+                    Err(e) => {
+                        let err_msg = format!("Execution error: {}", e);
+                        Ok(crate::executor::ExecutionResult {
+                            output: crate::executor::Output::Text(String::new()),
+                            stderr: err_msg,
+                            exit_code: 1,
+                            error: None,
+                        })
                     }
-                }
+                },
                 Err(e) => {
                     let err_msg = format!("Parse error: {}", e);
                     Ok(crate::executor::ExecutionResult {
                         output: crate::executor::Output::Text(String::new()),
                         stderr: err_msg,
                         exit_code: 2,
-        error: None,
+                        error: None,
                     })
                 }
             }
@@ -965,17 +1002,19 @@ impl DaemonServer {
         // Remove finished sessions
         for session_id in finished {
             if let Some(handle) = self.sessions.remove(&session_id) {
-                eprintln!("Cleaned up worker {} after {} requests ({} failed)", 
-                    session_id, 
-                    handle.metrics.requests_processed,
-                    handle.metrics.requests_failed);
+                eprintln!(
+                    "Cleaned up worker {} after {} requests ({} failed)",
+                    session_id, handle.metrics.requests_processed, handle.metrics.requests_failed
+                );
             }
         }
     }
 
     /// Write PID file for daemon management
     fn write_pid_file(&self) -> Result<()> {
-        let pid_path = self.socket_path.parent()
+        let pid_path = self
+            .socket_path
+            .parent()
             .ok_or_else(|| anyhow!("Invalid socket path"))?
             .join("daemon.pid");
 
@@ -987,7 +1026,9 @@ impl DaemonServer {
 
     /// Remove PID file
     fn remove_pid_file(&self) -> Result<()> {
-        let pid_path = self.socket_path.parent()
+        let pid_path = self
+            .socket_path
+            .parent()
             .ok_or_else(|| anyhow!("Invalid socket path"))?
             .join("daemon.pid");
 
@@ -1066,7 +1107,9 @@ impl DaemonServer {
 
     /// Check the health of a specific worker
     fn check_worker_health(&mut self, session_id: SessionId) -> Result<()> {
-        let handle = self.sessions.get_mut(&session_id)
+        let handle = self
+            .sessions
+            .get_mut(&session_id)
             .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
 
         let now = Instant::now();
@@ -1078,16 +1121,22 @@ impl DaemonServer {
                 eprintln!("Worker {} exited with code {}", session_id, code);
                 handle.health_state = WorkerHealthState::Crashed;
                 handle.metrics.requests_failed += 1;
-                
+
                 // Try to respawn if under limit
                 if handle.metrics.respawn_count < MAX_RESPAWN_ATTEMPTS {
                     let time_since_spawn = now.duration_since(handle.metrics.spawn_time);
                     if time_since_spawn >= RESPAWN_COOLDOWN {
-                        eprintln!("Respawning worker {} (attempt {})", 
-                            session_id, handle.metrics.respawn_count + 1);
+                        eprintln!(
+                            "Respawning worker {} (attempt {})",
+                            session_id,
+                            handle.metrics.respawn_count + 1
+                        );
                         return self.respawn_worker(session_id);
                     } else {
-                        eprintln!("Worker {} crashed too soon, waiting for cooldown", session_id);
+                        eprintln!(
+                            "Worker {} crashed too soon, waiting for cooldown",
+                            session_id
+                        );
                     }
                 }
                 return Ok(());
@@ -1096,7 +1145,7 @@ impl DaemonServer {
                 eprintln!("Worker {} killed by signal {:?}", session_id, sig);
                 handle.health_state = WorkerHealthState::Crashed;
                 handle.metrics.requests_failed += 1;
-                
+
                 // Try to respawn
                 if handle.metrics.respawn_count < MAX_RESPAWN_ATTEMPTS {
                     let time_since_spawn = now.duration_since(handle.metrics.spawn_time);
@@ -1117,18 +1166,20 @@ impl DaemonServer {
 
         // Check for hung workers (last heartbeat too old)
         let time_since_heartbeat = now.duration_since(handle.metrics.last_heartbeat);
-        
+
         if time_since_heartbeat > REQUEST_TIMEOUT {
             // Worker hasn't responded in a long time
             if time_since_heartbeat > REQUEST_TIMEOUT * 2 {
                 // Definitely hung, kill and respawn
-                eprintln!("Worker {} is hung (no heartbeat for {:?}), killing", 
-                    session_id, time_since_heartbeat);
+                eprintln!(
+                    "Worker {} is hung (no heartbeat for {:?}), killing",
+                    session_id, time_since_heartbeat
+                );
                 handle.health_state = WorkerHealthState::Hung;
-                
+
                 // Force kill
                 let _ = signal::kill(handle.worker_pid, Signal::SIGKILL);
-                
+
                 // Try to respawn
                 if handle.metrics.respawn_count < MAX_RESPAWN_ATTEMPTS {
                     return self.respawn_worker(session_id);
@@ -1137,8 +1188,10 @@ impl DaemonServer {
                 // Mark as slow/unresponsive
                 handle.health_state = WorkerHealthState::Unresponsive;
                 handle.metrics.consecutive_failures += 1;
-                eprintln!("Worker {} is unresponsive (no heartbeat for {:?})", 
-                    session_id, time_since_heartbeat);
+                eprintln!(
+                    "Worker {} is unresponsive (no heartbeat for {:?})",
+                    session_id, time_since_heartbeat
+                );
             }
         } else {
             // Worker responded recently, reset consecutive failures
@@ -1155,21 +1208,27 @@ impl DaemonServer {
     /// Respawn a failed worker
     fn respawn_worker(&mut self, session_id: SessionId) -> Result<()> {
         // Remove the old worker from sessions
-        let old_handle = self.sessions.remove(&session_id)
+        let old_handle = self
+            .sessions
+            .remove(&session_id)
             .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
 
-        eprintln!("Respawning worker {} (previous PID: {})", 
-            session_id, old_handle.worker_pid);
+        eprintln!(
+            "Respawning worker {} (previous PID: {})",
+            session_id, old_handle.worker_pid
+        );
 
         // Note: We can't truly "respawn" a worker for an existing session since
         // workers are tied to client connections. This method is here for potential
         // future use with persistent workers or worker pools.
-        
+
         // For now, we just ensure cleanup happened
         let _ = waitpid(old_handle.worker_pid, Some(WaitPidFlag::WNOHANG));
 
-        eprintln!("Worker {} removed from pool after {} respawn attempts", 
-            session_id, old_handle.metrics.respawn_count);
+        eprintln!(
+            "Worker {} removed from pool after {} respawn attempts",
+            session_id, old_handle.metrics.respawn_count
+        );
 
         Ok(())
     }
@@ -1178,7 +1237,7 @@ impl DaemonServer {
     pub fn print_health_stats(&self) {
         println!("\nWorker Health Statistics:");
         println!("Total active workers: {}", self.sessions.len());
-        
+
         let mut healthy = 0;
         let mut unresponsive = 0;
         let mut slow = 0;
@@ -1205,7 +1264,8 @@ impl DaemonServer {
         for handle in self.sessions.values() {
             let uptime = handle.created_at.elapsed().as_secs();
             let failure_rate = if handle.metrics.requests_processed > 0 {
-                (handle.metrics.requests_failed as f64 / handle.metrics.requests_processed as f64) * 100.0
+                (handle.metrics.requests_failed as f64 / handle.metrics.requests_processed as f64)
+                    * 100.0
             } else {
                 0.0
             };
@@ -1213,12 +1273,15 @@ impl DaemonServer {
             println!("\nWorker {} (PID {}):", handle.id, handle.worker_pid);
             println!("  State: {:?}", handle.health_state);
             println!("  Uptime: {}s", uptime);
-            println!("  Requests: {} processed, {} failed ({:.1}% failure rate)",
-                handle.metrics.requests_processed,
-                handle.metrics.requests_failed,
-                failure_rate);
+            println!(
+                "  Requests: {} processed, {} failed ({:.1}% failure rate)",
+                handle.metrics.requests_processed, handle.metrics.requests_failed, failure_rate
+            );
             println!("  Respawn count: {}", handle.metrics.respawn_count);
-            println!("  Consecutive failures: {}", handle.metrics.consecutive_failures);
+            println!(
+                "  Consecutive failures: {}",
+                handle.metrics.consecutive_failures
+            );
         }
     }
 
@@ -1244,31 +1307,31 @@ impl Drop for DaemonServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_stats_cache_new() {
         let cache = StatsCache::new();
-        
+
         // Should have static built-in stats
         let builtins = cache.get_builtin_stats();
         assert!(builtins.contains_key("host"), "should have host stat");
         assert!(builtins.contains_key("os"), "should have os stat");
         assert!(builtins.contains_key("kernel"), "should have kernel stat");
         assert!(builtins.contains_key("arch"), "should have arch stat");
-        
+
         // Should have dynamic built-in stats
         assert!(builtins.contains_key("uptime"), "should have uptime stat");
         assert!(builtins.contains_key("memory"), "should have memory stat");
-        
+
         // Should have no custom stats initially
         let custom = cache.get_custom_stats();
         assert!(custom.is_empty(), "should have no custom stats initially");
     }
-    
+
     #[test]
     fn test_stats_cache_init_custom_stats() {
         let mut cache = StatsCache::new();
-        
+
         let configs = vec![
             CustomStatConfig {
                 name: "test_stat".to_string(),
@@ -1283,97 +1346,101 @@ mod tests {
                 timeout: Duration::from_secs(5),
             },
         ];
-        
+
         cache.init_custom_stats(&configs);
-        
+
         // Custom stats should need updates (initialized with old timestamp)
         let needing_update = cache.get_stats_needing_update();
-        assert_eq!(needing_update.len(), 2, "both custom stats should need update");
+        assert_eq!(
+            needing_update.len(),
+            2,
+            "both custom stats should need update"
+        );
         assert!(needing_update.contains(&"test_stat".to_string()));
         assert!(needing_update.contains(&"another_stat".to_string()));
     }
-    
+
     #[test]
     fn test_stats_cache_update_custom_stat() {
         let mut cache = StatsCache::new();
-        
-        let configs = vec![
-            CustomStatConfig {
-                name: "echo_test".to_string(),
-                command: "echo hello".to_string(),
-                interval: Duration::from_secs(30),
-                timeout: Duration::from_secs(2),
-            },
-        ];
-        
+
+        let configs = vec![CustomStatConfig {
+            name: "echo_test".to_string(),
+            command: "echo hello".to_string(),
+            interval: Duration::from_secs(30),
+            timeout: Duration::from_secs(2),
+        }];
+
         cache.init_custom_stats(&configs);
-        
+
         // Update the stat
         cache.update_custom_stat("echo_test");
-        
+
         // Should now have a value
         let custom = cache.get_custom_stats();
         assert_eq!(custom.get("echo_test"), Some(&"hello".to_string()));
-        
+
         // Should not need update anymore (recent update)
         let needing_update = cache.get_stats_needing_update();
         assert!(!needing_update.contains(&"echo_test".to_string()));
     }
-    
+
     #[test]
     fn test_stats_cache_update_builtins() {
         let mut cache = StatsCache::new();
-        
+
         // Force update
         cache.update_builtins();
-        
+
         let builtins = cache.get_builtin_stats();
-        
+
         // Should have time and date stats
         assert!(builtins.contains_key("time"), "should have time stat");
         assert!(builtins.contains_key("date"), "should have date stat");
-        
+
         // Time should be recently updated
-        assert!(cache.seconds_since_update() < 2, "should be recently updated");
+        assert!(
+            cache.seconds_since_update() < 2,
+            "should be recently updated"
+        );
     }
-    
+
     #[test]
     fn test_custom_stat_cached_error_handling() {
         let mut cache = StatsCache::new();
-        
-        let configs = vec![
-            CustomStatConfig {
-                name: "bad_command".to_string(),
-                command: "this_command_does_not_exist_12345".to_string(),
-                interval: Duration::from_secs(30),
-                timeout: Duration::from_secs(2),
-            },
-        ];
-        
+
+        let configs = vec![CustomStatConfig {
+            name: "bad_command".to_string(),
+            command: "this_command_does_not_exist_12345".to_string(),
+            interval: Duration::from_secs(30),
+            timeout: Duration::from_secs(2),
+        }];
+
         cache.init_custom_stats(&configs);
         cache.update_custom_stat("bad_command");
-        
+
         // Should have empty value in get_custom_stats (errors are filtered out)
         let custom = cache.get_custom_stats();
-        assert!(!custom.contains_key("bad_command"), "error stats should be filtered");
+        assert!(
+            !custom.contains_key("bad_command"),
+            "error stats should be filtered"
+        );
     }
-    
+
     #[test]
     fn test_custom_stat_first_line_only() {
         let mut cache = StatsCache::new();
-        
-        let configs = vec![
-            CustomStatConfig {
-                name: "multiline".to_string(),
-                command: "echo -e 'line1\\nline2\\nline3'".to_string(),
-                interval: Duration::from_secs(30),
-                timeout: Duration::from_secs(2),
-            },
-        ];
-        
+
+        let configs = vec![CustomStatConfig {
+            name: "multiline".to_string(),
+            command: "echo -e 'line1\\nline2\\nline3'".to_string(),
+            interval: Duration::from_secs(30),
+            timeout: Duration::from_secs(2),
+        }];
+
         cache.init_custom_stats(&configs);
         cache.update_custom_stat("multiline");
-        
+
         // Should only have first line
         let custom = cache.get_custom_stats();
         let value = custom.get("multiline").unwrap();

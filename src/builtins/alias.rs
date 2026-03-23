@@ -26,7 +26,10 @@ pub fn builtin_alias(args: &[String], runtime: &mut Runtime) -> Result<Execution
         } else {
             // If no '=' is present, show the specific alias
             if let Some(value) = runtime.get_alias(arg) {
-                return Ok(ExecutionResult::success(format!("alias {}='{}'\n", arg, value)));
+                return Ok(ExecutionResult::success(format!(
+                    "alias {}='{}'\n",
+                    arg, value
+                )));
             } else {
                 return Err(anyhow!("alias: {}: not found", arg));
             }
@@ -50,10 +53,19 @@ pub fn builtin_unalias(args: &[String], runtime: &mut Runtime) -> Result<Executi
     if args.len() == 1 && args[0] == "-a" {
         // Clear all aliases
         let count = runtime.get_all_aliases().len();
-        runtime.get_all_aliases().keys().cloned().collect::<Vec<_>>().iter().for_each(|name| {
-            runtime.remove_alias(name);
-        });
-        return Ok(ExecutionResult::success(format!("Removed {} alias(es)\n", count)));
+        runtime
+            .get_all_aliases()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .iter()
+            .for_each(|name| {
+                runtime.remove_alias(name);
+            });
+        return Ok(ExecutionResult::success(format!(
+            "Removed {} alias(es)\n",
+            count
+        )));
     }
 
     // Remove specified aliases
@@ -147,7 +159,10 @@ mod tests {
 
         let result = builtin_alias(&["invalid name=value".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid alias name"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid alias name"));
     }
 
     #[test]

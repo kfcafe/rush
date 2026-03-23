@@ -1,21 +1,21 @@
-pub mod pipeline;
-pub mod value;
 pub mod error_formatter;
+pub mod pipeline;
 pub mod profile;
-pub mod suggestions;
 pub mod stack;
+pub mod suggestions;
+pub mod value;
 
 // Re-export Value type for convenience
-pub use value::Value;
 pub use error_formatter::ErrorFormatter;
-pub use profile::{ProfileData, ProfileFormatter, ExecutionStage};
-pub use suggestions::{SuggestionEngine, SuggestionConfig};
+pub use profile::{ExecutionStage, ProfileData, ProfileFormatter};
 pub use stack::CallStack;
+pub use suggestions::{SuggestionConfig, SuggestionEngine};
+pub use value::Value;
 
 use crate::arithmetic;
 use crate::builtins::Builtins;
 use crate::correction::Corrector;
-use crate::daemon::pi_rpc::{PiRpcManager, PiRpcError, PiEvent};
+use crate::daemon::pi_rpc::{PiEvent, PiRpcError, PiRpcManager};
 use crate::glob_expansion;
 use crate::parser::ast::*;
 use crate::runtime::Runtime;
@@ -23,14 +23,14 @@ use crate::runtime::Runtime;
 use crate::signal::SignalHandler;
 use crate::terminal::TerminalControl;
 use anyhow::{anyhow, Result};
+use nix::unistd::{getpid, setpgid, Pid};
 use std::collections::HashMap;
 use std::io::Write;
+use std::os::unix::process::CommandExt;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use nix::unistd::{setpgid, getpid, Pid};
-use std::os::unix::process::CommandExt;
 
 pub struct Executor {
     runtime: Runtime,
@@ -129,16 +129,16 @@ impl Executor {
                     // Execute signal trap if set
                     let signal_num = handler.signal_number();
                     let trap_signal = match signal_num {
-                        2 => Some(crate::builtins::trap::TrapSignal::Int),  // SIGINT
+                        2 => Some(crate::builtins::trap::TrapSignal::Int), // SIGINT
                         15 => Some(crate::builtins::trap::TrapSignal::Term), // SIGTERM
-                        1 => Some(crate::builtins::trap::TrapSignal::Hup),   // SIGHUP
+                        1 => Some(crate::builtins::trap::TrapSignal::Hup), // SIGHUP
                         _ => None,
                     };
-                    
+
                     if let Some(sig) = trap_signal {
                         let _ = self.execute_trap(sig);
                     }
-                    
+
                     return Err(anyhow!("Interrupted by signal"));
                 }
             }
@@ -163,7 +163,7 @@ impl Executor {
             accumulated_stdout.push_str(&result.stdout());
             accumulated_stderr.push_str(&result.stderr);
             last_exit_code = result.exit_code;
-            
+
             // Update $? after each statement
             self.runtime.set_last_exit_code(last_exit_code);
 
@@ -217,28 +217,29 @@ impl Executor {
         // Execute the inner command and capture its output
         let cmd_result = self.execute_statement(*pipe_ask.command)?;
         let stdin_content = cmd_result.stdout();
-        
+
         // Build the full prompt including the piped input
         let user_prompt = if pipe_ask.prompt.is_empty() {
             "Analyze this output".to_string()
         } else {
             pipe_ask.prompt.clone()
         };
-        
+
         let full_prompt = if stdin_content.is_empty() {
             user_prompt
         } else {
             format!("{}\n\nInput:\n```\n{}\n```", user_prompt, stdin_content)
         };
-        
+
         // Use PiRpcManager to spawn pi --rpc subprocess
         let mut manager = PiRpcManager::new();
-        
+
         // Ensure pi subprocess is running
         if let Err(e) = manager.ensure_running() {
             let error_msg = match e {
                 PiRpcError::SpawnFailed(_) => {
-                    "pi not found. Install with: npm install -g @mariozechner/pi-coding-agent".to_string()
+                    "pi not found. Install with: npm install -g @mariozechner/pi-coding-agent"
+                        .to_string()
                 }
                 other => format!("Pi error: {}", other),
             };
@@ -250,11 +251,11 @@ impl Executor {
                 error: None,
             });
         }
-        
+
         // Send prompt and stream responses
         let mut response_text = String::new();
         let mut final_exit_code = 0;
-        
+
         match manager.prompt(&full_prompt) {
             Ok(events) => {
                 for event_result in events {
@@ -298,7 +299,7 @@ impl Executor {
                 });
             }
         }
-        
+
         Ok(ExecutionResult {
             output: Output::Text(response_text),
             stderr: String::new(),
@@ -310,11 +311,28 @@ impl Executor {
     fn execute_command(&mut self, command: Command) -> Result<ExecutionResult> {
         // Print command if xtrace is enabled
         if self.runtime.options.xtrace {
-            let args_str = command.args.iter()
+            let args_str = command
+                .args
+                .iter()
                 .map(|arg| match arg {
-                    Argument::Literal(s) | Argument::Variable(s) | Argument::BracedVariable(s) |
-                    Argument::CommandSubstitution(s) | Argument::Flag(s) | Argument::Path(s) |
-                    Argument::Glob(s) => s.clone(),
+                    Argument::Literal(s)
+                    | Argument::SingleQuoted(s)
+                    | Argument::Variable(s)
+                    | Argument::BracedVariable(s)
+                    | Argument::CommandSubstitution(s)
+                    | Argument::Flag(s)
+                    | Argument::Path(s)
+                    | Argument::Glob(s) => s.clone(),
+                    Argument::DoubleQuoted(parts) => parts
+                        .iter()
+                        .map(|p| match p {
+                            ArgumentPart::Literal(s) => s.clone(),
+                            ArgumentPart::Variable(s)
+                            | ArgumentPart::BracedVariable(s)
+                            | ArgumentPart::CommandSubstitution(s) => s.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(""),
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -327,39 +345,43 @@ impl Executor {
 
         // Handle prefix environment assignments (e.g., FOO=bar cmd args)
         // Save old values to restore after command execution
-        let saved_env: Vec<(String, Option<String>)> = command.prefix_env.iter()
+        let saved_env: Vec<(String, Option<String>)> = command
+            .prefix_env
+            .iter()
             .map(|(k, _)| (k.clone(), self.runtime.get_variable(k)))
             .collect();
 
         // Set prefix env vars before command execution
         for (key, value) in &command.prefix_env {
             let expanded_value = self.expand_string_value(value)?;
-            self.runtime.set_variable(key.clone(), expanded_value.clone());
+            self.runtime
+                .set_variable(key.clone(), expanded_value.clone());
             self.runtime.set_env(key, &expanded_value);
         }
 
         // Check if it's an alias and expand it
-        let (command_name, command_args) = if let Some(alias_value) = self.runtime.get_alias(&command.name) {
-            // Split the alias value into command and args
-            let parts: Vec<&str> = alias_value.split_whitespace().collect();
-            if parts.is_empty() {
-                return Err(anyhow!("Empty alias expansion for '{}'", command.name));
-            }
+        let (command_name, command_args) =
+            if let Some(alias_value) = self.runtime.get_alias(&command.name) {
+                // Split the alias value into command and args
+                let parts: Vec<&str> = alias_value.split_whitespace().collect();
+                if parts.is_empty() {
+                    return Err(anyhow!("Empty alias expansion for '{}'", command.name));
+                }
 
-            // First part is the new command name
-            let new_name = parts[0].to_string();
+                // First part is the new command name
+                let new_name = parts[0].to_string();
 
-            // Remaining parts become additional arguments (prepended to original args)
-            let mut new_args = Vec::new();
-            for part in parts.iter().skip(1) {
-                new_args.push(Argument::Literal(part.to_string()));
-            }
-            new_args.extend(command.args.clone());
+                // Remaining parts become additional arguments (prepended to original args)
+                let mut new_args = Vec::new();
+                for part in parts.iter().skip(1) {
+                    new_args.push(Argument::Literal(part.to_string()));
+                }
+                new_args.extend(command.args.clone());
 
-            (new_name, new_args)
-        } else {
-            (command.name.clone(), command.args.clone())
-        };
+                (new_name, new_args)
+            } else {
+                (command.name.clone(), command.args.clone())
+            };
 
         // Check if it's a user-defined function first
         if self.runtime.get_function(&command_name).is_some() {
@@ -385,15 +407,25 @@ impl Executor {
             let stdin_content = self.extract_stdin_content(&command.redirects)?;
             // Also check for piped stdin from compound command in pipeline
             let piped_stdin = self.runtime.get_piped_stdin().map(|s| s.to_vec());
-            
-            // Helper to convert builtin errors to stderr in result (for redirect handling)
-            let builtin_result_to_stderr = |res: Result<ExecutionResult>, cmd_name: &str| -> ExecutionResult {
-                match res {
-                    Ok(r) => r,
-                    Err(e) => ExecutionResult::error(format!("{}: {}\n", cmd_name, e)),
-                }
-            };
-            
+
+            // Helper to convert builtin errors to stderr in result (for redirect handling).
+            // ExitSignal is re-raised so callers can propagate the exit code correctly.
+            let builtin_result_to_stderr =
+                |res: Result<ExecutionResult>, cmd_name: &str| -> Result<ExecutionResult> {
+                    match res {
+                        Ok(r) => Ok(r),
+                        Err(e) => {
+                            // ExitSignal must propagate — don't swallow it into stderr.
+                            if e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>()
+                                .is_some()
+                            {
+                                return Err(e);
+                            }
+                            Ok(ExecutionResult::error(format!("{}: {}\n", cmd_name, e)))
+                        }
+                    }
+                };
+
             let mut result = if let Some(ref stdin_data) = stdin_content {
                 builtin_result_to_stderr(
                     self.builtins.execute_with_stdin(
@@ -403,16 +435,18 @@ impl Executor {
                         Some(stdin_data.as_bytes()),
                     ),
                     &command_name,
-                )
+                )?
             } else if let Some(ref piped_data) = piped_stdin {
                 // Use piped stdin from compound command in pipeline
                 // For 'read' builtin, consume one line and keep the rest
                 if command_name == "read" {
                     // Find the first newline to determine how much to consume
-                    let line_end = piped_data.iter().position(|&b| b == b'\n')
+                    let line_end = piped_data
+                        .iter()
+                        .position(|&b| b == b'\n')
                         .map(|p| p + 1)
                         .unwrap_or(piped_data.len());
-                    
+
                     // Execute read with just this portion
                     let result = builtin_result_to_stderr(
                         self.builtins.execute_with_stdin(
@@ -422,16 +456,17 @@ impl Executor {
                             Some(&piped_data[..line_end]),
                         ),
                         &command_name,
-                    );
-                    
+                    )?;
+
                     // Update piped_stdin to remaining data
                     if line_end < piped_data.len() {
-                        self.runtime.set_piped_stdin(piped_data[line_end..].to_vec());
+                        self.runtime
+                            .set_piped_stdin(piped_data[line_end..].to_vec());
                     } else {
                         // All data consumed - clear it (will cause EOF on next read)
                         let _ = self.runtime.take_piped_stdin();
                     }
-                    
+
                     result
                 } else {
                     builtin_result_to_stderr(
@@ -442,13 +477,14 @@ impl Executor {
                             Some(piped_data),
                         ),
                         &command_name,
-                    )
+                    )?
                 }
             } else {
                 builtin_result_to_stderr(
-                    self.builtins.execute(&command_name, args, &mut self.runtime),
+                    self.builtins
+                        .execute(&command_name, args, &mut self.runtime),
                     &command_name,
-                )
+                )?
             };
 
             // Handle redirects for builtins
@@ -657,11 +693,15 @@ impl Executor {
         Ok(result)
     }
 
-    fn apply_redirects(&self, mut result: ExecutionResult, redirects: &[Redirect]) -> Result<ExecutionResult> {
+    fn apply_redirects(
+        &self,
+        mut result: ExecutionResult,
+        redirects: &[Redirect],
+    ) -> Result<ExecutionResult> {
         use std::fs::{File, OpenOptions};
         use std::io::Write;
         use std::path::Path;
-        
+
         // Helper to resolve paths relative to cwd
         let resolve_path = |target: &str| -> std::path::PathBuf {
             let path = Path::new(target);
@@ -671,7 +711,7 @@ impl Executor {
                 self.runtime.get_cwd().join(target)
             }
         };
-        
+
         for redirect in redirects {
             match &redirect.kind {
                 RedirectKind::Stdout => {
@@ -736,18 +776,21 @@ impl Executor {
                 }
             }
         }
-        
+
         Ok(result)
     }
 
     fn execute_user_function(&mut self, name: &str, args: Vec<String>) -> Result<ExecutionResult> {
         // Get the function definition (we know it exists because we checked earlier)
-        let func = self.runtime.get_function(name)
+        let func = self
+            .runtime
+            .get_function(name)
             .ok_or_else(|| anyhow!("Function '{}' not found", name))?
             .clone(); // Clone to avoid borrow issues
 
         // Check recursion depth
-        self.runtime.push_call(name.to_string())
+        self.runtime
+            .push_call(name.to_string())
             .map_err(|e| anyhow!(e))?;
 
         // Track function entry in call stack for error reporting
@@ -782,7 +825,9 @@ impl Executor {
                 }
                 Err(e) => {
                     // Check if this is a return signal
-                    if let Some(return_signal) = e.downcast_ref::<crate::builtins::return_builtin::ReturnSignal>() {
+                    if let Some(return_signal) =
+                        e.downcast_ref::<crate::builtins::return_builtin::ReturnSignal>()
+                    {
                         // Early return from function
                         last_result.exit_code = return_signal.exit_code;
                         break;
@@ -829,14 +874,14 @@ impl Executor {
 
         // Handle redirections
         use std::fs::{File, OpenOptions};
-        use std::process::Stdio;
         use std::path::Path;
-        
+        use std::process::Stdio;
+
         let mut stdout_redirect = false;
         let mut stderr_redirect = false;
         let mut stderr_to_stdout = false;
         let mut stdin_redirect = false;
-        
+
         // Helper to resolve paths relative to cwd
         let resolve_path = |target: &str| -> std::path::PathBuf {
             let path = Path::new(target);
@@ -846,7 +891,7 @@ impl Executor {
                 self.runtime.get_cwd().join(target)
             }
         };
-        
+
         for redirect in &command.redirects {
             match &redirect.kind {
                 RedirectKind::Stdout => {
@@ -898,8 +943,10 @@ impl Executor {
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         // Clone file descriptor for both stdout and stderr
-                        cmd.stdout(Stdio::from(file.try_clone()
-                            .map_err(|e| anyhow!("Failed to clone file descriptor: {}", e))?));
+                        cmd.stdout(Stdio::from(
+                            file.try_clone()
+                                .map_err(|e| anyhow!("Failed to clone file descriptor: {}", e))?,
+                        ));
                         cmd.stderr(Stdio::from(file));
                         stdout_redirect = true;
                         stderr_redirect = true;
@@ -912,7 +959,7 @@ impl Executor {
                 }
             }
         }
-        
+
         // Collect heredoc body before spawning (needs mutable borrow of self for expansion)
         let heredoc_body: Option<String> = {
             let mut body = None;
@@ -938,15 +985,16 @@ impl Executor {
         if !stdin_redirect {
             cmd.stdin(Stdio::inherit());
         }
-        
+
         // For commands with no redirects, check if we should run in full interactive mode
         // This allows interactive programs (like editors, REPLs, claude) to work properly
         // NEVER inherit IO in embedded mode (TUI usage) - always pipe
-        let should_inherit_io = self.show_progress && 
-                                !stdout_redirect && !stderr_redirect && 
-                                command.redirects.is_empty() &&
-                                atty::is(atty::Stream::Stdout);
-        
+        let should_inherit_io = self.show_progress
+            && !stdout_redirect
+            && !stderr_redirect
+            && command.redirects.is_empty()
+            && atty::is(atty::Stream::Stdout);
+
         // Set default piped outputs if not redirected
         if !stdout_redirect {
             if should_inherit_io {
@@ -981,12 +1029,9 @@ impl Executor {
 
         // Collect data for suggestions before spawning (needed for error handling closure)
         let builtin_names: Vec<String> = self.builtins.builtin_names();
-        let alias_names: Vec<String> = self.runtime
-            .get_all_aliases()
-            .keys()
-            .cloned()
-            .collect();
-        let history_commands: Vec<String> = self.runtime
+        let alias_names: Vec<String> = self.runtime.get_all_aliases().keys().cloned().collect();
+        let history_commands: Vec<String> = self
+            .runtime
             .history()
             .entries()
             .iter()
@@ -998,33 +1043,32 @@ impl Executor {
         let command_name = command.name.clone();
 
         // Spawn the command
-        let mut child = cmd.spawn()
-            .map_err(|e| {
-                // If command not found, provide suggestions
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    // Use suggestion engine for context-aware suggestions
-                    let suggestions = self.suggestion_engine.suggest_command(
-                        &command_name,
-                        &builtin_names,
-                        &alias_names,
-                        &history_commands,
-                        &current_dir,
-                    );
+        let mut child = cmd.spawn().map_err(|e| {
+            // If command not found, provide suggestions
+            if e.kind() == std::io::ErrorKind::NotFound {
+                // Use suggestion engine for context-aware suggestions
+                let suggestions = self.suggestion_engine.suggest_command(
+                    &command_name,
+                    &builtin_names,
+                    &alias_names,
+                    &history_commands,
+                    &current_dir,
+                );
 
-                    let mut error_msg = format!("Command not found: '{}'", command_name);
-                                
-                    if !suggestions.is_empty() {
-                        error_msg.push_str("\n\nDid you mean:\n");
-                        for suggestion in suggestions.iter().take(3) {
-                            error_msg.push_str(&format!("  {}\n", suggestion.text));
-                        }
+                let mut error_msg = format!("Command not found: '{}'", command_name);
+
+                if !suggestions.is_empty() {
+                    error_msg.push_str("\n\nDid you mean:\n");
+                    for suggestion in suggestions.iter().take(3) {
+                        error_msg.push_str(&format!("  {}\n", suggestion.text));
                     }
-
-                    anyhow!(error_msg)
-                } else {
-                    anyhow!("Failed to execute '{}': {}", command_name, e)
                 }
-            })?;
+
+                anyhow!(error_msg)
+            } else {
+                anyhow!("Failed to execute '{}': {}", command_name, e)
+            }
+        })?;
 
         // Give terminal control to the child process group for interactive commands
         // This is required for programs like sudo, ssh, vim that need terminal access
@@ -1037,7 +1081,8 @@ impl Executor {
         if let Some(body) = heredoc_body {
             if let Some(mut stdin) = child.stdin.take() {
                 use std::io::Write;
-                stdin.write_all(body.as_bytes())
+                stdin
+                    .write_all(body.as_bytes())
                     .map_err(|e| anyhow!("Failed to write here-document to stdin: {}", e))?;
                 drop(stdin); // Close stdin so child sees EOF
             }
@@ -1068,13 +1113,18 @@ impl Executor {
                         thread::sleep(Duration::from_millis(1));
                     }
                     Err(e) => {
-                        return Err(anyhow!("Failed to check status for '{}': {}", command.name, e));
+                        return Err(anyhow!(
+                            "Failed to check status for '{}': {}",
+                            command.name,
+                            e
+                        ));
                     }
                 }
             }
         } else {
             // Non-interactive mode - use blocking wait (most efficient)
-            let output = child.wait_with_output()
+            let output = child
+                .wait_with_output()
                 .map_err(|e| anyhow!("Failed to wait for '{}': {}", command.name, e))?;
 
             let mut stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
@@ -1086,8 +1136,12 @@ impl Executor {
 
             (
                 stdout_str,
-                if stderr_to_stdout { String::new() } else { stderr_str },
-                output.status.code().unwrap_or(1)
+                if stderr_to_stdout {
+                    String::new()
+                } else {
+                    stderr_str
+                },
+                output.status.code().unwrap_or(1),
             )
         };
 
@@ -1185,9 +1239,7 @@ impl Executor {
                                 end += 1;
                             }
                             let var_name: String = chars[start..end].iter().collect();
-                            let value = self.runtime
-                                .get_variable(&var_name)
-                                .unwrap_or_default();
+                            let value = self.runtime.get_variable(&var_name).unwrap_or_default();
                             result.push_str(&value);
                             i = end;
                         }
@@ -1218,16 +1270,33 @@ impl Executor {
                         i += 1;
                     }
                 }
-                '\\' if i + 1 < chars.len() => {
-                    match chars[i + 1] {
-                        '$' => { result.push('$'); i += 2; }
-                        '`' => { result.push('`'); i += 2; }
-                        '\\' => { result.push('\\'); i += 2; }
-                        'n' => { result.push('\n'); i += 2; }
-                        't' => { result.push('\t'); i += 2; }
-                        _ => { result.push('\\'); result.push(chars[i + 1]); i += 2; }
+                '\\' if i + 1 < chars.len() => match chars[i + 1] {
+                    '$' => {
+                        result.push('$');
+                        i += 2;
                     }
-                }
+                    '`' => {
+                        result.push('`');
+                        i += 2;
+                    }
+                    '\\' => {
+                        result.push('\\');
+                        i += 2;
+                    }
+                    'n' => {
+                        result.push('\n');
+                        i += 2;
+                    }
+                    't' => {
+                        result.push('\t');
+                        i += 2;
+                    }
+                    _ => {
+                        result.push('\\');
+                        result.push(chars[i + 1]);
+                        i += 2;
+                    }
+                },
                 c => {
                     result.push(c);
                     i += 1;
@@ -1261,7 +1330,8 @@ impl Executor {
         // String length: ${#var}
         if expr.starts_with('#') {
             let var_name = &expr[1..];
-            return self.runtime
+            return self
+                .runtime
                 .get_variable(var_name)
                 .map(|v| v.len().to_string())
                 .unwrap_or_else(|| "0".to_string());
@@ -1272,7 +1342,8 @@ impl Executor {
         if let Some(pos) = expr.find(":-") {
             let var_name = &expr[..pos];
             let default_val = &expr[pos + 2..];
-            return self.runtime
+            return self
+                .runtime
                 .get_variable(var_name)
                 .filter(|v| !v.is_empty())
                 .unwrap_or_else(|| default_val.to_string());
@@ -1290,7 +1361,8 @@ impl Executor {
         if let Some(pos) = expr.find(":+") {
             let var_name = &expr[..pos];
             let alternate = &expr[pos + 2..];
-            return self.runtime
+            return self
+                .runtime
                 .get_variable(var_name)
                 .filter(|v| !v.is_empty())
                 .map(|_| alternate.to_string())
@@ -1300,7 +1372,11 @@ impl Executor {
         if let Some(pos) = expr.find(":?") {
             let var_name = &expr[..pos];
             let message = &expr[pos + 2..];
-            if self.runtime.get_variable(var_name).map_or(true, |v| v.is_empty()) {
+            if self
+                .runtime
+                .get_variable(var_name)
+                .map_or(true, |v| v.is_empty())
+            {
                 eprintln!("{}: {}", var_name, message);
             }
             return self.runtime.get_variable(var_name).unwrap_or_default();
@@ -1372,15 +1448,17 @@ impl Executor {
             let handle = thread::spawn(move || {
                 let result = if builtins.is_builtin(&command.name) {
                     // Execute builtin
-                    let args = expand_and_resolve_arguments_static(&command.args, &runtime_snapshot)?;
-                    
+                    let args =
+                        expand_and_resolve_arguments_static(&command.args, &runtime_snapshot)?;
+
                     // We need a mutable runtime, but we can't safely share it across threads
                     // For now, create a temporary runtime for builtins in parallel execution
                     let mut temp_runtime = (*runtime_snapshot).clone();
                     builtins.execute(&command.name, args, &mut temp_runtime)
                 } else {
                     // Execute external command
-                    let args = expand_and_resolve_arguments_static(&command.args, &runtime_snapshot)?;
+                    let args =
+                        expand_and_resolve_arguments_static(&command.args, &runtime_snapshot)?;
 
                     match StdCommand::new(&command.name)
                         .args(&args)
@@ -1389,7 +1467,9 @@ impl Executor {
                         .output()
                     {
                         Ok(output) => Ok(ExecutionResult {
-                            output: Output::Text(String::from_utf8_lossy(&output.stdout).to_string()),
+                            output: Output::Text(
+                                String::from_utf8_lossy(&output.stdout).to_string(),
+                            ),
                             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
                             exit_code: output.status.code().unwrap_or(1),
                             error: None,
@@ -1397,30 +1477,28 @@ impl Executor {
                         Err(e) => {
                             if e.kind() == std::io::ErrorKind::NotFound {
                                 let builtin_names: Vec<String> = builtins.builtin_names();
-                                
+
                                 // Get aliases for suggestions
-                                let alias_names: Vec<String> = runtime_snapshot
-                                    .get_all_aliases()
-                                    .keys()
-                                    .cloned()
-                                    .collect();
-                                
+                                let alias_names: Vec<String> =
+                                    runtime_snapshot.get_all_aliases().keys().cloned().collect();
+
                                 // Use alias-aware suggestions
                                 let suggestions = corrector.suggest_command_with_aliases(
                                     &command.name,
                                     &builtin_names,
                                     &alias_names,
                                 );
-                                
-                                let mut error_msg = format!("Command not found: '{}'", command.name);
-                                
+
+                                let mut error_msg =
+                                    format!("Command not found: '{}'", command.name);
+
                                 if !suggestions.is_empty() {
                                     error_msg.push_str("\n\nDid you mean:\n");
                                     for suggestion in suggestions.iter().take(3) {
                                         error_msg.push_str(&format!("  {}\n", suggestion.text));
                                     }
                                 }
-                                
+
                                 Err(anyhow!(error_msg))
                             } else {
                                 Err(anyhow!("Failed to execute '{}': {}", command.name, e))
@@ -1567,8 +1645,7 @@ impl Executor {
 
         let result = (|| -> Result<ExecutionResult> {
             for item in items {
-                self.runtime
-                    .set_variable(for_loop.variable.clone(), item);
+                self.runtime.set_variable(for_loop.variable.clone(), item);
                 for statement in &for_loop.body {
                     match self.execute_statement(statement.clone()) {
                         Ok(result) => {
@@ -1578,7 +1655,9 @@ impl Executor {
                         }
                         Err(e) => {
                             // Check if this is a break signal
-                            if let Some(break_signal) = e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>() {
+                            if let Some(break_signal) =
+                                e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>()
+                            {
                                 // First, add any accumulated output from the break signal itself
                                 accumulated_stdout.push_str(&break_signal.accumulated_stdout);
                                 accumulated_stderr.push_str(&break_signal.accumulated_stderr);
@@ -1593,16 +1672,21 @@ impl Executor {
                                     });
                                 } else {
                                     // Propagate to outer loop with decreased level and accumulated output
-                                    return Err(anyhow::Error::new(crate::builtins::break_builtin::BreakSignal {
-                                        levels: break_signal.levels - 1,
-                                        accumulated_stdout: accumulated_stdout.clone(),
-                                        accumulated_stderr: accumulated_stderr.clone(),
-                                    }));
+                                    return Err(anyhow::Error::new(
+                                        crate::builtins::break_builtin::BreakSignal {
+                                            levels: break_signal.levels - 1,
+                                            accumulated_stdout: accumulated_stdout.clone(),
+                                            accumulated_stderr: accumulated_stderr.clone(),
+                                        },
+                                    ));
                                 }
                             }
 
                             // Check if this is a continue signal
-                            if let Some(continue_signal) = e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>() {
+                            if let Some(continue_signal) =
+                                e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>(
+                                )
+                            {
                                 // First, add any accumulated output from the continue signal itself
                                 accumulated_stdout.push_str(&continue_signal.accumulated_stdout);
                                 accumulated_stderr.push_str(&continue_signal.accumulated_stderr);
@@ -1612,11 +1696,13 @@ impl Executor {
                                     break; // Break out of the statement loop, continue with next item
                                 } else {
                                     // Propagate to outer loop with decreased level and accumulated output
-                                    return Err(anyhow::Error::new(crate::builtins::continue_builtin::ContinueSignal {
-                                        levels: continue_signal.levels - 1,
-                                        accumulated_stdout: accumulated_stdout.clone(),
-                                        accumulated_stderr: accumulated_stderr.clone(),
-                                    }));
+                                    return Err(anyhow::Error::new(
+                                        crate::builtins::continue_builtin::ContinueSignal {
+                                            levels: continue_signal.levels - 1,
+                                            accumulated_stdout: accumulated_stdout.clone(),
+                                            accumulated_stderr: accumulated_stderr.clone(),
+                                        },
+                                    ));
                                 }
                             }
 
@@ -1676,7 +1762,9 @@ impl Executor {
                         }
                         Err(e) => {
                             // Check if this is a break signal
-                            if let Some(break_signal) = e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>() {
+                            if let Some(break_signal) =
+                                e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>()
+                            {
                                 // First, add any accumulated output from the break signal itself
                                 accumulated_stdout.push_str(&break_signal.accumulated_stdout);
                                 accumulated_stderr.push_str(&break_signal.accumulated_stderr);
@@ -1691,16 +1779,21 @@ impl Executor {
                                     });
                                 } else {
                                     // Propagate to outer loop with decreased level and accumulated output
-                                    return Err(anyhow::Error::new(crate::builtins::break_builtin::BreakSignal {
-                                        levels: break_signal.levels - 1,
-                                        accumulated_stdout: accumulated_stdout.clone(),
-                                        accumulated_stderr: accumulated_stderr.clone(),
-                                    }));
+                                    return Err(anyhow::Error::new(
+                                        crate::builtins::break_builtin::BreakSignal {
+                                            levels: break_signal.levels - 1,
+                                            accumulated_stdout: accumulated_stdout.clone(),
+                                            accumulated_stderr: accumulated_stderr.clone(),
+                                        },
+                                    ));
                                 }
                             }
 
                             // Check if this is a continue signal
-                            if let Some(continue_signal) = e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>() {
+                            if let Some(continue_signal) =
+                                e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>(
+                                )
+                            {
                                 // First, add any accumulated output from the continue signal itself
                                 accumulated_stdout.push_str(&continue_signal.accumulated_stdout);
                                 accumulated_stderr.push_str(&continue_signal.accumulated_stderr);
@@ -1710,11 +1803,13 @@ impl Executor {
                                     break; // Break out of the statement loop, continue with next item
                                 } else {
                                     // Propagate to outer loop with decreased level and accumulated output
-                                    return Err(anyhow::Error::new(crate::builtins::continue_builtin::ContinueSignal {
-                                        levels: continue_signal.levels - 1,
-                                        accumulated_stdout: accumulated_stdout.clone(),
-                                        accumulated_stderr: accumulated_stderr.clone(),
-                                    }));
+                                    return Err(anyhow::Error::new(
+                                        crate::builtins::continue_builtin::ContinueSignal {
+                                            levels: continue_signal.levels - 1,
+                                            accumulated_stdout: accumulated_stdout.clone(),
+                                            accumulated_stderr: accumulated_stderr.clone(),
+                                        },
+                                    ));
                                 }
                             }
 
@@ -1772,7 +1867,9 @@ impl Executor {
                         }
                         Err(e) => {
                             // Check if this is a break signal
-                            if let Some(break_signal) = e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>() {
+                            if let Some(break_signal) =
+                                e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>()
+                            {
                                 accumulated_stdout.push_str(&break_signal.accumulated_stdout);
                                 accumulated_stderr.push_str(&break_signal.accumulated_stderr);
                                 self.runtime.exit_loop();
@@ -1785,7 +1882,10 @@ impl Executor {
                             }
 
                             // Check if this is a continue signal
-                            if let Some(continue_signal) = e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>() {
+                            if let Some(continue_signal) =
+                                e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>(
+                                )
+                            {
                                 accumulated_stdout.push_str(&continue_signal.accumulated_stdout);
                                 accumulated_stderr.push_str(&continue_signal.accumulated_stderr);
                                 break; // Break inner loop to continue outer loop
@@ -1884,7 +1984,7 @@ impl Executor {
         // Execute left side
         let left_result = self.execute_statement(*cond_and.left)?;
         self.runtime.set_last_exit_code(left_result.exit_code);
-        
+
         // Only execute right side if left succeeded (exit code 0)
         if left_result.exit_code == 0 {
             let right_result = self.execute_statement(*cond_and.right)?;
@@ -1906,7 +2006,7 @@ impl Executor {
         // Execute left side
         let left_result = self.execute_statement(*cond_or.left)?;
         self.runtime.set_last_exit_code(left_result.exit_code);
-        
+
         // Only execute right side if left failed (exit code != 0)
         if left_result.exit_code != 0 {
             let right_result = self.execute_statement(*cond_or.right)?;
@@ -1953,7 +2053,9 @@ impl Executor {
         let result = match child_executor.execute(statements) {
             Ok(r) => r,
             Err(e) => {
-                if let Some(exit_sig) = e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>() {
+                if let Some(exit_sig) =
+                    e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>()
+                {
                     ExecutionResult {
                         output: Output::Text(String::new()),
                         stderr: String::new(),
@@ -2013,7 +2115,7 @@ impl Executor {
                     .iter()
                     .map(|arg| self.resolve_argument(arg))
                     .collect();
-                
+
                 let args = args?;
 
                 // Spawn the process
@@ -2031,14 +2133,22 @@ impl Executor {
                         // Put this process in its own process group (PGID = PID)
                         let pid = getpid();
                         setpgid(pid, pid).map_err(|e| {
-                            std::io::Error::new(std::io::ErrorKind::Other, format!("setpgid failed: {}", e))
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("setpgid failed: {}", e),
+                            )
                         })?;
                         Ok(())
                     });
                 }
 
-                let child = cmd.spawn()
-                    .map_err(|e| anyhow!("Failed to spawn background process '{}': {}", command.name, e))?;
+                let child = cmd.spawn().map_err(|e| {
+                    anyhow!(
+                        "Failed to spawn background process '{}': {}",
+                        command.name,
+                        e
+                    )
+                })?;
 
                 let pid = child.id();
 
@@ -2054,10 +2164,11 @@ impl Executor {
             Statement::Pipeline(_) | Statement::Subshell(_) => {
                 self.execute_background_via_sh(&command_str)
             }
-            _ => Err(anyhow!("Only simple commands and pipelines can be run in background")),
+            _ => Err(anyhow!(
+                "Only simple commands and pipelines can be run in background"
+            )),
         }
     }
-
 
     /// Execute a complex statement in background by wrapping it in sh -c
     fn execute_background_via_sh(&mut self, command_str: &str) -> Result<ExecutionResult> {
@@ -2084,11 +2195,15 @@ impl Executor {
             });
         }
 
-        let child = cmd.spawn()
+        let child = cmd
+            .spawn()
             .map_err(|e| anyhow!("Failed to spawn background process: {}", e))?;
 
         let pid = child.id();
-        let job_id = self.runtime.job_manager().add_job(pid, command_str.to_string());
+        let job_id = self
+            .runtime
+            .job_manager()
+            .add_job(pid, command_str.to_string());
         self.runtime.set_last_bg_pid(pid);
 
         Ok(ExecutionResult::success(format!("[{}] {}\n", job_id, pid)))
@@ -2097,9 +2212,28 @@ impl Executor {
     fn statement_to_string(&self, statement: &Statement) -> String {
         match statement {
             Statement::Command(cmd) => {
-                let args_str = cmd.args.iter()
+                let args_str = cmd
+                    .args
+                    .iter()
                     .map(|arg| match arg {
-                        Argument::Literal(s) | Argument::Variable(s) | Argument::BracedVariable(s) | Argument::CommandSubstitution(s) | Argument::Flag(s) | Argument::Path(s) | Argument::Glob(s) => s.clone(),
+                        Argument::Literal(s)
+                        | Argument::SingleQuoted(s)
+                        | Argument::Variable(s)
+                        | Argument::BracedVariable(s)
+                        | Argument::CommandSubstitution(s)
+                        | Argument::Flag(s)
+                        | Argument::Path(s)
+                        | Argument::Glob(s) => s.clone(),
+                        Argument::DoubleQuoted(parts) => parts
+                            .iter()
+                            .map(|p| match p {
+                                ArgumentPart::Literal(s) => s.clone(),
+                                ArgumentPart::Variable(s)
+                                | ArgumentPart::BracedVariable(s)
+                                | ArgumentPart::CommandSubstitution(s) => s.clone(),
+                            })
+                            .collect::<Vec<_>>()
+                            .join(""),
                     })
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -2116,9 +2250,28 @@ impl Executor {
     }
 
     fn command_to_string(cmd: &crate::parser::ast::Command) -> String {
-        let args_str = cmd.args.iter()
+        let args_str = cmd
+            .args
+            .iter()
             .map(|arg| match arg {
-                Argument::Literal(s) | Argument::Variable(s) | Argument::BracedVariable(s) | Argument::CommandSubstitution(s) | Argument::Flag(s) | Argument::Path(s) | Argument::Glob(s) => s.clone(),
+                Argument::Literal(s)
+                | Argument::SingleQuoted(s)
+                | Argument::Variable(s)
+                | Argument::BracedVariable(s)
+                | Argument::CommandSubstitution(s)
+                | Argument::Flag(s)
+                | Argument::Path(s)
+                | Argument::Glob(s) => s.clone(),
+                Argument::DoubleQuoted(parts) => parts
+                    .iter()
+                    .map(|p| match p {
+                        ArgumentPart::Literal(s) => s.clone(),
+                        ArgumentPart::Variable(s)
+                        | ArgumentPart::BracedVariable(s)
+                        | ArgumentPart::CommandSubstitution(s) => s.clone(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(""),
             })
             .collect::<Vec<_>>()
             .join(" ");
@@ -2163,7 +2316,9 @@ impl Executor {
                 if var_name == "$" {
                     return Ok(std::process::id().to_string());
                 } else if var_name == "!" {
-                    return Ok(self.runtime.get_last_bg_pid()
+                    return Ok(self
+                        .runtime
+                        .get_last_bg_pid()
                         .map(|pid| pid.to_string())
                         .unwrap_or_default());
                 } else if var_name == "-" {
@@ -2195,14 +2350,10 @@ impl Executor {
                 if self.runtime.options.nounset {
                     self.runtime.get_variable_checked(var_name)
                 } else {
-                    Ok(self.runtime
-                        .get_variable(var_name)
-                        .unwrap_or_default())
+                    Ok(self.runtime.get_variable(var_name).unwrap_or_default())
                 }
             }
-            Expression::VariableExpansion(expansion) => {
-                self.runtime.expand_variable(&expansion)
-            }
+            Expression::VariableExpansion(expansion) => self.runtime.expand_variable(&expansion),
             Expression::CommandSubstitution(cmd) => {
                 // Check for arithmetic expansion: $((expr))
                 if cmd.starts_with("$((") && cmd.ends_with("))") {
@@ -2245,7 +2396,9 @@ impl Executor {
                     return Ok(std::process::id().to_string());
                 } else if var_name == "!" {
                     // $! - PID of last background command
-                    return Ok(self.runtime.get_last_bg_pid()
+                    return Ok(self
+                        .runtime
+                        .get_last_bg_pid()
                         .map(|pid| pid.to_string())
                         .unwrap_or_default());
                 } else if var_name == "-" {
@@ -2293,7 +2446,9 @@ impl Executor {
                     return Ok(std::process::id().to_string());
                 } else if expansion.name == "!" {
                     // ${!} - PID of last background command (no operators allowed)
-                    return Ok(self.runtime.get_last_bg_pid()
+                    return Ok(self
+                        .runtime
+                        .get_last_bg_pid()
                         .map(|pid| pid.to_string())
                         .unwrap_or_default());
                 } else if expansion.name == "-" {
@@ -2347,12 +2502,44 @@ impl Executor {
                     return Ok(result.to_string());
                 }
                 // Execute command substitution and return output
-                Ok(self.execute_command_substitution(cmd)
+                Ok(self
+                    .execute_command_substitution(cmd)
                     .unwrap_or_else(|_| String::new()))
             }
             Argument::Flag(f) => Ok(f.clone()),
             Argument::Path(p) => Ok(expand_tilde(p)),
             Argument::Glob(g) => Ok(g.clone()),
+            Argument::SingleQuoted(s) => Ok(s.clone()),
+            Argument::DoubleQuoted(parts) => {
+                let mut result = String::new();
+                for part in parts {
+                    match part {
+                        ArgumentPart::Literal(s) => result.push_str(s),
+                        ArgumentPart::Variable(v) => {
+                            result.push_str(
+                                &self
+                                    .resolve_argument(&Argument::Variable(v.clone()))
+                                    .unwrap_or_default(),
+                            );
+                        }
+                        ArgumentPart::BracedVariable(v) => {
+                            result.push_str(
+                                &self
+                                    .resolve_argument(&Argument::BracedVariable(v.clone()))
+                                    .unwrap_or_default(),
+                            );
+                        }
+                        ArgumentPart::CommandSubstitution(c) => {
+                            result.push_str(
+                                &self
+                                    .resolve_argument(&Argument::CommandSubstitution(c.clone()))
+                                    .unwrap_or_default(),
+                            );
+                        }
+                    }
+                }
+                Ok(result)
+            }
         }
     }
 
@@ -2361,7 +2548,11 @@ impl Executor {
         let inner = braced_var.trim_start_matches("${").trim_end_matches('}');
 
         // String length: ${#var}
-        if inner.starts_with('#') && !inner.contains(':') && !inner[1..].contains('#') && !inner[1..].contains('%') {
+        if inner.starts_with('#')
+            && !inner.contains(':')
+            && !inner[1..].contains('#')
+            && !inner[1..].contains('%')
+        {
             let var_name = &inner[1..];
             return Ok(VarExpansion {
                 name: var_name.to_string(),
@@ -2458,7 +2649,9 @@ impl Executor {
             // Only unquoted variables and command substitutions should be split
             let should_split_ifs = matches!(
                 arg,
-                Argument::Variable(_) | Argument::BracedVariable(_) | Argument::CommandSubstitution(_)
+                Argument::Variable(_)
+                    | Argument::BracedVariable(_)
+                    | Argument::CommandSubstitution(_)
             );
 
             // Determine if this argument should have glob expansion
@@ -2467,7 +2660,11 @@ impl Executor {
             // Path is included because paths like /tmp/*.txt are tokenized as Path by the lexer
             let should_expand = matches!(
                 arg,
-                Argument::Glob(_) | Argument::Path(_) | Argument::Variable(_) | Argument::BracedVariable(_) | Argument::CommandSubstitution(_)
+                Argument::Glob(_)
+                    | Argument::Path(_)
+                    | Argument::Variable(_)
+                    | Argument::BracedVariable(_)
+                    | Argument::CommandSubstitution(_)
             );
 
             // First resolve the argument (e.g., variable substitution)
@@ -2538,14 +2735,15 @@ impl Executor {
         } else {
             cmd_str
         };
-        
+
         // Parse and execute the command
         let tokens = Lexer::tokenize(command)
             .map_err(|e| anyhow!("Failed to tokenize command substitution: {}", e))?;
         let mut parser = Parser::new(tokens);
-        let statements = parser.parse()
+        let statements = parser
+            .parse()
             .map_err(|e| anyhow!("Failed to parse command substitution: {}", e))?;
-        
+
         // Create a new executor with the same runtime (but cloned to avoid borrow issues)
         let mut sub_executor = Executor {
             runtime: self.runtime.clone(),
@@ -2588,13 +2786,19 @@ impl Executor {
                         b')' => depth -= 1,
                         b'\'' => {
                             j += 1;
-                            while j < len && bytes[j] != b'\'' { j += 1; }
+                            while j < len && bytes[j] != b'\'' {
+                                j += 1;
+                            }
                         }
                         b'"' => {
                             j += 1;
                             while j < len {
-                                if bytes[j] == b'"' { break; }
-                                if bytes[j] == b'\\' { j += 1; }
+                                if bytes[j] == b'"' {
+                                    break;
+                                }
+                                if bytes[j] == b'\\' {
+                                    j += 1;
+                                }
                                 j += 1;
                             }
                         }
@@ -2605,7 +2809,8 @@ impl Executor {
 
                 if depth == 0 {
                     let substitution = &input[start..j];
-                    let output = self.execute_command_substitution(substitution)
+                    let output = self
+                        .execute_command_substitution(substitution)
                         .unwrap_or_default();
                     result.push_str(&output);
                     i = j;
@@ -2619,14 +2824,20 @@ impl Executor {
                 let mut j = i + 1;
 
                 while j < len {
-                    if bytes[j] == b'`' { j += 1; break; }
-                    else if bytes[j] == b'\\' && j + 1 < len { j += 2; }
-                    else { j += 1; }
+                    if bytes[j] == b'`' {
+                        j += 1;
+                        break;
+                    } else if bytes[j] == b'\\' && j + 1 < len {
+                        j += 2;
+                    } else {
+                        j += 1;
+                    }
                 }
 
                 if j <= len && j > start + 1 && bytes[j - 1] == b'`' {
                     let substitution = &input[start..j];
-                    let output = self.execute_command_substitution(substitution)
+                    let output = self
+                        .execute_command_substitution(substitution)
                         .unwrap_or_default();
                     result.push_str(&output);
                     i = j;
@@ -2697,7 +2908,8 @@ impl Executor {
         let tokens = Lexer::tokenize(&trap_command)
             .map_err(|e| anyhow!("Failed to tokenize trap command: {}", e))?;
         let mut parser = Parser::new(tokens);
-        let statements = parser.parse()
+        let statements = parser
+            .parse()
             .map_err(|e| anyhow!("Failed to parse trap command: {}", e))?;
 
         // Execute the trap (errors are logged but don't stop execution)
@@ -2705,7 +2917,11 @@ impl Executor {
             Ok(_) => Ok(()),
             Err(e) => {
                 // Print error but don't fail - traps should be resilient
-                eprintln!("trap: error executing {} handler: {}", signal.to_string(), e);
+                eprintln!(
+                    "trap: error executing {} handler: {}",
+                    signal.to_string(),
+                    e
+                );
                 Ok(())
             }
         }
@@ -2722,7 +2938,7 @@ impl Executor {
     pub fn source_file(&mut self, path: &std::path::Path) -> Result<()> {
         use std::fs;
         use std::io::{BufRead, BufReader};
-        
+
         // Check if file exists
         if !path.exists() {
             return Ok(()); // Silently ignore missing config files
@@ -2745,7 +2961,7 @@ impl Executor {
 
             // Execute the line
             match self.execute_line_internal(line) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("{}:{}: {}", path.display(), line_num + 1, e);
                     // Continue executing other lines even if one fails
@@ -2760,7 +2976,7 @@ impl Executor {
     fn execute_line_internal(&mut self, line: &str) -> Result<ExecutionResult> {
         use crate::lexer::Lexer;
         use crate::parser::Parser;
-        
+
         let tokens = Lexer::tokenize(line)?;
         let mut parser = Parser::new(tokens);
         let statements = parser.parse()?;
@@ -2857,7 +3073,7 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
             } else {
                 cmd.as_str()
             };
-            
+
             // Try to execute the command substitution
             if let Ok(tokens) = crate::lexer::Lexer::tokenize(command) {
                 let mut parser = crate::parser::Parser::new(tokens);
@@ -2886,11 +3102,42 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
         Argument::Flag(f) => f.clone(),
         Argument::Path(p) => expand_tilde(p),
         Argument::Glob(g) => g.clone(),
+        Argument::SingleQuoted(s) => s.clone(),
+        Argument::DoubleQuoted(parts) => {
+            let mut result = String::new();
+            for part in parts {
+                match part {
+                    ArgumentPart::Literal(s) => result.push_str(s),
+                    ArgumentPart::Variable(v) => {
+                        result.push_str(&resolve_argument_static(
+                            &Argument::Variable(v.clone()),
+                            runtime,
+                        ));
+                    }
+                    ArgumentPart::BracedVariable(v) => {
+                        result.push_str(&resolve_argument_static(
+                            &Argument::BracedVariable(v.clone()),
+                            runtime,
+                        ));
+                    }
+                    ArgumentPart::CommandSubstitution(c) => {
+                        result.push_str(&resolve_argument_static(
+                            &Argument::CommandSubstitution(c.clone()),
+                            runtime,
+                        ));
+                    }
+                }
+            }
+            result
+        }
     }
 }
 
 // Helper function for parallel execution with glob expansion
-fn expand_and_resolve_arguments_static(args: &[Argument], runtime: &Runtime) -> Result<Vec<String>> {
+fn expand_and_resolve_arguments_static(
+    args: &[Argument],
+    runtime: &Runtime,
+) -> Result<Vec<String>> {
     let mut expanded_args = Vec::new();
 
     for arg in args {
@@ -2898,7 +3145,11 @@ fn expand_and_resolve_arguments_static(args: &[Argument], runtime: &Runtime) -> 
         // Path is included because paths like /tmp/*.txt are tokenized as Path by the lexer
         let should_expand = matches!(
             arg,
-            Argument::Glob(_) | Argument::Path(_) | Argument::Variable(_) | Argument::BracedVariable(_) | Argument::CommandSubstitution(_)
+            Argument::Glob(_)
+                | Argument::Path(_)
+                | Argument::Variable(_)
+                | Argument::BracedVariable(_)
+                | Argument::CommandSubstitution(_)
         );
 
         let resolved = resolve_argument_static(arg, runtime);
@@ -2922,7 +3173,10 @@ fn expand_and_resolve_arguments_static(args: &[Argument], runtime: &Runtime) -> 
 }
 
 /// Static version of command substitution expansion for use outside &mut self methods.
-pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime: &Runtime) -> String {
+pub(crate) fn expand_command_substitutions_in_string_static(
+    input: &str,
+    runtime: &Runtime,
+) -> String {
     let mut result = String::with_capacity(input.len());
     let bytes = input.as_bytes();
     let len = bytes.len();
@@ -2938,8 +3192,24 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
                 match bytes[j] {
                     b'(' => depth += 1,
                     b')' => depth -= 1,
-                    b'\'' => { j += 1; while j < len && bytes[j] != b'\'' { j += 1; } }
-                    b'"' => { j += 1; while j < len { if bytes[j] == b'"' { break; } if bytes[j] == b'\\' { j += 1; } j += 1; } }
+                    b'\'' => {
+                        j += 1;
+                        while j < len && bytes[j] != b'\'' {
+                            j += 1;
+                        }
+                    }
+                    b'"' => {
+                        j += 1;
+                        while j < len {
+                            if bytes[j] == b'"' {
+                                break;
+                            }
+                            if bytes[j] == b'\\' {
+                                j += 1;
+                            }
+                            j += 1;
+                        }
+                    }
                     _ => {}
                 }
                 j += 1;
@@ -2991,9 +3261,14 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
             let start = i;
             let mut j = i + 1;
             while j < len {
-                if bytes[j] == b'`' { j += 1; break; }
-                else if bytes[j] == b'\\' && j + 1 < len { j += 2; }
-                else { j += 1; }
+                if bytes[j] == b'`' {
+                    j += 1;
+                    break;
+                } else if bytes[j] == b'\\' && j + 1 < len {
+                    j += 2;
+                } else {
+                    j += 1;
+                }
             }
             if j <= len && j > start + 1 && bytes[j - 1] == b'`' {
                 let command = &input[start + 1..j - 1];
@@ -3033,7 +3308,6 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
 
     result
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ExecutionResult {
@@ -3210,7 +3484,7 @@ fn pattern_matches_helper(pattern: &[char], text: &[char]) -> bool {
     if pattern.is_empty() {
         return text.is_empty();
     }
-    
+
     match pattern[0] {
         '*' => {
             // * matches zero or more characters
@@ -3250,12 +3524,19 @@ mod tests {
         let mut executor = Executor::new_embedded();
 
         // Set some runtime state
-        executor.runtime_mut().set_variable("TEST_VAR".to_string(), "value".to_string());
+        executor
+            .runtime_mut()
+            .set_variable("TEST_VAR".to_string(), "value".to_string());
         executor.runtime_mut().set_last_exit_code(42);
-        executor.runtime_mut().set_alias("ll".to_string(), "ls -la".to_string());
+        executor
+            .runtime_mut()
+            .set_alias("ll".to_string(), "ls -la".to_string());
 
         // Verify state is set
-        assert_eq!(executor.runtime_mut().get_variable("TEST_VAR"), Some("value".to_string()));
+        assert_eq!(
+            executor.runtime_mut().get_variable("TEST_VAR"),
+            Some("value".to_string())
+        );
         assert_eq!(executor.runtime_mut().get_last_exit_code(), 42);
 
         // Reset
@@ -3272,7 +3553,9 @@ mod tests {
         let mut executor = Executor::new_embedded();
 
         // Simulate first command: set a variable via assignment
-        executor.runtime_mut().set_variable("LEAKED".to_string(), "secret".to_string());
+        executor
+            .runtime_mut()
+            .set_variable("LEAKED".to_string(), "secret".to_string());
         executor.runtime_mut().set_last_exit_code(1);
 
         // Reset between commands
@@ -3288,12 +3571,19 @@ mod tests {
         let mut executor = Executor::new_embedded();
 
         // Execute a command, then reset, then execute again
-        executor.runtime_mut().set_variable("X".to_string(), "1".to_string());
+        executor
+            .runtime_mut()
+            .set_variable("X".to_string(), "1".to_string());
         executor.reset().unwrap();
 
         // After reset, executor should still be usable
-        executor.runtime_mut().set_variable("Y".to_string(), "2".to_string());
-        assert_eq!(executor.runtime_mut().get_variable("Y"), Some("2".to_string()));
+        executor
+            .runtime_mut()
+            .set_variable("Y".to_string(), "2".to_string());
+        assert_eq!(
+            executor.runtime_mut().get_variable("Y"),
+            Some("2".to_string())
+        );
         assert_eq!(executor.runtime_mut().get_variable("X"), None);
     }
 
@@ -3304,8 +3594,13 @@ mod tests {
         // Simulate multiple request/reset cycles
         for i in 0..5 {
             let key = format!("VAR_{}", i);
-            executor.runtime_mut().set_variable(key.clone(), i.to_string());
-            assert_eq!(executor.runtime_mut().get_variable(&key), Some(i.to_string()));
+            executor
+                .runtime_mut()
+                .set_variable(key.clone(), i.to_string());
+            assert_eq!(
+                executor.runtime_mut().get_variable(&key),
+                Some(i.to_string())
+            );
 
             executor.reset().unwrap();
 
@@ -3345,14 +3640,20 @@ mod tests {
     #[test]
     fn test_if_elif() {
         let mut executor = Executor::new_embedded();
-        let result = run_line(&mut executor, "if false; then echo 1; elif true; then echo 2; fi");
+        let result = run_line(
+            &mut executor,
+            "if false; then echo 1; elif true; then echo 2; fi",
+        );
         assert_eq!(result.stdout().trim(), "2");
     }
 
     #[test]
     fn test_nested_if() {
         let mut executor = Executor::new_embedded();
-        let result = run_line(&mut executor, "if true; then if true; then echo nested; fi; fi");
+        let result = run_line(
+            &mut executor,
+            "if true; then if true; then echo nested; fi; fi",
+        );
         assert_eq!(result.stdout().trim(), "nested");
     }
 
@@ -3443,7 +3744,10 @@ mod tests {
     #[test]
     fn test_function_local_variables() {
         let mut executor = Executor::new_embedded();
-        let result = run_line(&mut executor, "f() { local x=inner; echo $x; }; x=outer; f; echo $x");
+        let result = run_line(
+            &mut executor,
+            "f() { local x=inner; echo $x; }; x=outer; f; echo $x",
+        );
         assert_eq!(result.stdout(), "inner\nouter\n");
     }
 
@@ -3488,10 +3792,7 @@ mod tests {
     #[test]
     fn test_case_basic_match() {
         let mut executor = Executor::new_embedded();
-        let result = run_line(
-            &mut executor,
-            "x=foo; case $x in foo) echo matched;; esac",
-        );
+        let result = run_line(&mut executor, "x=foo; case $x in foo) echo matched;; esac");
         assert_eq!(result.stdout().trim(), "matched");
     }
 
@@ -3593,10 +3894,7 @@ mod tests {
     #[test]
     fn test_until_with_break() {
         let mut executor = Executor::new_embedded();
-        let result = run_line(
-            &mut executor,
-            "until false; do echo once; break; done",
-        );
+        let result = run_line(&mut executor, "until false; do echo once; break; done");
         assert_eq!(result.stdout(), "once\n");
     }
 

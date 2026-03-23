@@ -3,7 +3,7 @@
 //! This module provides utilities for tracking function call stacks during
 //! script execution, enabling detailed error messages with full call context.
 
-use crate::error::{SourceLocation, CommandContext};
+use crate::error::{CommandContext, SourceLocation};
 
 /// Tracks the function call stack during execution
 #[derive(Debug, Clone)]
@@ -52,7 +52,10 @@ impl CallStack {
 
     /// Get the current call stack as a vector of function names
     pub fn as_vec(&self) -> Vec<String> {
-        self.entries.iter().map(|e| e.function_name.clone()).collect()
+        self.entries
+            .iter()
+            .map(|e| e.function_name.clone())
+            .collect()
     }
 
     /// Check if the stack is empty (not in any function)
@@ -154,7 +157,10 @@ mod tests {
 
         let ctx = stack.create_context("test_cmd");
         assert_eq!(ctx.command_name, "test_cmd");
-        assert_eq!(ctx.function_stack, Some(vec!["func1".to_string(), "func2".to_string()]));
+        assert_eq!(
+            ctx.function_stack,
+            Some(vec!["func1".to_string(), "func2".to_string()])
+        );
     }
 
     #[test]

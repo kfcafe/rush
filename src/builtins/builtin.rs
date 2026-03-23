@@ -63,12 +63,30 @@ pub fn builtin_builtin(args: &[String], runtime: &mut Runtime) -> Result<Executi
 fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "cd" | "pwd" | "echo" | "exit" | "export" | "source"
-            | "cat" | "find" | "ls" | "mkdir" | "git" | "grep"
-            | "undo" | "jobs" | "set"
-            | "alias" | "unalias" | "test" | "[" | "help" | "type"
-            | "true" | "false"
-            | "unset" | "printf"
+        "cd" | "pwd"
+            | "echo"
+            | "exit"
+            | "export"
+            | "source"
+            | "cat"
+            | "find"
+            | "ls"
+            | "mkdir"
+            | "git"
+            | "grep"
+            | "undo"
+            | "jobs"
+            | "set"
+            | "alias"
+            | "unalias"
+            | "test"
+            | "["
+            | "help"
+            | "type"
+            | "true"
+            | "false"
+            | "unset"
+            | "printf"
     )
 }
 
@@ -109,7 +127,10 @@ mod tests {
         let args = vec!["nonexistent".to_string()];
         let result = builtin_builtin(&args, &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not a shell builtin"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not a shell builtin"));
     }
 
     #[test]

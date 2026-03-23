@@ -146,10 +146,10 @@ pub enum Token {
     AnsiCString(String),
 
     // Numbers
-    #[regex(r"-?[0-9]+", |lex| lex.slice().parse().ok())]
+    #[regex(r"-?[0-9]+", priority = 3, callback = |lex| lex.slice().parse().ok())]
     Integer(i64),
 
-    #[regex(r"-?[0-9]+\.[0-9]+", |lex| lex.slice().parse().ok())]
+    #[regex(r"-?[0-9]+\.[0-9]+", priority = 4, callback = |lex| lex.slice().parse().ok())]
     Float(f64),
 
     // Glob patterns (*, ?, [...] wildcards in filename context)
@@ -188,12 +188,15 @@ pub enum Token {
     //   npm scopes: @scope/pkg        compilers: g++, c++
     //   format args: +%Y-%m-%d        job IDs: %1
     //   mid-word: foo#bar, a,b        emails: user@host
+    //   digit-start: 7z, 2to3         UUIDs: 9a6c...
     //
     // Priority notes (logos: longest match wins; same length → first defined):
     //   +e → PlusFlag (same length, PlusFlag defined first)
     //   +%Y → Identifier (PlusFlag can't match %, Identifier wins by length)
-    //   100% → Integer(100) + Identifier("%") (Integer matches first; known limit)
-    #[regex(r"[a-zA-Z_@+%^][a-zA-Z0-9_.\-:~@/+%^,#]*", |lex| lex.slice().to_string())]
+    //   42 → Integer (same length, Integer defined first)
+    //   42abc → Identifier (5 chars beats Integer's 2)
+    //   3.14 → Float (same length, Float defined first)
+    #[regex(r"[a-zA-Z0-9_@+%^][a-zA-Z0-9_.\-:~@/+%^,#]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
     // Command substitution - needs custom parsing for nested cases
@@ -277,24 +280,24 @@ fn parse_ansi_c_string(lex: &mut logos::Lexer<Token>) -> Option<String> {
     let slice = lex.slice();
     // Remove $' prefix and ' suffix
     let content = &slice[2..slice.len() - 1];
-    
+
     let mut result = String::new();
     let mut chars = content.chars().peekable();
-    
+
     while let Some(c) = chars.next() {
         if c == '\\' {
             match chars.next() {
-                Some('a') => result.push('\x07'),  // alert/bell
-                Some('b') => result.push('\x08'),  // backspace
-                Some('e') | Some('E') => result.push('\x1b'),  // escape
-                Some('f') => result.push('\x0c'),  // form feed
-                Some('n') => result.push('\n'),    // newline
-                Some('r') => result.push('\r'),    // carriage return
-                Some('t') => result.push('\t'),    // horizontal tab
-                Some('v') => result.push('\x0b'),  // vertical tab
-                Some('\\') => result.push('\\'),   // backslash
-                Some('\'') => result.push('\''),   // single quote
-                Some('"') => result.push('"'),     // double quote
+                Some('a') => result.push('\x07'),             // alert/bell
+                Some('b') => result.push('\x08'),             // backspace
+                Some('e') | Some('E') => result.push('\x1b'), // escape
+                Some('f') => result.push('\x0c'),             // form feed
+                Some('n') => result.push('\n'),               // newline
+                Some('r') => result.push('\r'),               // carriage return
+                Some('t') => result.push('\t'),               // horizontal tab
+                Some('v') => result.push('\x0b'),             // vertical tab
+                Some('\\') => result.push('\\'),              // backslash
+                Some('\'') => result.push('\''),              // single quote
+                Some('"') => result.push('"'),                // double quote
                 Some('x') => {
                     // Hexadecimal: \xNN
                     let mut hex = String::new();
@@ -381,7 +384,7 @@ fn parse_ansi_c_string(lex: &mut logos::Lexer<Token>) -> Option<String> {
             result.push(c);
         }
     }
-    
+
     Some(result)
 }
 
@@ -933,7 +936,10 @@ mod tests {
         let tokens = Lexer::tokenize(r#"echo "test\"end""#).unwrap();
         assert_eq!(tokens.len(), 2, "Expected 2 tokens, got {:?}", tokens);
         if let Token::String(s) = &tokens[1] {
-            assert_eq!(s, r#""test\"end""#, "String token should contain the escaped quote");
+            assert_eq!(
+                s, r#""test\"end""#,
+                "String token should contain the escaped quote"
+            );
         } else {
             panic!("Expected String token, got {:?}", tokens[1]);
         }
@@ -945,7 +951,10 @@ mod tests {
         let tokens = Lexer::tokenize(r#"echo "test\"""#).unwrap();
         assert_eq!(tokens.len(), 2, "Expected 2 tokens, got {:?}", tokens);
         if let Token::String(s) = &tokens[1] {
-            assert_eq!(s, r#""test\"""#, "String token should contain the escaped quote at end");
+            assert_eq!(
+                s, r#""test\"""#,
+                "String token should contain the escaped quote at end"
+            );
         } else {
             panic!("Expected String token, got {:?}", tokens[1]);
         }
@@ -955,6 +964,28 @@ mod tests {
     fn test_pipe_ask_token() {
         let tokens = Lexer::tokenize("echo hello |? \"summarize\"").unwrap();
         assert!(tokens.contains(&Token::PipeAsk));
+    }
+
+    #[test]
+    fn test_digit_starting_word() {
+        // UUIDs, hex strings, commands like 7z/2to3 must tokenize
+        let tokens = Lexer::tokenize("echo 9a6c9c73-22be-4847-8e43-e8111b5b8836").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(
+            matches!(tokens[1], Token::Identifier(ref s) if s == "9a6c9c73-22be-4847-8e43-e8111b5b8836")
+        );
+    }
+
+    #[test]
+    fn test_digit_starting_command() {
+        let tokens = Lexer::tokenize("7z x archive.7z").unwrap();
+        assert!(matches!(tokens[0], Token::Identifier(ref s) if s == "7z"));
+    }
+
+    #[test]
+    fn test_pure_integer_still_integer() {
+        let tokens = Lexer::tokenize("echo 42").unwrap();
+        assert!(matches!(tokens[1], Token::Integer(42)));
     }
 
     #[test]

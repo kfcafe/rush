@@ -17,10 +17,10 @@ pub fn builtin_undo(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                 } else {
                     10
                 };
-                
+
                 let ops = runtime.undo_manager_mut().list_operations(limit);
                 let mut output = String::new();
-                
+
                 if ops.is_empty() {
                     output.push_str("No operations to undo\n");
                 } else {
@@ -29,24 +29,29 @@ pub fn builtin_undo(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                         output.push_str(&format!("  {}: {}\n", i + 1, op.description));
                     }
                 }
-                
+
                 Ok(ExecutionResult::success(output))
             }
             "enable" => {
                 runtime.undo_manager_mut().enable();
-                Ok(ExecutionResult::success("Undo tracking enabled\n".to_string()))
+                Ok(ExecutionResult::success(
+                    "Undo tracking enabled\n".to_string(),
+                ))
             }
             "disable" => {
                 runtime.undo_manager_mut().disable();
-                Ok(ExecutionResult::success("Undo tracking disabled\n".to_string()))
+                Ok(ExecutionResult::success(
+                    "Undo tracking disabled\n".to_string(),
+                ))
             }
             "clear" => {
                 runtime.undo_manager_mut().clear()?;
-                Ok(ExecutionResult::success("Undo history cleared\n".to_string()))
-            }
-            "--help" => {
                 Ok(ExecutionResult::success(
-                    "Usage: undo [COMMAND]\n\
+                    "Undo history cleared\n".to_string(),
+                ))
+            }
+            "--help" => Ok(ExecutionResult::success(
+                "Usage: undo [COMMAND]\n\
                      \n\
                      Undo file operations\n\
                      \n\
@@ -56,10 +61,13 @@ pub fn builtin_undo(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                      enable        Enable undo tracking\n\
                      disable       Disable undo tracking\n\
                      clear         Clear undo history\n\
-                     --help        Show this help message\n".to_string()
-                ))
-            }
-            _ => Ok(ExecutionResult::error(format!("undo: unknown command: {}\n", args[0]))),
+                     --help        Show this help message\n"
+                    .to_string(),
+            )),
+            _ => Ok(ExecutionResult::error(format!(
+                "undo: unknown command: {}\n",
+                args[0]
+            ))),
         }
     }
 }

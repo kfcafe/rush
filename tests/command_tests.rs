@@ -1,5 +1,5 @@
 use rush::executor::Executor;
-use rush::parser::ast::{Statement, Command, Argument, FunctionDef};
+use rush::parser::ast::{Argument, Command, FunctionDef, Statement};
 
 #[test]
 fn test_command_basic_echo() {
@@ -29,17 +29,15 @@ fn test_command_bypasses_function() {
     let func_def = Statement::FunctionDef(FunctionDef {
         name: "echo".to_string(),
         params: vec![],
-        body: vec![
-            Statement::Command(Command {
-                name: "builtin".to_string(),
-                args: vec![
-                    Argument::Literal("echo".to_string()),
-                    Argument::Literal("FUNCTION ECHO".to_string()),
-                ],
-                redirects: vec![],
-                prefix_env: vec![],
-            }),
-        ],
+        body: vec![Statement::Command(Command {
+            name: "builtin".to_string(),
+            args: vec![
+                Argument::Literal("echo".to_string()),
+                Argument::Literal("FUNCTION ECHO".to_string()),
+            ],
+            redirects: vec![],
+            prefix_env: vec![],
+        })],
     });
     executor.execute(vec![func_def]).unwrap();
 
@@ -313,14 +311,12 @@ fn test_command_with_function_shadowing_builtin() {
     let func_def = Statement::FunctionDef(FunctionDef {
         name: "pwd".to_string(),
         params: vec![],
-        body: vec![
-            Statement::Command(Command {
-                name: "echo".to_string(),
-                args: vec![Argument::Literal("/fake/path".to_string())],
-                redirects: vec![],
-                prefix_env: vec![],
-            }),
-        ],
+        body: vec![Statement::Command(Command {
+            name: "echo".to_string(),
+            args: vec![Argument::Literal("/fake/path".to_string())],
+            redirects: vec![],
+            prefix_env: vec![],
+        })],
     });
     executor.execute(vec![func_def]).unwrap();
 

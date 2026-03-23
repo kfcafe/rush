@@ -1,9 +1,9 @@
 // Profiling infrastructure for measuring execution performance
 // Provides timing data collection with zero overhead when disabled
 
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
 use nu_ansi_term::Color;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Execution stage for profiling breakdown
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,19 +79,18 @@ impl ProfileData {
     }
 
     pub fn record(&mut self, stage: ExecutionStage, duration: Duration) {
-        let entry = self.stages
-            .entry(stage)
-            .or_insert(StageTiming {
-                stage,
-                count: 0,
-                total: Duration::ZERO,
-            });
+        let entry = self.stages.entry(stage).or_insert(StageTiming {
+            stage,
+            count: 0,
+            total: Duration::ZERO,
+        });
         entry.count += 1;
         entry.total += duration;
     }
 
     pub fn total_elapsed(&self) -> Duration {
-        self.total_start.map_or(Duration::ZERO, |start| start.elapsed())
+        self.total_start
+            .map_or(Duration::ZERO, |start| start.elapsed())
     }
 
     pub fn get_stats(&self, stage: ExecutionStage) -> Option<StageTiming> {
@@ -252,8 +251,14 @@ mod tests {
     #[test]
     fn test_stage_labels() {
         assert_eq!(ExecutionStage::Parse.label(), "Parse");
-        assert_eq!(ExecutionStage::BuiltinExecution.label(), "Builtin Execution");
-        assert_eq!(ExecutionStage::ExternalExecution.label(), "External Execution");
+        assert_eq!(
+            ExecutionStage::BuiltinExecution.label(),
+            "Builtin Execution"
+        );
+        assert_eq!(
+            ExecutionStage::ExternalExecution.label(),
+            "External Execution"
+        );
     }
 
     #[test]
@@ -392,15 +397,15 @@ mod tests {
         data.record(ExecutionStage::Parse, Duration::from_millis(10));
 
         let json = ProfileFormatter::format_json(&data);
-        
+
         // Root level should have total_ms, total_us, and stages
         assert!(json.get("total_ms").is_some());
         assert!(json.get("total_us").is_some());
         assert!(json.get("stages").is_some());
-        
+
         let stages = json.get("stages").unwrap().as_array().unwrap();
         assert!(!stages.is_empty());
-        
+
         let stage = &stages[0];
         // Each stage should have all timing fields for tooling compatibility
         assert!(stage.get("stage").is_some());
@@ -417,11 +422,11 @@ mod tests {
         data.record(ExecutionStage::Parse, Duration::from_millis(10));
 
         let json = ProfileFormatter::format_json(&data);
-        
+
         // JSON should be serializable for jq and other tools
         let json_str = serde_json::to_string(&json).expect("JSON serialization failed");
         assert!(!json_str.is_empty());
-        
+
         // Pretty print should also work
         let pretty = serde_json::to_string_pretty(&json).expect("Pretty JSON failed");
         assert!(!pretty.is_empty());
@@ -436,16 +441,16 @@ mod tests {
         data.record(ExecutionStage::BuiltinExecution, Duration::from_millis(8));
 
         let json = ProfileFormatter::format_json(&data);
-        
+
         // Verify root object has required fields
         assert!(json.get("total_ms").is_some());
         assert!(json.get("total_us").is_some());
         assert!(json.get("stages").is_some());
-        
+
         // Verify stages is an array
         let stages = json.get("stages").unwrap().as_array().unwrap();
         assert_eq!(stages.len(), 2);
-        
+
         // Verify each stage has required fields
         for stage in stages {
             assert!(stage.get("stage").is_some());
@@ -461,15 +466,15 @@ mod tests {
     fn test_profile_formatter_json_timing_values() {
         let mut data = ProfileData::new();
         data.record(ExecutionStage::Parse, Duration::from_millis(20));
-        
+
         let json = ProfileFormatter::format_json(&data);
         let stages = json.get("stages").unwrap().as_array().unwrap();
         let parse_stage = &stages[0];
-        
+
         // Verify millisecond values
         let total_ms = parse_stage.get("total_ms").unwrap().as_f64().unwrap();
         assert!((total_ms - 20.0).abs() < 0.1);
-        
+
         // Verify microsecond values
         let total_us = parse_stage.get("total_us").unwrap().as_u64().unwrap();
         assert!(total_us >= 20000); // 20ms = 20000us
@@ -480,13 +485,13 @@ mod tests {
     fn test_profile_formatter_json_serializable() {
         let mut data = ProfileData::new();
         data.record(ExecutionStage::Parse, Duration::from_millis(10));
-        
+
         let json = ProfileFormatter::format_json(&data);
-        
+
         // Ensure the JSON can be serialized to string
         let result = serde_json::to_string(&json);
         assert!(result.is_ok());
-        
+
         // Ensure pretty-printed JSON is also valid
         let pretty_result = serde_json::to_string_pretty(&json);
         assert!(pretty_result.is_ok());

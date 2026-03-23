@@ -1,5 +1,5 @@
 /// Integration tests for structured error handling (rush-ai.8)
-use rush::error::{RushError, should_output_json_errors};
+use rush::error::{should_output_json_errors, RushError};
 use std::env;
 use std::path::Path;
 
@@ -27,11 +27,7 @@ fn test_error_json_format_env_var() {
 
 #[test]
 fn test_rush_error_construction() {
-    let error = RushError::new(
-        "TEST_ERROR",
-        "test message",
-        1,
-    );
+    let error = RushError::new("TEST_ERROR", "test message", 1);
 
     assert_eq!(error.error_code, "TEST_ERROR");
     assert_eq!(error.message, "test message");
@@ -102,8 +98,8 @@ fn test_json_output_format() {
 
 #[test]
 fn test_json_output_with_context() {
-    let error = RushError::new("TEST", "message", 1)
-        .with_context(serde_json::json!({"key": "value"}));
+    let error =
+        RushError::new("TEST", "message", 1).with_context(serde_json::json!({"key": "value"}));
     let json = error.to_json();
 
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();

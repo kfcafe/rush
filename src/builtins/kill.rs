@@ -55,7 +55,10 @@ fn list_signals() -> String {
 /// Get signal name from number (for kill -l <signum>)
 #[cfg(unix)]
 fn signal_name_from_number(num: i32) -> Option<&'static str> {
-    SIGNAL_LIST.iter().find(|(n, _)| *n == num).map(|(_, name)| *name)
+    SIGNAL_LIST
+        .iter()
+        .find(|(n, _)| *n == num)
+        .map(|(_, name)| *name)
 }
 
 /// Parse signal name or number to a Signal

@@ -52,6 +52,8 @@ pub struct Runtime {
     dir_stack: Vec<PathBuf>,
     // Piped stdin data for compound commands in pipelines
     piped_stdin: Option<Vec<u8>>,
+    // Agent mode: emit JSON from built-ins and strip ANSI from all output
+    agent_mode: bool,
 }
 
 impl Default for Runtime {
@@ -89,42 +91,44 @@ impl Runtime {
             last_arg: String::new(),
             dir_stack: Vec::new(),
             piped_stdin: None,
+            agent_mode: std::env::var("RUSH_AGENT_MODE").as_deref() == Ok("1"),
         };
 
         // Initialize $? to 0
         runtime.set_last_exit_code(0);
-        
+
         // Initialize IFS to default value (space, tab, newline)
         runtime.set_variable("IFS".to_string(), " \t\n".to_string());
-        
+
         runtime
     }
 
     /// Get the IFS (Internal Field Separator) variable value
     /// Defaults to space, tab, and newline if not set
     pub fn get_ifs(&self) -> String {
-        self.get_variable("IFS").unwrap_or_else(|| " \t\n".to_string())
+        self.get_variable("IFS")
+            .unwrap_or_else(|| " \t\n".to_string())
     }
-    
+
     /// Split a string by IFS characters
     /// Returns a vector of fields after splitting
-    /// 
+    ///
     /// If IFS is empty, no splitting occurs.
     /// Leading/trailing IFS whitespace characters are removed.
     /// Consecutive IFS whitespace characters are treated as a single separator.
     pub fn split_by_ifs<'a>(&self, s: &'a str) -> Vec<&'a str> {
         let ifs = self.get_ifs();
-        
+
         if ifs.is_empty() {
             // Empty IFS means no splitting
             return vec![s];
         }
-        
+
         // Split by any character in IFS
         let mut fields = Vec::new();
         let mut current_field_start = 0;
         let mut in_field = false;
-        
+
         for (i, ch) in s.char_indices() {
             if ifs.contains(ch) {
                 if in_field {
@@ -138,12 +142,12 @@ impl Runtime {
                 }
             }
         }
-        
+
         // Add the last field if we ended in one
         if in_field {
             fields.push(&s[current_field_start..]);
         }
-        
+
         fields
     }
 
@@ -221,7 +225,8 @@ impl Runtime {
     /// Set the PIPESTATUS array (exit codes of each pipeline command)
     pub fn set_pipestatus(&mut self, codes: Vec<i32>) {
         // Store as space-separated string for POSIX compatibility
-        let status_str = codes.iter()
+        let status_str = codes
+            .iter()
             .map(|c| c.to_string())
             .collect::<Vec<_>>()
             .join(" ");
@@ -282,6 +287,20 @@ impl Runtime {
 
     pub fn get_cwd(&self) -> &PathBuf {
         &self.cwd
+    }
+
+    /// Refresh the stored cwd from the OS.
+    /// Handles cases where the current directory was renamed or moved externally
+    /// (e.g. while a child process was running). The OS tracks cwd by inode so
+    /// the process stays in the directory, but the stored path becomes stale.
+    pub fn refresh_cwd(&mut self) {
+        if let Ok(actual) = env::current_dir() {
+            if self.cwd != actual {
+                self.cwd = actual.clone();
+                self.variables
+                    .insert("PWD".to_string(), actual.to_string_lossy().to_string());
+            }
+        }
     }
 
     // Shell options management
@@ -437,10 +456,16 @@ impl Runtime {
             // Initialize on first use, falling back to a temp directory if the
             // default location (home dir) is unavailable.
             let manager = UndoManager::new().unwrap_or_else(|e| {
-                eprintln!("Warning: Failed to initialize undo manager: {}. Using temp directory.", e);
+                eprintln!(
+                    "Warning: Failed to initialize undo manager: {}. Using temp directory.",
+                    e
+                );
                 let tmp_dir = std::env::temp_dir().join("rush-undo");
                 UndoManager::with_undo_dir(tmp_dir).unwrap_or_else(|e2| {
-                    eprintln!("Warning: Undo support disabled (temp fallback also failed: {})", e2);
+                    eprintln!(
+                        "Warning: Undo support disabled (temp fallback also failed: {})",
+                        e2
+                    );
                     // Last resort: in-memory-only undo with a path that won't be used
                     UndoManager::new_disabled()
                 })
@@ -465,9 +490,9 @@ impl Runtime {
 
         match &expansion.operator {
             VarExpansionOp::Simple => Ok(var_value.unwrap_or_default()),
-            VarExpansionOp::StringLength => {
-                Ok(var_value.map(|v| v.len().to_string()).unwrap_or_else(|| "0".to_string()))
-            }
+            VarExpansionOp::StringLength => Ok(var_value
+                .map(|v| v.len().to_string())
+                .unwrap_or_else(|| "0".to_string())),
             VarExpansionOp::UseDefault(default) => Ok(var_value.unwrap_or_else(|| default.clone())),
             VarExpansionOp::AssignDefault(default) => {
                 if let Some(value) = var_value {
@@ -477,12 +502,10 @@ impl Runtime {
                     Ok(default.clone())
                 }
             }
-            VarExpansionOp::ErrorIfUnset(error_msg) => {
-                match &var_value {
-                    Some(v) if !v.is_empty() => Ok(v.clone()),
-                    _ => Err(anyhow!("{}: {}", expansion.name, error_msg)),
-                }
-            }
+            VarExpansionOp::ErrorIfUnset(error_msg) => match &var_value {
+                Some(v) if !v.is_empty() => Ok(v.clone()),
+                _ => Err(anyhow!("{}: {}", expansion.name, error_msg)),
+            },
             VarExpansionOp::UseAlternate(alternate) => {
                 if var_value.as_ref().map_or(false, |v| !v.is_empty()) {
                     Ok(alternate.clone())
@@ -827,6 +850,16 @@ impl Runtime {
         &self.dir_stack
     }
 
+    /// Whether agent mode is active (JSON output + ANSI stripping for all built-ins)
+    pub fn agent_mode(&self) -> bool {
+        self.agent_mode
+    }
+
+    /// Enable or disable agent mode programmatically (used by the run() API)
+    pub fn set_agent_mode(&mut self, enabled: bool) {
+        self.agent_mode = enabled;
+    }
+
     /// Clear the directory stack
     pub fn clear_dir_stack(&mut self) {
         self.dir_stack.clear();
@@ -839,50 +872,50 @@ impl Runtime {
         // Clear variables (except special ones we want to preserve)
         self.variables.clear();
         self.readonly_vars.clear();
-        
+
         // Clear functions and aliases
         self.functions.clear();
         self.aliases.clear();
-        
+
         // Reset scopes and call stack
         self.scopes.clear();
         self.call_stack.clear();
-        
+
         // Reset positional parameters
         self.positional_params.clear();
         self.positional_stack.clear();
-        
+
         // Reset depths
         self.function_depth = 0;
         self.loop_depth = 0;
-        
+
         // Clear trap handlers
         self.trap_handlers = TrapHandlers::new();
-        
+
         // Clear permanent redirections
         self.permanent_stdout = None;
         self.permanent_stderr = None;
         self.permanent_stdin = None;
-        
+
         // Clear special variables
         self.last_bg_pid = None;
         self.last_arg = String::new();
-        
+
         // Clear directory stack
         self.dir_stack.clear();
-        
+
         // Reset cwd to current directory
         self.cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
-        
+
         // Reset shell options to defaults
         self.options = ShellOptions::default();
-        
+
         // Reinitialize required variables
         self.set_last_exit_code(0);
         self.set_variable("IFS".to_string(), " \t\n".to_string());
-        
+
         // Keep history, undo_manager, and job_manager (they persist across commands)
-        
+
         Ok(())
     }
 }

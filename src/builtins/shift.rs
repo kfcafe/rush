@@ -16,9 +16,9 @@ pub fn builtin_shift(args: &[String], runtime: &mut Runtime) -> Result<Execution
         1
     } else if args.len() == 1 {
         // Parse the argument as a number
-        args[0].parse::<usize>().map_err(|_| {
-            anyhow!("shift: {}: numeric argument required", args[0])
-        })?
+        args[0]
+            .parse::<usize>()
+            .map_err(|_| anyhow!("shift: {}: numeric argument required", args[0]))?
     } else {
         return Err(anyhow!("shift: too many arguments"));
     };
@@ -88,10 +88,7 @@ mod tests {
     #[test]
     fn test_shift_all() {
         let mut runtime = Runtime::new();
-        runtime.set_positional_params(vec![
-            "one".to_string(),
-            "two".to_string(),
-        ]);
+        runtime.set_positional_params(vec!["one".to_string(), "two".to_string()]);
 
         // Shift all parameters
         let result = builtin_shift(&["2".to_string()], &mut runtime);
@@ -108,10 +105,7 @@ mod tests {
     #[test]
     fn test_shift_error_too_many() {
         let mut runtime = Runtime::new();
-        runtime.set_positional_params(vec![
-            "arg1".to_string(),
-            "arg2".to_string(),
-        ]);
+        runtime.set_positional_params(vec!["arg1".to_string(), "arg2".to_string()]);
 
         // Try to shift more than available
         let result = builtin_shift(&["3".to_string()], &mut runtime);
@@ -130,7 +124,10 @@ mod tests {
         // Try with non-numeric argument
         let result = builtin_shift(&["abc".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("numeric argument required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("numeric argument required"));
     }
 
     #[test]
@@ -141,16 +138,16 @@ mod tests {
         // Try with too many arguments
         let result = builtin_shift(&["1".to_string(), "2".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("too many arguments"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("too many arguments"));
     }
 
     #[test]
     fn test_shift_zero() {
         let mut runtime = Runtime::new();
-        runtime.set_positional_params(vec![
-            "arg1".to_string(),
-            "arg2".to_string(),
-        ]);
+        runtime.set_positional_params(vec!["arg1".to_string(), "arg2".to_string()]);
 
         // Shift by 0 (no-op)
         let result = builtin_shift(&["0".to_string()], &mut runtime);
@@ -176,11 +173,7 @@ mod tests {
     #[test]
     fn test_shift_in_loop() {
         let mut runtime = Runtime::new();
-        runtime.set_positional_params(vec![
-            "a".to_string(),
-            "b".to_string(),
-            "c".to_string(),
-        ]);
+        runtime.set_positional_params(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
 
         // Simulate processing all args in a loop
         let mut processed = Vec::new();

@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rush::executor::Executor;
 use rush::lexer::Lexer;
 use rush::parser::Parser;
@@ -17,7 +17,10 @@ fn setup_benchmark_data() {
     if !large_file.exists() {
         let mut content = String::new();
         for i in 1..=10000 {
-            content.push_str(&format!("Line {}: Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n", i));
+            content.push_str(&format!(
+                "Line {}: Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n",
+                i
+            ));
         }
         fs::write(&large_file, content).unwrap();
     }
@@ -102,7 +105,9 @@ fn bench_find_operations(c: &mut Criterion) {
 
     c.bench_function("find_deep_tree", |b| {
         b.iter(|| {
-            execute_command(black_box("find benchmarks/benchmark-data/deep-tree -name \"*.txt\""));
+            execute_command(black_box(
+                "find benchmarks/benchmark-data/deep-tree -name \"*.txt\"",
+            ));
         });
     });
 }
@@ -112,7 +117,9 @@ fn bench_grep_operations(c: &mut Criterion) {
 
     c.bench_function("grep_large_file", |b| {
         b.iter(|| {
-            execute_command(black_box("grep \"FOUND\" benchmarks/benchmark-data/grep-test.txt"));
+            execute_command(black_box(
+                "grep \"FOUND\" benchmarks/benchmark-data/grep-test.txt",
+            ));
         });
     });
 }

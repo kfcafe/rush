@@ -166,9 +166,11 @@ fn parse_args(args: &[String], runtime: &Runtime) -> Result<FindOptions> {
                 if i >= args.len() {
                     return Err(anyhow!("find: -maxdepth requires an argument"));
                 }
-                options.max_depth = Some(args[i].parse().map_err(|_| {
-                    anyhow!("find: -maxdepth must be a positive integer")
-                })?);
+                options.max_depth = Some(
+                    args[i]
+                        .parse()
+                        .map_err(|_| anyhow!("find: -maxdepth must be a positive integer"))?,
+                );
             }
             flag => {
                 return Err(anyhow!("find: unknown flag: {}", flag));
@@ -198,7 +200,10 @@ fn parse_size(size_str: &str) -> Result<SizeFilter> {
 
     let (num_part, multiplier) = if let Some(last_char) = number_str.chars().last() {
         if last_char.is_alphabetic() {
-            (number_str.strip_suffix(last_char).unwrap_or(number_str), last_char)
+            (
+                number_str.strip_suffix(last_char).unwrap_or(number_str),
+                last_char,
+            )
         } else {
             (number_str, ' ')
         }
@@ -260,12 +265,7 @@ fn matches_pattern(file_name: &str, pattern: &str) -> bool {
     let pattern_chars: Vec<char> = pattern.chars().collect();
     let name_chars: Vec<char> = file_name.chars().collect();
 
-    fn match_recursive(
-        name: &[char],
-        pattern: &[char],
-        name_idx: usize,
-        pat_idx: usize,
-    ) -> bool {
+    fn match_recursive(name: &[char], pattern: &[char], name_idx: usize, pat_idx: usize) -> bool {
         if pat_idx == pattern.len() {
             return name_idx == name.len();
         }
@@ -380,7 +380,10 @@ fn execute_command(command: &[String], file_path: &Path) -> Result<String> {
 
 /// Main find function
 pub fn builtin_find(args: &[String], runtime: &mut Runtime) -> Result<ExecutionResult> {
-    let options = parse_args(args, runtime)?;
+    let mut options = parse_args(args, runtime)?;
+    if runtime.agent_mode() {
+        options.json_output = true;
+    }
 
     if !options.start_path.exists() {
         return Err(anyhow!(
@@ -435,7 +438,12 @@ pub fn builtin_find(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                             let modified = metadata
                                 .modified()
                                 .ok()
-                                .and_then(|t| DateTime::<Utc>::from(t).format("%Y-%m-%dT%H:%M:%SZ").to_string().into())
+                                .and_then(|t| {
+                                    DateTime::<Utc>::from(t)
+                                        .format("%Y-%m-%dT%H:%M:%SZ")
+                                        .to_string()
+                                        .into()
+                                })
                                 .unwrap_or_else(|| "unknown".to_string());
 
                             #[cfg(unix)]
@@ -539,8 +547,8 @@ mod tests {
         let mut runtime = Runtime::new();
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
-        let result = builtin_find(&vec!["-name".to_string(), "*.rs".to_string()], &mut runtime)
-            .unwrap();
+        let result =
+            builtin_find(&vec!["-name".to_string(), "*.rs".to_string()], &mut runtime).unwrap();
 
         assert!(result.stdout().contains("test1.rs"));
         assert!(result.stdout().contains("test3.rs"));
@@ -590,7 +598,11 @@ mod tests {
         // With gitignore (default)
         let result = builtin_find(&vec![], &mut runtime).unwrap();
         assert!(result.stdout().contains("include.txt"));
-        assert!(!result.stdout().contains("ignore.log"), "Expected ignore.log to be excluded, but found it in: {}", result.stdout());
+        assert!(
+            !result.stdout().contains("ignore.log"),
+            "Expected ignore.log to be excluded, but found it in: {}",
+            result.stdout()
+        );
 
         // Without gitignore
         let result = builtin_find(&vec!["--no-ignore".to_string()], &mut runtime).unwrap();
@@ -697,7 +709,11 @@ mod tests {
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
         let result = builtin_find(
-            &vec!["--json".to_string(), "-name".to_string(), "*.rs".to_string()],
+            &vec![
+                "--json".to_string(),
+                "-name".to_string(),
+                "*.rs".to_string(),
+            ],
             &mut runtime,
         )
         .unwrap();
@@ -720,7 +736,11 @@ mod tests {
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
         let result = builtin_find(
-            &vec!["--json".to_string(), "-name".to_string(), "test.txt".to_string()],
+            &vec![
+                "--json".to_string(),
+                "-name".to_string(),
+                "test.txt".to_string(),
+            ],
             &mut runtime,
         )
         .unwrap();
@@ -731,7 +751,12 @@ mod tests {
         let item = &array[0];
 
         // Check metadata fields
-        assert!(item.get("path").unwrap().as_str().unwrap().contains("test.txt"));
+        assert!(item
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("test.txt"));
         assert_eq!(item.get("type").unwrap().as_str().unwrap(), "file");
         assert_eq!(item.get("size").unwrap().as_u64().unwrap(), 11); // "hello world" is 11 bytes
         assert!(item.get("modified").is_some());

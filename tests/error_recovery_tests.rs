@@ -1,6 +1,6 @@
+use rush::executor::Executor;
 use rush::lexer::Lexer;
 use rush::parser::Parser;
-use rush::executor::Executor;
 
 #[test]
 fn test_parse_error_recovery() {
@@ -46,7 +46,10 @@ fn test_execution_error_recovery() {
 
     // Should return an error, not panic
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Command not found"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Command not found"));
 }
 
 #[test]
@@ -114,11 +117,11 @@ fn test_multiple_parse_errors() {
     // Test that parser can handle multiple different error conditions
 
     let test_cases = vec![
-        "let",           // Incomplete assignment
-        "if",            // Incomplete if statement
-        "for",           // Incomplete for loop
-        "fn",            // Incomplete function definition
-        "match",         // Incomplete match expression
+        "let",   // Incomplete assignment
+        "if",    // Incomplete if statement
+        "for",   // Incomplete for loop
+        "fn",    // Incomplete function definition
+        "match", // Incomplete match expression
     ];
 
     for test_case in test_cases {

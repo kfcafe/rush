@@ -109,7 +109,7 @@ impl Parser {
         } else {
             false
         };
-        
+
         let first_statement = self.parse_pipeline_element()?;
 
         // Check if this is a parallel execution
@@ -184,7 +184,11 @@ impl Parser {
                 })
                 .collect();
 
-            Statement::Pipeline(Pipeline { commands, elements, negated })
+            Statement::Pipeline(Pipeline {
+                commands,
+                elements,
+                negated,
+            })
         } else if negated {
             // Single command with negation - wrap in a Pipeline with negated=true
             let element = Self::statement_to_pipeline_element(first_statement)?;
@@ -192,7 +196,11 @@ impl Parser {
                 PipelineElement::Command(cmd) => vec![cmd.clone()],
                 _ => vec![],
             };
-            Statement::Pipeline(Pipeline { commands, elements: vec![element], negated: true })
+            Statement::Pipeline(Pipeline {
+                commands,
+                elements: vec![element],
+                negated: true,
+            })
         } else {
             first_statement
         };
@@ -321,50 +329,50 @@ impl Parser {
             Some(Token::LeftParen) => return self.parse_subshell(),
             _ => {}
         }
-        
+
         if self.is_bare_assignment() {
             self.parse_bare_assignment_or_command()
         } else {
             Ok(Statement::Command(self.parse_command()?))
         }
     }
-    
+
     /// Parse a brace group: { commands; }
     /// Executes in current shell context (unlike subshell which forks)
     fn parse_brace_group(&mut self) -> Result<Statement> {
         self.expect_token(&Token::LeftBrace)?;
-        
+
         let mut statements = Vec::new();
-        
+
         // Skip leading newlines
         while matches!(self.peek(), Some(Token::Newline) | Some(Token::CrLf)) {
             self.advance();
         }
-        
+
         // Parse statements until we hit a closing brace
         while !self.match_token(&Token::RightBrace) && !self.is_at_end() {
             // Skip newlines between statements
             while matches!(self.peek(), Some(Token::Newline) | Some(Token::CrLf)) {
                 self.advance();
             }
-            
+
             if self.match_token(&Token::RightBrace) {
                 break;
             }
-            
+
             statements.push(self.parse_conditional_statement()?);
-            
+
             // Handle statement separators (semicolon)
             if self.match_token(&Token::Semicolon) {
                 self.advance();
             }
         }
-        
+
         self.expect_token(&Token::RightBrace)?;
-        
+
         Ok(Statement::BraceGroup(statements))
     }
-    
+
     /// Convert a parsed statement into a pipeline element
     fn statement_to_pipeline_element(stmt: Statement) -> Result<PipelineElement> {
         match stmt {
@@ -484,23 +492,17 @@ impl Parser {
                     _ => unreachable!(),
                 }
             }
-            Some(Token::String(_)) => {
-                match self.advance() {
-                    Some(Token::String(s)) => {
-                        let unquoted = Self::strip_outer_quotes(&s, '"');
-                        Ok(Self::process_double_quote_escapes(&unquoted))
-                    }
-                    _ => unreachable!(),
+            Some(Token::String(_)) => match self.advance() {
+                Some(Token::String(s)) => {
+                    let unquoted = Self::strip_outer_quotes(&s, '"');
+                    Ok(Self::process_double_quote_escapes(&unquoted))
                 }
-            }
-            Some(Token::SingleQuotedString(_)) => {
-                match self.advance() {
-                    Some(Token::SingleQuotedString(s)) => {
-                        Ok(Self::strip_outer_quotes(&s, '\''))
-                    }
-                    _ => unreachable!(),
-                }
-            }
+                _ => unreachable!(),
+            },
+            Some(Token::SingleQuotedString(_)) => match self.advance() {
+                Some(Token::SingleQuotedString(s)) => Ok(Self::strip_outer_quotes(&s, '\'')),
+                _ => unreachable!(),
+            },
             Some(Token::AnsiCString(_)) => {
                 match self.advance() {
                     Some(Token::AnsiCString(s)) => {
@@ -510,12 +512,10 @@ impl Parser {
                     _ => unreachable!(),
                 }
             }
-            Some(Token::Integer(_)) => {
-                match self.advance() {
-                    Some(Token::Integer(n)) => Ok(n.to_string()),
-                    _ => unreachable!(),
-                }
-            }
+            Some(Token::Integer(_)) => match self.advance() {
+                Some(Token::Integer(n)) => Ok(n.to_string()),
+                _ => unreachable!(),
+            },
             Some(Token::Variable(_)) | Some(Token::SpecialVariable(_)) => {
                 match self.advance() {
                     Some(Token::Variable(s)) | Some(Token::SpecialVariable(s)) => {
@@ -525,12 +525,10 @@ impl Parser {
                     _ => unreachable!(),
                 }
             }
-            Some(Token::Path(_)) => {
-                match self.advance() {
-                    Some(Token::Path(s)) => Ok(s.clone()),
-                    _ => unreachable!(),
-                }
-            }
+            Some(Token::Path(_)) => match self.advance() {
+                Some(Token::Path(s)) => Ok(s.clone()),
+                _ => unreachable!(),
+            },
             Some(Token::CommandSubstitution(_)) | Some(Token::BacktickSubstitution(_)) => {
                 match self.advance() {
                     Some(Token::CommandSubstitution(s)) | Some(Token::BacktickSubstitution(s)) => {
@@ -539,18 +537,14 @@ impl Parser {
                     _ => unreachable!(),
                 }
             }
-            Some(Token::BracedVariable(_)) => {
-                match self.advance() {
-                    Some(Token::BracedVariable(s)) => Ok(s.clone()),
-                    _ => unreachable!(),
-                }
-            }
-            Some(Token::Float(_)) => {
-                match self.advance() {
-                    Some(Token::Float(f)) => Ok(f.to_string()),
-                    _ => unreachable!(),
-                }
-            }
+            Some(Token::BracedVariable(_)) => match self.advance() {
+                Some(Token::BracedVariable(s)) => Ok(s.clone()),
+                _ => unreachable!(),
+            },
+            Some(Token::Float(_)) => match self.advance() {
+                Some(Token::Float(f)) => Ok(f.to_string()),
+                _ => unreachable!(),
+            },
             Some(Token::Tilde) => {
                 self.advance();
                 Ok("~".to_string())
@@ -563,12 +557,10 @@ impl Parser {
                 self.advance();
                 Ok("--".to_string())
             }
-            Some(Token::ShortFlag(_)) => {
-                match self.advance() {
-                    Some(Token::ShortFlag(s)) => Ok(s.clone()),
-                    _ => unreachable!(),
-                }
-            }
+            Some(Token::ShortFlag(_)) => match self.advance() {
+                Some(Token::ShortFlag(s)) => Ok(s.clone()),
+                _ => unreachable!(),
+            },
             Some(Token::Dot) => {
                 self.advance();
                 Ok(".".to_string())
@@ -579,7 +571,9 @@ impl Parser {
 
     fn parse_command(&mut self) -> Result<Command> {
         let name = match self.advance() {
-            Some(Token::Identifier(s)) | Some(Token::Path(s)) | Some(Token::GlobPattern(s)) => s.clone(),
+            Some(Token::Identifier(s)) | Some(Token::Path(s)) | Some(Token::GlobPattern(s)) => {
+                s.clone()
+            }
             Some(Token::LeftBracket) => "[".to_string(),
             Some(Token::Colon) => ":".to_string(),
             Some(Token::Dot) => ".".to_string(),
@@ -970,7 +964,10 @@ impl Parser {
 
         while !self.match_token(&Token::RightBrace) && !self.is_at_end() {
             // Skip newlines and semicolons
-            while matches!(self.peek(), Some(Token::Newline) | Some(Token::CrLf) | Some(Token::Semicolon)) {
+            while matches!(
+                self.peek(),
+                Some(Token::Newline) | Some(Token::CrLf) | Some(Token::Semicolon)
+            ) {
                 self.advance();
             }
 
@@ -1145,7 +1142,10 @@ impl Parser {
             }
 
             // Stop at elif, else, or fi
-            if matches!(self.peek(), Some(Token::Elif) | Some(Token::Else) | Some(Token::Fi)) {
+            if matches!(
+                self.peek(),
+                Some(Token::Elif) | Some(Token::Else) | Some(Token::Fi)
+            ) {
                 break;
             }
 
@@ -1184,7 +1184,10 @@ impl Parser {
         };
 
         // Skip optional semicolons/newlines before 'do'
-        while matches!(self.peek(), Some(Token::Semicolon) | Some(Token::Newline) | Some(Token::CrLf)) {
+        while matches!(
+            self.peek(),
+            Some(Token::Semicolon) | Some(Token::Newline) | Some(Token::CrLf)
+        ) {
             self.advance();
         }
 
@@ -1253,10 +1256,10 @@ impl Parser {
                 self.advance();
                 continue;
             }
-            
+
             // Parse a statement in the condition
             condition.push(self.parse_statement()?);
-            
+
             // Handle optional semicolons or newlines between condition statements
             if matches!(self.peek(), Some(Token::Semicolon)) {
                 self.advance();
@@ -1268,7 +1271,7 @@ impl Parser {
         }
 
         self.expect_token(&Token::Do)?;
-        
+
         // Skip newline after 'do'
         if matches!(self.peek(), Some(Token::Newline) | Some(Token::CrLf)) {
             self.advance();
@@ -1282,9 +1285,9 @@ impl Parser {
                 self.advance();
                 continue;
             }
-            
+
             body.push(self.parse_statement()?);
-            
+
             // Handle optional semicolons or newlines between body statements
             if matches!(self.peek(), Some(Token::Semicolon)) {
                 self.advance();
@@ -1307,10 +1310,10 @@ impl Parser {
                 self.advance();
                 continue;
             }
-            
+
             // Parse a statement in the condition
             condition.push(self.parse_statement()?);
-            
+
             // Handle optional semicolons or newlines between condition statements
             if matches!(self.peek(), Some(Token::Semicolon)) {
                 self.advance();
@@ -1322,7 +1325,7 @@ impl Parser {
         }
 
         self.expect_token(&Token::Do)?;
-        
+
         // Skip newline after 'do'
         if matches!(self.peek(), Some(Token::Newline) | Some(Token::CrLf)) {
             self.advance();
@@ -1336,9 +1339,9 @@ impl Parser {
                 self.advance();
                 continue;
             }
-            
+
             body.push(self.parse_statement()?);
-            
+
             // Handle optional semicolons or newlines between body statements
             if matches!(self.peek(), Some(Token::Semicolon)) {
                 self.advance();
@@ -1439,15 +1442,20 @@ impl Parser {
 
             // Parse body statements until ';;' or 'esac'
             let mut body = Vec::new();
-            while !matches!(self.peek(), Some(Token::DoubleSemicolon) | Some(Token::Esac))
-                && !self.is_at_end()
+            while !matches!(
+                self.peek(),
+                Some(Token::DoubleSemicolon) | Some(Token::Esac)
+            ) && !self.is_at_end()
             {
                 // Skip newlines in body
                 while matches!(self.peek(), Some(Token::Newline) | Some(Token::CrLf)) {
                     self.advance();
                 }
 
-                if matches!(self.peek(), Some(Token::DoubleSemicolon) | Some(Token::Esac)) {
+                if matches!(
+                    self.peek(),
+                    Some(Token::DoubleSemicolon) | Some(Token::Esac)
+                ) {
                     break;
                 }
 
@@ -1547,12 +1555,10 @@ impl Parser {
                 let processed = Self::process_double_quote_escapes(&unquoted);
                 Ok(Pattern::Literal(Literal::String(processed)))
             }
-            Some(Token::SingleQuotedString(s)) => {
-                Ok(Pattern::Literal(Literal::String(Self::strip_outer_quotes(&s, '\''))))
-            }
-            Some(Token::AnsiCString(s)) => {
-                Ok(Pattern::Literal(Literal::String(s.clone())))
-            }
+            Some(Token::SingleQuotedString(s)) => Ok(Pattern::Literal(Literal::String(
+                Self::strip_outer_quotes(&s, '\''),
+            ))),
+            Some(Token::AnsiCString(s)) => Ok(Pattern::Literal(Literal::String(s.clone()))),
             Some(Token::Integer(n)) => Ok(Pattern::Literal(Literal::Integer(*n))),
             _ => Ok(Pattern::Wildcard),
         }
@@ -1814,7 +1820,7 @@ mod tests {
                 println!("Parsed successfully: {:?}", statements);
                 assert_eq!(statements.len(), 1);
                 match &statements[0] {
-                    Statement::WhileLoop(_) => {},
+                    Statement::WhileLoop(_) => {}
                     _ => panic!("Expected while loop"),
                 }
             }
@@ -1880,7 +1886,9 @@ mod tests {
 
     #[test]
     fn test_parse_if_elif_else_fi() {
-        let tokens = Lexer::tokenize("if false; then echo 1; elif false; then echo 2; else echo 3; fi").unwrap();
+        let tokens =
+            Lexer::tokenize("if false; then echo 1; elif false; then echo 2; else echo 3; fi")
+                .unwrap();
         let mut parser = Parser::new(tokens);
         let statements = parser.parse().unwrap();
 
@@ -2103,7 +2111,8 @@ mod tests {
 
     #[test]
     fn test_parse_nested_for_loop() {
-        let tokens = Lexer::tokenize("for i in 1 2; do for j in a b; do echo $i $j; done; done").unwrap();
+        let tokens =
+            Lexer::tokenize("for i in 1 2; do for j in a b; do echo $i $j; done; done").unwrap();
         let mut parser = Parser::new(tokens);
         let statements = parser.parse().unwrap();
 
@@ -2222,8 +2231,7 @@ mod tests {
 
     #[test]
     fn test_parse_case_multiple_patterns() {
-        let tokens =
-            Lexer::tokenize("case $x in a|b) echo ab;; *) echo other;; esac").unwrap();
+        let tokens = Lexer::tokenize("case $x in a|b) echo ab;; *) echo other;; esac").unwrap();
         let mut parser = Parser::new(tokens);
         let statements = parser.parse().unwrap();
 
@@ -2240,8 +2248,7 @@ mod tests {
 
     #[test]
     fn test_parse_case_with_variable_assignment() {
-        let tokens =
-            Lexer::tokenize("x=foo; case $x in foo) echo matched;; esac").unwrap();
+        let tokens = Lexer::tokenize("x=foo; case $x in foo) echo matched;; esac").unwrap();
         let mut parser = Parser::new(tokens);
         let statements = parser.parse().unwrap();
 
@@ -2265,7 +2272,10 @@ mod tests {
         // Test backslash before regular char (preserved)
         assert_eq!(Parser::process_double_quote_escapes(r"test\n"), "test\\n");
         // Test multiple escapes
-        assert_eq!(Parser::process_double_quote_escapes(r#"\"hello\""#), "\"hello\"");
+        assert_eq!(
+            Parser::process_double_quote_escapes(r#"\"hello\""#),
+            "\"hello\""
+        );
     }
 
     #[test]
@@ -2318,7 +2328,8 @@ mod tests {
 
     #[test]
     fn test_parse_pipe_ask_in_pipeline() {
-        let tokens = Lexer::tokenize(r#"cat file.txt | grep error |? "explain these errors""#).unwrap();
+        let tokens =
+            Lexer::tokenize(r#"cat file.txt | grep error |? "explain these errors""#).unwrap();
         let mut parser = Parser::new(tokens);
         let statements = parser.parse().unwrap();
 

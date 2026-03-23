@@ -73,7 +73,12 @@ fn test_multiple_background_jobs() {
     // Job IDs should be sequential (but not necessarily starting at 1)
     let id1 = jobs[0].id;
     let id2 = jobs[1].id;
-    assert!(id2 > id1, "Second job ID ({}) should be greater than first ({})", id2, id1);
+    assert!(
+        id2 > id1,
+        "Second job ID ({}) should be greater than first ({})",
+        id2,
+        id1
+    );
 
     // Cleanup - terminate the jobs
     executor.runtime_mut().job_manager().terminate_job(id1).ok();
@@ -203,8 +208,10 @@ fn test_background_with_conditional_and() {
     // Should fail because echo is a builtin
     assert!(result.is_err());
     let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("Builtin commands cannot be run in background") 
-            || error_msg.contains("cannot be run in background"));
+    assert!(
+        error_msg.contains("Builtin commands cannot be run in background")
+            || error_msg.contains("cannot be run in background")
+    );
 }
 
 #[test]

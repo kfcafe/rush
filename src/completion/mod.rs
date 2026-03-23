@@ -51,30 +51,61 @@ pub struct Completer {
 impl Completer {
     pub fn new(builtins: Arc<Builtins>, runtime: Arc<RwLock<Runtime>>) -> Self {
         let mut builtin_flags = HashMap::new();
-        
+
         // Define common flags for builtins
-        builtin_flags.insert("ls".to_string(), vec![
-            "-l".to_string(), "-a".to_string(), "-h".to_string(),
-            "-R".to_string(), "-t".to_string(), "-r".to_string(),
-            "--long".to_string(), "--all".to_string(), "--human-readable".to_string(),
-        ]);
-        
-        builtin_flags.insert("grep".to_string(), vec![
-            "-i".to_string(), "-r".to_string(), "-n".to_string(),
-            "-v".to_string(), "-w".to_string(), "-E".to_string(),
-            "--ignore-case".to_string(), "--recursive".to_string(),
-            "--line-number".to_string(), "--invert-match".to_string(),
-        ]);
-        
-        builtin_flags.insert("find".to_string(), vec![
-            "-name".to_string(), "-type".to_string(), "-size".to_string(),
-            "-mtime".to_string(), "-exec".to_string(), "-print".to_string(),
-        ]);
-        
-        builtin_flags.insert("cat".to_string(), vec![
-            "-n".to_string(), "-b".to_string(), "-s".to_string(),
-            "--number".to_string(), "--number-nonblank".to_string(),
-        ]);
+        builtin_flags.insert(
+            "ls".to_string(),
+            vec![
+                "-l".to_string(),
+                "-a".to_string(),
+                "-h".to_string(),
+                "-R".to_string(),
+                "-t".to_string(),
+                "-r".to_string(),
+                "--long".to_string(),
+                "--all".to_string(),
+                "--human-readable".to_string(),
+            ],
+        );
+
+        builtin_flags.insert(
+            "grep".to_string(),
+            vec![
+                "-i".to_string(),
+                "-r".to_string(),
+                "-n".to_string(),
+                "-v".to_string(),
+                "-w".to_string(),
+                "-E".to_string(),
+                "--ignore-case".to_string(),
+                "--recursive".to_string(),
+                "--line-number".to_string(),
+                "--invert-match".to_string(),
+            ],
+        );
+
+        builtin_flags.insert(
+            "find".to_string(),
+            vec![
+                "-name".to_string(),
+                "-type".to_string(),
+                "-size".to_string(),
+                "-mtime".to_string(),
+                "-exec".to_string(),
+                "-print".to_string(),
+            ],
+        );
+
+        builtin_flags.insert(
+            "cat".to_string(),
+            vec![
+                "-n".to_string(),
+                "-b".to_string(),
+                "-s".to_string(),
+                "--number".to_string(),
+                "--number-nonblank".to_string(),
+            ],
+        );
 
         Self {
             builtins,
@@ -89,20 +120,22 @@ impl Completer {
     /// Get all available commands (builtins + PATH + user functions)
     fn get_all_commands(&self) -> Vec<String> {
         let mut commands = Vec::new();
-        
+
         // Add builtin commands
         commands.extend(self.get_builtin_commands());
-        
+
         // Add PATH executables (from engine cache)
-        let path_commands: Vec<String> = self.engine.complete_commands("", 500)
+        let path_commands: Vec<String> = self
+            .engine
+            .complete_commands("", 500)
             .into_iter()
             .map(|(cmd, _)| cmd)
             .collect();
         commands.extend(path_commands);
-        
+
         // Add user-defined functions
         commands.extend(self.get_user_functions());
-        
+
         commands.sort();
         commands.dedup();
         commands
@@ -126,7 +159,8 @@ impl Completer {
 
     /// Get PATH executables using engine
     fn get_path_executables(&self) -> Vec<String> {
-        self.engine.complete_commands("", 500)
+        self.engine
+            .complete_commands("", 500)
             .into_iter()
             .map(|(cmd, _)| cmd)
             .collect()
@@ -145,9 +179,7 @@ impl Completer {
         let (dir, partial) = if prefix.contains('/') {
             let path = Path::new(prefix);
             let dir = path.parent().unwrap_or(Path::new("."));
-            let partial = path.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let partial = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
             (dir.to_path_buf(), partial)
         } else {
             (PathBuf::from("."), prefix)
@@ -191,7 +223,8 @@ impl Completer {
             if let Some(filename) = entry.file_name().to_str() {
                 if filename.starts_with(partial) {
                     let mut path_str = if prefix.contains('/') {
-                        let dir_prefix = Path::new(prefix).parent()
+                        let dir_prefix = Path::new(prefix)
+                            .parent()
                             .and_then(|p| p.to_str())
                             .unwrap_or("");
                         if dir_prefix.is_empty() {
@@ -231,13 +264,13 @@ impl Completer {
 
         // Cache miss or expired, scan git branches
         let branches = self.scan_git_branches();
-        
+
         // Update cache
         {
             let mut cache = self.git_branches_cache.write().unwrap();
             *cache = Some(CacheEntry::new(branches.clone()));
         }
-        
+
         branches
     }
 
@@ -293,7 +326,7 @@ impl Completer {
     fn get_npm_scripts(&self) -> Vec<String> {
         let runtime = self.runtime.read().unwrap();
         let package_json = runtime.get_cwd().join("package.json");
-        
+
         if let Ok(content) = fs::read_to_string(package_json) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(scripts) = json.get("scripts").and_then(|s| s.as_object()) {
@@ -301,7 +334,7 @@ impl Completer {
                 }
             }
         }
-        
+
         Vec::new()
     }
 
@@ -309,13 +342,13 @@ impl Completer {
     fn parse_context(&self, line: &str, pos: usize) -> CompletionContext {
         let before_cursor = &line[..pos];
         let words: Vec<&str> = before_cursor.split_whitespace().collect();
-        
+
         if words.is_empty() {
             return CompletionContext::Command;
         }
 
         let last_word = words.last().copied().unwrap_or("");
-        
+
         // Check if we're completing the command itself
         if words.len() == 1 && !before_cursor.ends_with(char::is_whitespace) {
             return CompletionContext::Command;
@@ -379,32 +412,29 @@ impl ReedlineCompleter for Completer {
         let context = self.parse_context(line, pos);
         let before_cursor = &line[..pos];
         let last_word = before_cursor.split_whitespace().last().unwrap_or("");
-        
+
         let candidates = match context {
             CompletionContext::Command => {
                 let all_commands = self.get_all_commands();
-                self.engine.fuzzy_filter(&all_commands, last_word, 50)
+                self.engine
+                    .fuzzy_filter(&all_commands, last_word, 50)
                     .into_iter()
                     .map(|(cmd, _)| cmd)
                     .collect::<Vec<_>>()
             }
             CompletionContext::Path => {
                 let paths = self.engine.complete_files(last_word, 50);
-                paths.into_iter()
-                    .map(|(path, _)| path)
-                    .collect()
+                paths.into_iter().map(|(path, _)| path).collect()
             }
-            CompletionContext::GitBranch => {
-                self.get_git_branches()
-                    .into_iter()
-                    .filter(|branch| branch.starts_with(last_word))
-                    .collect()
-            }
+            CompletionContext::GitBranch => self
+                .get_git_branches()
+                .into_iter()
+                .filter(|branch| branch.starts_with(last_word))
+                .collect(),
             CompletionContext::GitSubcommand => {
                 let git_commands = vec![
-                    "add", "branch", "checkout", "clone", "commit", "diff",
-                    "fetch", "log", "merge", "pull", "push", "rebase",
-                    "reset", "status", "tag",
+                    "add", "branch", "checkout", "clone", "commit", "diff", "fetch", "log",
+                    "merge", "pull", "push", "rebase", "reset", "status", "tag",
                 ];
                 git_commands
                     .into_iter()
@@ -412,33 +442,29 @@ impl ReedlineCompleter for Completer {
                     .map(|s| s.to_string())
                     .collect()
             }
-            CompletionContext::CargoCommand => {
-                self.get_cargo_commands()
-                    .into_iter()
-                    .filter(|cmd| cmd.starts_with(last_word))
-                    .collect()
-            }
-            CompletionContext::NpmScript => {
-                self.get_npm_scripts()
-                    .into_iter()
-                    .filter(|script| script.starts_with(last_word))
-                    .collect()
-            }
-            CompletionContext::RustFile => {
-                self.complete_path(last_word)
-                    .into_iter()
-                    .filter(|path| path.ends_with(".rs") || path.ends_with('/'))
-                    .collect()
-            }
-            CompletionContext::Flag(cmd) => {
-                self.builtin_flags
-                    .get(&cmd)
-                    .cloned()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|flag| flag.starts_with(last_word))
-                    .collect()
-            }
+            CompletionContext::CargoCommand => self
+                .get_cargo_commands()
+                .into_iter()
+                .filter(|cmd| cmd.starts_with(last_word))
+                .collect(),
+            CompletionContext::NpmScript => self
+                .get_npm_scripts()
+                .into_iter()
+                .filter(|script| script.starts_with(last_word))
+                .collect(),
+            CompletionContext::RustFile => self
+                .complete_path(last_word)
+                .into_iter()
+                .filter(|path| path.ends_with(".rs") || path.ends_with('/'))
+                .collect(),
+            CompletionContext::Flag(cmd) => self
+                .builtin_flags
+                .get(&cmd)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|flag| flag.starts_with(last_word))
+                .collect(),
         };
 
         // Convert to Suggestions
@@ -473,7 +499,7 @@ mod tests {
     fn test_command_completion() {
         let mut completer = setup_completer();
         let suggestions = completer.complete("ec", 2);
-        
+
         let values: Vec<String> = suggestions.iter().map(|s| s.value.clone()).collect();
         assert!(values.contains(&"echo".to_string()));
     }
@@ -482,7 +508,7 @@ mod tests {
     fn test_builtin_completion() {
         let mut completer = setup_completer();
         let suggestions = completer.complete("pw", 2);
-        
+
         let values: Vec<String> = suggestions.iter().map(|s| s.value.clone()).collect();
         assert!(values.contains(&"pwd".to_string()));
     }
@@ -492,7 +518,7 @@ mod tests {
     fn test_path_completion_current_dir() {
         let mut completer = setup_completer();
         let suggestions = completer.complete("ls sr", 5);
-        
+
         // Should suggest paths starting with "sr"
         let values: Vec<String> = suggestions.iter().map(|s| s.value.clone()).collect();
         assert!(values.iter().any(|v| v.starts_with("sr")));
@@ -530,7 +556,7 @@ mod tests {
     fn test_flag_completion() {
         let mut completer = setup_completer();
         let suggestions = completer.complete("ls -", 4);
-        
+
         let values: Vec<String> = suggestions.iter().map(|s| s.value.clone()).collect();
         assert!(values.contains(&"-l".to_string()));
         assert!(values.contains(&"-a".to_string()));
@@ -540,7 +566,7 @@ mod tests {
     fn test_grep_flag_completion() {
         let mut completer = setup_completer();
         let suggestions = completer.complete("grep -i", 7);
-        
+
         let values: Vec<String> = suggestions.iter().map(|s| s.value.clone()).collect();
         assert!(values.contains(&"-i".to_string()));
     }
@@ -562,13 +588,13 @@ mod tests {
     #[test]
     fn test_path_cache_expiry() {
         let completer = setup_completer();
-        
+
         // First call should populate cache
         let executables1 = completer.get_path_executables();
-        
+
         // Second call should use cache
         let executables2 = completer.get_path_executables();
-        
+
         assert_eq!(executables1, executables2);
     }
 
@@ -576,7 +602,7 @@ mod tests {
     fn test_git_subcommand_completion() {
         let mut completer = setup_completer();
         let suggestions = completer.complete("git chec", 8);
-        
+
         let values: Vec<String> = suggestions.iter().map(|s| s.value.clone()).collect();
         assert!(values.contains(&"checkout".to_string()));
     }

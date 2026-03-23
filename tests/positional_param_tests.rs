@@ -71,7 +71,9 @@ fn test_positional_param_numbered() {
 #[test]
 fn test_positional_param_zero() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_variable("0".to_string(), "myscript.sh".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("0".to_string(), "myscript.sh".to_string());
 
     let output = execute_line("echo $0", &mut executor).unwrap();
     assert_eq!(output, "myscript.sh");
@@ -141,10 +143,9 @@ fn test_positional_param_empty() {
 #[test]
 fn test_positional_param_out_of_range() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_positional_params(vec![
-        "arg1".to_string(),
-        "arg2".to_string(),
-    ]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["arg1".to_string(), "arg2".to_string()]);
 
     // $3 should be empty when we only have 2 args
     let output = execute_line("echo $3", &mut executor).unwrap();
@@ -158,9 +159,9 @@ fn test_positional_param_out_of_range() {
 #[test]
 fn test_positional_param_with_default() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_positional_params(vec![
-        "arg1".to_string(),
-    ]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["arg1".to_string()]);
 
     // $2 doesn't exist, use default
     let output = execute_line("echo ${2:-default}", &mut executor).unwrap();
@@ -174,7 +175,9 @@ fn test_positional_param_with_default() {
 #[test]
 fn test_positional_param_all_together() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_variable("0".to_string(), "script.sh".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("0".to_string(), "script.sh".to_string());
     executor.runtime_mut().set_positional_params(vec![
         "alpha".to_string(),
         "beta".to_string(),
@@ -192,10 +195,9 @@ fn test_positional_param_function_scope() {
     let mut executor = Executor::new();
 
     // Set global positional params
-    executor.runtime_mut().set_positional_params(vec![
-        "global1".to_string(),
-        "global2".to_string(),
-    ]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["global1".to_string(), "global2".to_string()]);
 
     // Define a function
     execute_line("fn test_func() { echo $1 $2; }", &mut executor).unwrap();

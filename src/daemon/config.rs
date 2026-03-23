@@ -129,7 +129,7 @@ impl DaemonConfig {
 
         for line in content.lines() {
             let line = line.trim();
-            
+
             // Skip comments and empty lines
             if line.is_empty() || line.starts_with('#') {
                 continue;
@@ -137,10 +137,10 @@ impl DaemonConfig {
 
             // Parse variable assignments (handle both = and export)
             let line = line.strip_prefix("export ").unwrap_or(line);
-            
+
             if let Some((key, value)) = parse_assignment(line) {
                 let value = unquote(&value);
-                
+
                 match key.as_str() {
                     "RUSH_BANNER_STYLE" => {
                         config.banner.style = BannerStyle::from_str(&value);
@@ -152,14 +152,12 @@ impl DaemonConfig {
                         config.banner.show = BannerShow::from_str(&value);
                     }
                     "RUSH_BANNER_STATS" => {
-                        config.banner.stats = value
-                            .split_whitespace()
-                            .map(|s| s.to_string())
-                            .collect();
+                        config.banner.stats =
+                            value.split_whitespace().map(|s| s.to_string()).collect();
                     }
                     _ if key.starts_with("RUSH_STAT_") => {
                         let suffix = &key["RUSH_STAT_".len()..];
-                        
+
                         if let Some(name) = suffix.strip_suffix("_INTERVAL") {
                             // RUSH_STAT_<name>_INTERVAL
                             if let Ok(secs) = value.parse::<u64>() {
@@ -187,7 +185,7 @@ impl DaemonConfig {
                 .get(&name)
                 .map(|&s| Duration::from_secs(s))
                 .unwrap_or(Duration::from_secs(30));
-            
+
             let timeout = stat_timeouts
                 .get(&name)
                 .map(|&s| Duration::from_secs(s))
@@ -223,29 +221,29 @@ fn parse_assignment(line: &str) -> Option<(String, String)> {
     let eq_pos = line.find('=')?;
     let key = line[..eq_pos].trim().to_string();
     let value = line[eq_pos + 1..].trim().to_string();
-    
+
     // Validate key is a valid identifier
     if key.is_empty() || !key.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return None;
     }
-    
+
     Some((key, value))
 }
 
 /// Remove surrounding quotes from a value
 fn unquote(s: &str) -> String {
     let s = s.trim();
-    
+
     // Handle double quotes
     if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
-        return s[1..s.len()-1].to_string();
+        return s[1..s.len() - 1].to_string();
     }
-    
+
     // Handle single quotes
     if s.starts_with('\'') && s.ends_with('\'') && s.len() >= 2 {
-        return s[1..s.len()-1].to_string();
+        return s[1..s.len() - 1].to_string();
     }
-    
+
     s.to_string()
 }
 
@@ -269,7 +267,7 @@ RUSH_BANNER_SHOW="first"
 RUSH_BANNER_STATS="host uptime memory"
 "#;
         let config = DaemonConfig::parse(content);
-        
+
         assert_eq!(config.banner.style, BannerStyle::Minimal);
         assert_eq!(config.banner.color, "green");
         assert_eq!(config.banner.show, BannerShow::First);
@@ -285,14 +283,14 @@ RUSH_STAT_weather_TIMEOUT=5
 RUSH_STAT_todos="wc -l < ~/todo.txt"
 "#;
         let config = DaemonConfig::parse(content);
-        
+
         assert_eq!(config.custom_stats.len(), 2);
-        
+
         let weather = config.get_custom_stat("weather").unwrap();
         assert_eq!(weather.command, "curl -s wttr.in");
         assert_eq!(weather.interval, Duration::from_secs(300));
         assert_eq!(weather.timeout, Duration::from_secs(5));
-        
+
         let todos = config.get_custom_stat("todos").unwrap();
         assert_eq!(todos.command, "wc -l < ~/todo.txt");
         assert_eq!(todos.interval, Duration::from_secs(30)); // default
@@ -306,7 +304,7 @@ export RUSH_BANNER_STYLE="line"
 export RUSH_STAT_test="echo hello"
 "#;
         let config = DaemonConfig::parse(content);
-        
+
         assert_eq!(config.banner.style, BannerStyle::Line);
         assert_eq!(config.custom_stats.len(), 1);
     }
@@ -320,7 +318,7 @@ RUSH_BANNER_STYLE="block"
 RUSH_STAT_test="echo hello"
 "#;
         let config = DaemonConfig::parse(content);
-        
+
         assert_eq!(config.banner.style, BannerStyle::Block);
         assert_eq!(config.custom_stats.len(), 1);
     }

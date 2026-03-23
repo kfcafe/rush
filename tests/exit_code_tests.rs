@@ -15,7 +15,10 @@ fn test_exit_code_variable_after_success() {
 
     // Check $? is set to 0
     assert_eq!(executor.runtime_mut().get_last_exit_code(), 0);
-    assert_eq!(executor.runtime_mut().get_variable("?"), Some("0".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("?"),
+        Some("0".to_string())
+    );
 }
 
 #[test]

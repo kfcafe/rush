@@ -37,8 +37,7 @@ pub fn builtin_type(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
         output: Output::Text(output),
         stderr: String::new(),
         exit_code,
-        error: None,        
-        
+        error: None,
     })
 }
 
@@ -76,12 +75,40 @@ fn get_command_type(name: &str, runtime: &Runtime) -> Option<CommandType> {
 fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "cd" | "pwd" | "echo" | "exit" | "export" | "source"
-            | "cat" | "find" | "ls" | "mkdir" | "git-status" | "grep"
-            | "undo" | "jobs" | "fg" | "bg" | "set"
-            | "alias" | "unalias" | "test" | "[" | "help" | "type"
-            | "shift" | "local" | "true" | "false" | "return" | "read"
-            | "trap" | "unset" | "printf" | "eval" | "exec" | "kill"
+        "cd" | "pwd"
+            | "echo"
+            | "exit"
+            | "export"
+            | "source"
+            | "cat"
+            | "find"
+            | "ls"
+            | "mkdir"
+            | "git-status"
+            | "grep"
+            | "undo"
+            | "jobs"
+            | "fg"
+            | "bg"
+            | "set"
+            | "alias"
+            | "unalias"
+            | "test"
+            | "["
+            | "help"
+            | "type"
+            | "shift"
+            | "local"
+            | "true"
+            | "false"
+            | "return"
+            | "read"
+            | "trap"
+            | "unset"
+            | "printf"
+            | "eval"
+            | "exec"
+            | "kill"
     )
 }
 
@@ -126,8 +153,8 @@ fn find_in_path(command: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::Runtime;
     use crate::parser::ast::FunctionDef;
+    use crate::runtime::Runtime;
 
     #[test]
     fn test_type_builtin() {
@@ -141,10 +168,10 @@ mod tests {
     #[test]
     fn test_type_alias() {
         let mut runtime = Runtime::new();
-        
+
         // Create an alias
         runtime.set_alias("ll".to_string(), "ls -la".to_string());
-        
+
         let result = builtin_type(&["ll".to_string()], &mut runtime).unwrap();
         assert_eq!(result.stdout(), "ll is aliased to 'ls -la'\n");
         assert_eq!(result.exit_code, 0);
@@ -200,7 +227,7 @@ mod tests {
     #[test]
     fn test_type_mixed_args() {
         let mut runtime = Runtime::new();
-        
+
         // Set up different command types
         runtime.set_alias("ll".to_string(), "ls -la".to_string());
         let func = FunctionDef {
@@ -209,12 +236,13 @@ mod tests {
             body: vec![],
         };
         runtime.define_function(func);
-        
+
         let result = builtin_type(
             &["cd".to_string(), "ll".to_string(), "myfunc".to_string()],
-            &mut runtime
-        ).unwrap();
-        
+            &mut runtime,
+        )
+        .unwrap();
+
         assert!(result.stdout().contains("cd is a shell builtin"));
         assert!(result.stdout().contains("ll is aliased to 'ls -la'"));
         assert!(result.stdout().contains("myfunc is a function"));
@@ -224,10 +252,10 @@ mod tests {
     #[test]
     fn test_type_priority_builtin_over_alias() {
         let mut runtime = Runtime::new();
-        
+
         // Try to create an alias with the same name as a builtin
         runtime.set_alias("cd".to_string(), "echo fake cd".to_string());
-        
+
         // type should report cd as a builtin (builtins have priority)
         let result = builtin_type(&["cd".to_string()], &mut runtime).unwrap();
         assert_eq!(result.stdout(), "cd is a shell builtin\n");

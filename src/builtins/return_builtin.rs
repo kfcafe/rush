@@ -32,7 +32,9 @@ impl std::error::Error for ReturnSignal {}
 pub fn builtin_return(args: &[String], runtime: &mut Runtime) -> Result<ExecutionResult> {
     // Check if we're in a function context
     if !runtime.in_function_context() {
-        return Err(anyhow!("return: can only 'return' from a function or sourced script"));
+        return Err(anyhow!(
+            "return: can only 'return' from a function or sourced script"
+        ));
     }
 
     // Parse exit code argument
@@ -60,7 +62,10 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_return(&[], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("can only 'return' from a function"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("can only 'return' from a function"));
     }
 
     #[test]
@@ -102,6 +107,9 @@ mod tests {
         runtime.enter_function_context();
         let result = builtin_return(&["1".to_string(), "2".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("too many arguments"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("too many arguments"));
     }
 }

@@ -192,10 +192,7 @@ fn redirect_fd(
         RedirectTarget::File { path, append } => {
             // Open the file
             let file = if append {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&path)?
+                OpenOptions::new().create(true).append(true).open(&path)?
             } else {
                 OpenOptions::new()
                     .create(true)
@@ -228,7 +225,11 @@ fn redirect_fd(
             // Redirect to another file descriptor (e.g., 2>&1)
             unsafe {
                 if libc::dup2(source_fd, fd) == -1 {
-                    return Err(anyhow!("exec: failed to redirect {} to fd {}", fd_name, source_fd));
+                    return Err(anyhow!(
+                        "exec: failed to redirect {} to fd {}",
+                        fd_name,
+                        source_fd
+                    ));
                 }
             }
 
@@ -262,18 +263,21 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_exec(&["cd".to_string(), "/tmp".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot execute builtin"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot execute builtin"));
     }
 
     #[test]
     fn test_exec_nonexistent_command() {
         let mut runtime = Runtime::new();
-        let result = builtin_exec(
-            &["nonexistent_command_12345".to_string()],
-            &mut runtime,
-        );
+        let result = builtin_exec(&["nonexistent_command_12345".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("command not found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("command not found"));
     }
 
     #[test]

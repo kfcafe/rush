@@ -123,8 +123,7 @@ impl History {
             return Ok(());
         }
 
-        let file = File::open(&self.history_file)
-            .context("Failed to open history file")?;
+        let file = File::open(&self.history_file).context("Failed to open history file")?;
         let reader = BufReader::new(file);
 
         self.entries.clear();
@@ -154,18 +153,14 @@ impl History {
     pub fn save(&self) -> Result<()> {
         // Create parent directory if it doesn't exist
         if let Some(parent) = self.history_file.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create history directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create history directory")?;
         }
 
-        let mut file = File::create(&self.history_file)
-            .context("Failed to create history file")?;
+        let mut file = File::create(&self.history_file).context("Failed to create history file")?;
 
         for entry in &self.entries {
-            let json = serde_json::to_string(entry)
-                .context("Failed to serialize history entry")?;
-            writeln!(file, "{}", json)
-                .context("Failed to write to history file")?;
+            let json = serde_json::to_string(entry).context("Failed to serialize history entry")?;
+            writeln!(file, "{}", json).context("Failed to write to history file")?;
         }
 
         Ok(())
@@ -175,8 +170,7 @@ impl History {
     pub fn append_to_file(&self, entry: &HistoryEntry) -> Result<()> {
         // Create parent directory if it doesn't exist
         if let Some(parent) = self.history_file.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create history directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create history directory")?;
         }
 
         let mut file = OpenOptions::new()
@@ -185,10 +179,8 @@ impl History {
             .open(&self.history_file)
             .context("Failed to open history file for appending")?;
 
-        let json = serde_json::to_string(entry)
-            .context("Failed to serialize history entry")?;
-        writeln!(file, "{}", json)
-            .context("Failed to append to history file")?;
+        let json = serde_json::to_string(entry).context("Failed to serialize history entry")?;
+        writeln!(file, "{}", json).context("Failed to append to history file")?;
 
         Ok(())
     }

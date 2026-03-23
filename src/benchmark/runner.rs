@@ -1,11 +1,11 @@
+use crate::benchmark::compare::ComparisonRunner;
+use crate::executor::Executor;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::time::Instant;
-use crate::executor::Executor;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
-use crate::benchmark::compare::ComparisonRunner;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BenchmarkMode {
@@ -98,47 +98,36 @@ impl BenchmarkRunner {
             ("echo", "echo hello"),
             ("echo_multiple_args", "echo hello world test"),
             ("echo_with_special_chars", "echo 'hello $world'"),
-
             // File operations
             ("ls", "ls /tmp"),
             ("pwd", "pwd"),
             ("mkdir_test", "mkdir -p /tmp/rush_bench_test"),
             ("ls_dir", "ls /tmp/rush_bench_test"),
-
             // Variables and substitution
             ("variable_set", "x=5; echo $x"),
             ("variable_expansion", "name=rush; echo hello $name"),
             ("variable_default", "echo ${missing:-default}"),
-
             // Pipes and redirection
             ("pipe_simple", "echo 'test' | cat"),
             ("pipe_multiple", "echo -e 'line1\\nline2' | wc -l"),
-
             // Control flow (if available)
             ("command_exit_code", "true; echo $?"),
             ("false_exit_code", "false; echo $?"),
-
             // Arithmetic (if supported)
             ("simple_arithmetic", "echo $((5 + 3))"),
             ("variable_arithmetic", "x=10; echo $((x * 2))"),
-
             // String operations
             ("string_concat", "a=hello; b=world; echo $a$b"),
             ("substring", "str=hello; echo ${str:0:3}"),
-
             // Globbing
             ("glob_ls", "ls /tmp/rush_bench_test*"),
-
             // Command substitution
             ("command_substitution", "echo $(echo nested)"),
             ("backtick_substitution", "x=`echo test`; echo $x"),
-
             // Brace expansion (if supported)
             ("echo_expansion", "echo test"),
-
             // Function call (if supported)
             ("function_call", "echo function_test"),
-
             // Array operations (if supported)
             ("array_index", "echo array_test"),
         ];
@@ -259,7 +248,10 @@ impl BenchmarkRunner {
         println!("\nResults saved to benchmark_results.json");
     }
 
-    fn write_comparison_results(&self, results: &[crate::benchmark::ComparisonResult]) -> Result<()> {
+    fn write_comparison_results(
+        &self,
+        results: &[crate::benchmark::ComparisonResult],
+    ) -> Result<()> {
         let json = serde_json::to_string_pretty(results)?;
         fs::write("benchmark_comparison.json", json)?;
         Ok(())

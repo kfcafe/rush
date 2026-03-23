@@ -1,11 +1,11 @@
 // Tab completion engine with fuzzy matching and caching
+use fuzzy_matcher::FuzzyMatcher;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use fuzzy_matcher::FuzzyMatcher;
 
 /// Cache entry with timestamp for expiration
 struct CacheEntry<T> {
@@ -59,9 +59,18 @@ impl CompletionEngine {
     }
 
     /// Fuzzy filter candidates with scores
-    pub fn fuzzy_filter(&self, candidates: &[String], prefix: &str, limit: usize) -> Vec<(String, i64)> {
+    pub fn fuzzy_filter(
+        &self,
+        candidates: &[String],
+        prefix: &str,
+        limit: usize,
+    ) -> Vec<(String, i64)> {
         if prefix.is_empty() {
-            return candidates.iter().take(limit).map(|s| (s.clone(), 0)).collect();
+            return candidates
+                .iter()
+                .take(limit)
+                .map(|s| (s.clone(), 0))
+                .collect();
         }
 
         let mut scored: Vec<(String, i64)> = candidates
@@ -116,7 +125,8 @@ impl CompletionEngine {
                             #[cfg(unix)]
                             {
                                 use std::os::unix::fs::PermissionsExt;
-                                if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                                if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+                                {
                                     if let Some(name) = entry.file_name().to_str() {
                                         executables.insert(name.to_string());
                                     }
@@ -146,10 +156,7 @@ impl CompletionEngine {
         let (dir, partial) = if prefix.contains('/') {
             let path = Path::new(prefix);
             let dir = path.parent().unwrap_or(Path::new("."));
-            let partial = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let partial = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
             (dir.to_path_buf(), partial)
         } else {
             (PathBuf::from("."), prefix)
@@ -158,11 +165,7 @@ impl CompletionEngine {
         // Expand tilde
         let dir = if dir.to_string_lossy().starts_with("~") {
             if let Some(home) = dirs::home_dir() {
-                home.join(
-                    dir.to_string_lossy()
-                        .strip_prefix("~")
-                        .unwrap_or(""),
-                )
+                home.join(dir.to_string_lossy().strip_prefix("~").unwrap_or(""))
             } else {
                 dir
             }

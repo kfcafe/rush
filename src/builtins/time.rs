@@ -1,10 +1,10 @@
 use crate::executor::{ExecutionResult, Output};
 use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
-use std::time::Instant;
+use libc;
 use std::cell::RefCell;
 use std::process::{Command as StdCommand, Stdio};
-use libc;
+use std::time::Instant;
 
 /// Timing data for a single pipeline stage
 #[derive(Debug, Clone)]
@@ -97,24 +97,23 @@ pub fn builtin_time(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
     let command_string = cmd_args.join(" ");
 
     // Parse and execute the command string
+    use crate::executor::Executor;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
-    use crate::executor::Executor;
 
     // Tokenize the command string
-    let tokens = Lexer::tokenize(&command_string)
-        .map_err(|e| anyhow!("time: tokenize error: {}", e))?;
+    let tokens =
+        Lexer::tokenize(&command_string).map_err(|e| anyhow!("time: tokenize error: {}", e))?;
 
     // Parse the tokens into statements
     let mut parser = Parser::new(tokens);
-    let statements = parser.parse()
+    let statements = parser
+        .parse()
         .map_err(|e| anyhow!("time: parse error: {}", e))?;
 
     // Check if this is a pipeline
-    let is_pipeline = statements.len() == 1 && matches!(
-        &statements[0],
-        crate::parser::ast::Statement::Pipeline(_)
-    );
+    let is_pipeline = statements.len() == 1
+        && matches!(&statements[0], crate::parser::ast::Statement::Pipeline(_));
 
     // Record the start time (for wall-clock time)
     let start_time = Instant::now();
@@ -138,7 +137,8 @@ pub fn builtin_time(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
     *executor.runtime_mut() = runtime.clone();
 
     // Execute the parsed statements
-    let result = executor.execute(statements)
+    let result = executor
+        .execute(statements)
         .map_err(|e| anyhow!("time: execution error: {}", e))?;
 
     // Record the end time
@@ -156,12 +156,13 @@ pub fn builtin_time(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
     *runtime = executor.runtime_mut().clone();
 
     // Calculate timing information
-    let (user_time, sys_time) = if let (Some(before), Some(after)) = (cpu_time_before, cpu_time_after) {
-        (after.user - before.user, after.sys - before.sys)
-    } else {
-        // Fallback: estimate from elapsed time (not accurate but better than nothing)
-        (elapsed_real, std::time::Duration::ZERO)
-    };
+    let (user_time, sys_time) =
+        if let (Some(before), Some(after)) = (cpu_time_before, cpu_time_after) {
+            (after.user - before.user, after.sys - before.sys)
+        } else {
+            // Fallback: estimate from elapsed time (not accurate but better than nothing)
+            (elapsed_real, std::time::Duration::ZERO)
+        };
 
     // Format timing output
     let timing_output = if is_pipeline {
@@ -174,11 +175,7 @@ pub fn builtin_time(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
     };
 
     // Combine the command output with timing information
-    let combined_output = format!(
-        "{}{}",
-        result.stdout(),
-        timing_output
-    );
+    let combined_output = format!("{}{}", result.stdout(), timing_output);
 
     // Return result with timing appended to output, but preserve stderr and exit code
     Ok(ExecutionResult {
@@ -220,18 +217,18 @@ fn builtin_time_compare(args: &[String], runtime: &mut Runtime) -> Result<Execut
 
 /// Time a command by executing it in Rush
 fn time_command_in_rush(command: &str, runtime: &mut Runtime) -> Result<ShellTiming> {
+    use crate::executor::Executor;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
-    use crate::executor::Executor;
 
     let start = Instant::now();
 
     // Tokenize and parse
-    let tokens = Lexer::tokenize(command)
-        .map_err(|e| anyhow!("Rush timing error: {}", e))?;
+    let tokens = Lexer::tokenize(command).map_err(|e| anyhow!("Rush timing error: {}", e))?;
 
     let mut parser = Parser::new(tokens);
-    let statements = parser.parse()
+    let statements = parser
+        .parse()
         .map_err(|e| anyhow!("Rush timing error: {}", e))?;
 
     // Create executor and execute
@@ -321,10 +318,7 @@ fn format_comparison_results(
     output.push_str(&format!("Command: {}\n\n", command));
 
     // Display Rush timing
-    output.push_str(&format!(
-        "Rush:  {}\n",
-        format_duration_short(rush.elapsed)
-    ));
+    output.push_str(&format!("Rush:  {}\n", format_duration_short(rush.elapsed)));
 
     // Display Bash timing with speedup ratio if available
     if let Some(bash_timing) = bash {
@@ -392,16 +386,18 @@ pub fn record_stage_timing(name: String, is_builtin: bool, elapsed: std::time::D
     TIMING_STATE.with(|ts| {
         let mut state = ts.borrow_mut();
         if state.collecting {
-            state.timings.push(StageTiming { name, is_builtin, elapsed });
+            state.timings.push(StageTiming {
+                name,
+                is_builtin,
+                elapsed,
+            });
         }
     });
 }
 
 /// Check if timing collection is enabled
 pub fn is_collecting_timing() -> bool {
-    TIMING_STATE.with(|ts| {
-        ts.borrow().collecting
-    })
+    TIMING_STATE.with(|ts| ts.borrow().collecting)
 }
 
 /// Format pipeline timing output as a table
@@ -428,8 +424,15 @@ fn format_pipeline_timing(timings: &[StageTiming], total_elapsed: std::time::Dur
     // Stage entries
     for timing in timings {
         let time_str = format_duration_ms(timing.elapsed);
-        let type_str = if timing.is_builtin { "builtin" } else { "external" };
-        output.push_str(&format!("{}\t\t{}\t\t{}\n", timing.name, time_str, type_str));
+        let type_str = if timing.is_builtin {
+            "builtin"
+        } else {
+            "external"
+        };
+        output.push_str(&format!(
+            "{}\t\t{}\t\t{}\n",
+            timing.name, time_str, type_str
+        ));
     }
 
     // Overhead line
@@ -518,7 +521,11 @@ fn get_cpu_time() -> Option<CpuTime> {
 /// real    0m0.123s
 /// user    0m0.100s
 /// sys     0m0.020s
-fn format_timing(real: std::time::Duration, user: std::time::Duration, sys: std::time::Duration) -> String {
+fn format_timing(
+    real: std::time::Duration,
+    user: std::time::Duration,
+    sys: std::time::Duration,
+) -> String {
     fn duration_to_posix(d: std::time::Duration) -> String {
         let total_secs = d.as_secs_f64();
         let minutes = (total_secs / 60.0).floor() as u64;
@@ -641,13 +648,11 @@ mod tests {
 
     #[test]
     fn test_pipeline_timing_formatter_single_stage() {
-        let timings = vec![
-            StageTiming {
-                name: "echo".to_string(),
-                is_builtin: true,
-                elapsed: std::time::Duration::from_millis(10),
-            },
-        ];
+        let timings = vec![StageTiming {
+            name: "echo".to_string(),
+            is_builtin: true,
+            elapsed: std::time::Duration::from_millis(10),
+        }];
         let total = std::time::Duration::from_millis(15);
         let output = format_pipeline_timing(&timings, total);
 
@@ -703,7 +708,11 @@ mod tests {
             state.timings.clear();
         });
 
-        record_stage_timing("test".to_string(), true, std::time::Duration::from_millis(10));
+        record_stage_timing(
+            "test".to_string(),
+            true,
+            std::time::Duration::from_millis(10),
+        );
 
         // Check that timing was recorded
         TIMING_STATE.with(|ts| {
@@ -730,7 +739,11 @@ mod tests {
             state.timings.clear();
         });
 
-        record_stage_timing("test".to_string(), true, std::time::Duration::from_millis(10));
+        record_stage_timing(
+            "test".to_string(),
+            true,
+            std::time::Duration::from_millis(10),
+        );
 
         // Check that timing was NOT recorded
         TIMING_STATE.with(|ts| {
@@ -742,7 +755,11 @@ mod tests {
     #[test]
     fn test_time_compare_flag() {
         let mut runtime = Runtime::new();
-        let args = vec!["--compare".to_string(), "echo".to_string(), "hello".to_string()];
+        let args = vec![
+            "--compare".to_string(),
+            "echo".to_string(),
+            "hello".to_string(),
+        ];
         let result = builtin_time(&args, &mut runtime).unwrap();
 
         // Should contain command in output
@@ -758,7 +775,10 @@ mod tests {
         let result = builtin_time(&args, &mut runtime);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires a command"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires a command"));
     }
 
     #[test]

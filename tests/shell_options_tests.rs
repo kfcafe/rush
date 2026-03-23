@@ -58,7 +58,9 @@ fn test_set_nounset_allows_defined_var() {
     let mut executor = Executor::new();
 
     // Set variable in runtime directly
-    executor.runtime_mut().set_variable("MYVAR".to_string(), "hello".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("MYVAR".to_string(), "hello".to_string());
 
     // Set -u and use the variable
     let input = "set -u; echo $MYVAR";

@@ -4,10 +4,10 @@
 //! This reuses Pi's battle-tested RPC protocol over stdin/stdout
 //! for lower latency than Unix socket IPC.
 
+use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Global counter for generating unique request IDs
@@ -192,8 +192,8 @@ impl PiRpcManager {
         };
 
         // Serialize command to JSON
-        let json = serde_json::to_string(&cmd)
-            .map_err(|e| PiRpcError::ProtocolError(e.to_string()))?;
+        let json =
+            serde_json::to_string(&cmd).map_err(|e| PiRpcError::ProtocolError(e.to_string()))?;
 
         // Send command (JSONL format - one line per message)
         let stdin = self.stdin.as_mut().ok_or(PiRpcError::NotRunning)?;
@@ -268,8 +268,9 @@ impl PiRpcManager {
         }
 
         // Parse JSON event
-        let event: PiEvent = serde_json::from_str(line.trim())
-            .map_err(|e| PiRpcError::ProtocolError(format!("Invalid JSON: {} (line: {})", e, line.trim())))?;
+        let event: PiEvent = serde_json::from_str(line.trim()).map_err(|e| {
+            PiRpcError::ProtocolError(format!("Invalid JSON: {} (line: {})", e, line.trim()))
+        })?;
 
         Ok(Some(event))
     }

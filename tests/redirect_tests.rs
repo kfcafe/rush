@@ -17,7 +17,9 @@ fn execute_command(input: &str, temp_dir: &TempDir) -> Result<String, String> {
 
     // Change to temp directory and update executor's runtime
     std::env::set_current_dir(temp_dir.path()).map_err(|e| e.to_string())?;
-    executor.runtime_mut().set_cwd(temp_dir.path().to_path_buf());
+    executor
+        .runtime_mut()
+        .set_cwd(temp_dir.path().to_path_buf());
 
     let result = executor.execute(statements).map_err(|e| e.to_string())?;
 
@@ -34,7 +36,11 @@ fn test_stdout_redirect() {
     let output_file = temp_dir.path().join("output.txt");
 
     // Test basic stdout redirect
-    execute_command(&format!("echo hello > {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo hello > {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
     assert_eq!(content.trim(), "hello");
@@ -46,10 +52,18 @@ fn test_stdout_append() {
     let output_file = temp_dir.path().join("append.txt");
 
     // First write
-    execute_command(&format!("echo first > {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo first > {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     // Append
-    execute_command(&format!("echo second >> {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo second >> {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
     assert!(content.contains("first"));
@@ -92,7 +106,11 @@ fn test_both_redirect() {
     let output_file = temp_dir.path().join("both.log");
 
     // Redirect both stdout and stderr
-    execute_command(&format!("echo hello &> {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo hello &> {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
     assert!(content.contains("hello"));
@@ -117,10 +135,18 @@ fn test_overwrite_existing_file() {
     let output_file = temp_dir.path().join("overwrite.txt");
 
     // First write
-    execute_command(&format!("echo first > {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo first > {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     // Overwrite (not append)
-    execute_command(&format!("echo second > {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo second > {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
     assert_eq!(content.trim(), "second");
@@ -135,7 +161,11 @@ fn test_multiple_redirects() {
 
     // This should redirect stdout to one file and stderr to another
     // Using a command that produces both stdout and stderr
-    let cmd = format!("echo hello > {} 2> {}", stdout_file.display(), stderr_file.display());
+    let cmd = format!(
+        "echo hello > {} 2> {}",
+        stdout_file.display(),
+        stderr_file.display()
+    );
     execute_command(&cmd, &temp_dir).unwrap();
 
     let stdout_content = fs::read_to_string(&stdout_file).unwrap();
@@ -150,7 +180,10 @@ fn test_redirect_missing_file() {
     // This test verifies error handling for missing input files
     let result = execute_command("wc < /nonexistent/file/path.txt", &temp_dir);
     // The result should be an error since the file doesn't exist
-    assert!(result.is_err(), "Expected error when redirecting from non-existent file");
+    assert!(
+        result.is_err(),
+        "Expected error when redirecting from non-existent file"
+    );
 }
 
 #[test]
@@ -171,7 +204,11 @@ fn test_redirect_with_quotes() {
     let temp_dir = setup_test_env();
     let output_file = temp_dir.path().join("quoted.txt");
 
-    execute_command(&format!("echo \"hello world\" > {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo \"hello world\" > {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
     assert_eq!(content.trim(), "hello world");
@@ -183,7 +220,11 @@ fn test_append_creates_file() {
     let output_file = temp_dir.path().join("new_append.txt");
 
     // Append should create the file if it doesn't exist
-    execute_command(&format!("echo content >> {}", output_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo content >> {}", output_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
     assert_eq!(content.trim(), "content");
@@ -291,7 +332,11 @@ fn test_grep_pipe_redirect() {
     fs::write(&input_file, "apple\nbanana\napple pie\n").unwrap();
 
     // Use grep with pipe and redirect
-    let cmd = format!("grep apple {} | cat > {}", input_file.display(), output_file.display());
+    let cmd = format!(
+        "grep apple {} | cat > {}",
+        input_file.display(),
+        output_file.display()
+    );
     execute_command(&cmd, &temp_dir).unwrap();
 
     let content = fs::read_to_string(&output_file).unwrap();
@@ -322,18 +367,30 @@ fn test_echo_with_all_redirect_types() {
     let stdout_file2 = temp_dir.path().join("out2.txt");
 
     // Test basic redirect
-    execute_command(&format!("echo test1 > {}", stdout_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo test1 > {}", stdout_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
     let content = fs::read_to_string(&stdout_file).unwrap();
     assert_eq!(content.trim(), "test1");
 
     // Test append redirect
-    execute_command(&format!("echo test2 >> {}", stdout_file.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo test2 >> {}", stdout_file.display()),
+        &temp_dir,
+    )
+    .unwrap();
     let content = fs::read_to_string(&stdout_file).unwrap();
     assert!(content.contains("test1"));
     assert!(content.contains("test2"));
 
     // Test both redirect
-    execute_command(&format!("echo test3 &> {}", stdout_file2.display()), &temp_dir).unwrap();
+    execute_command(
+        &format!("echo test3 &> {}", stdout_file2.display()),
+        &temp_dir,
+    )
+    .unwrap();
     let content = fs::read_to_string(&stdout_file2).unwrap();
     assert_eq!(content.trim(), "test3");
 }
@@ -344,7 +401,10 @@ fn test_redirect_preserves_pipe_output() {
     let output_file = temp_dir.path().join("pipe_preserved.txt");
 
     // Complex pipeline: echo -> wc -> cat -> redirect
-    let cmd = format!("echo 'hello world' | wc -c | cat > {}", output_file.display());
+    let cmd = format!(
+        "echo 'hello world' | wc -c | cat > {}",
+        output_file.display()
+    );
     let _ = execute_command(&cmd, &temp_dir);
 
     // File should exist and contain output

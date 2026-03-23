@@ -31,7 +31,10 @@ fn test_two_stage_pipeline() {
 
 #[test]
 fn test_three_stage_pipeline() {
-    create_test_file("/tmp/rush_test_pipe3.txt", "apple\nbanana\napple\napple\nbanana\n");
+    create_test_file(
+        "/tmp/rush_test_pipe3.txt",
+        "apple\nbanana\napple\napple\nbanana\n",
+    );
 
     // cat | grep | wc
     let output = run_rush("cat /tmp/rush_test_pipe3.txt | grep --no-color -N apple | wc -l");
@@ -100,10 +103,27 @@ fn test_pipeline_with_external_commands() {
     let stdout_str = String::from_utf8_lossy(&output.stdout);
 
     // Verify sorted output
-    assert!(stdout_str.contains("apple"), "Output should contain 'apple': {:?}", stdout_str);
-    assert!(stdout_str.contains("banana"), "Output should contain 'banana': {:?}", stdout_str);
-    assert!(stdout_str.contains("cherry"), "Output should contain 'cherry': {:?}", stdout_str);
-    assert_eq!(output.status.code(), Some(0), "Command should succeed. stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        stdout_str.contains("apple"),
+        "Output should contain 'apple': {:?}",
+        stdout_str
+    );
+    assert!(
+        stdout_str.contains("banana"),
+        "Output should contain 'banana': {:?}",
+        stdout_str
+    );
+    assert!(
+        stdout_str.contains("cherry"),
+        "Output should contain 'cherry': {:?}",
+        stdout_str
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "Command should succeed. stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     fs::remove_file("/tmp/rush_test_external.txt").ok();
 }
@@ -165,7 +185,9 @@ fn test_pipeline_error_in_middle_command() {
 
     // Middle command references non-existent file, but pipeline should handle it
     // Note: This tests error propagation behavior
-    let output = run_rush("cat /tmp/rush_test_error.txt | cat /nonexistent/file.txt | grep --no-color -N hello");
+    let output = run_rush(
+        "cat /tmp/rush_test_error.txt | cat /nonexistent/file.txt | grep --no-color -N hello",
+    );
 
     // The pipeline should fail (non-zero exit code)
     assert_ne!(output.status.code(), Some(0));
@@ -203,25 +225,31 @@ fn test_pipeline_pipefail_option_enabled() {
 
     // With pipefail set, the pipeline should fail if any command fails
     // First, test without pipefail (default behavior)
-    let output_default = run_rush(
-        "grep --no-color -N nonexistent /tmp/rush_test_pipefail.txt | wc -l"
-    );
+    let output_default =
+        run_rush("grep --no-color -N nonexistent /tmp/rush_test_pipefail.txt | wc -l");
     // Without pipefail, the pipeline succeeds even though grep fails
     // because the last command (wc) succeeds
 
     // With pipefail set
     let output_pipefail = run_rush(
-        "set -o pipefail; grep --no-color -N nonexistent /tmp/rush_test_pipefail.txt | wc -l"
+        "set -o pipefail; grep --no-color -N nonexistent /tmp/rush_test_pipefail.txt | wc -l",
     );
     // With pipefail, the pipeline should fail
-    assert_ne!(output_pipefail.status.code(), Some(0), "Pipeline with pipefail should fail when middle command fails");
+    assert_ne!(
+        output_pipefail.status.code(),
+        Some(0),
+        "Pipeline with pipefail should fail when middle command fails"
+    );
 
     fs::remove_file("/tmp/rush_test_pipefail.txt").ok();
 }
 
 #[test]
 fn test_pipeline_six_stage() {
-    create_test_file("/tmp/rush_test_pipe6.txt", "apple\nbanana\napple\ncherry\napple\ndate\n");
+    create_test_file(
+        "/tmp/rush_test_pipe6.txt",
+        "apple\nbanana\napple\ncherry\napple\ndate\n",
+    );
 
     // 6-stage pipeline: cat | grep | grep | head | tail | wc -l
     let output = run_rush(
@@ -231,7 +259,10 @@ fn test_pipeline_six_stage() {
         .trim()
         .parse()
         .expect("Expected number");
-    assert!(count >= 1, "Should have at least 1 line in 6-stage pipeline");
+    assert!(
+        count >= 1,
+        "Should have at least 1 line in 6-stage pipeline"
+    );
     assert_eq!(output.status.code(), Some(0));
 
     fs::remove_file("/tmp/rush_test_pipe6.txt").ok();
@@ -248,7 +279,10 @@ fn test_pipeline_with_special_characters_in_data() {
         .trim()
         .parse()
         .expect("Expected number");
-    assert_eq!(count, 4, "Should preserve all lines with special characters");
+    assert_eq!(
+        count, 4,
+        "Should preserve all lines with special characters"
+    );
     assert_eq!(output.status.code(), Some(0));
 
     fs::remove_file("/tmp/rush_test_special.txt").ok();
@@ -280,7 +314,10 @@ fn test_pipeline_very_long_lines() {
         .trim()
         .parse()
         .expect("Expected number");
-    assert_eq!(count, 3, "Should preserve all lines including very long ones");
+    assert_eq!(
+        count, 3,
+        "Should preserve all lines including very long ones"
+    );
     assert_eq!(output.status.code(), Some(0));
 
     fs::remove_file("/tmp/rush_test_long_lines.txt").ok();
@@ -341,11 +378,19 @@ fn test_pipeline_preserves_exit_codes_correctly() {
 
     // Test 1: Last command succeeds -> pipeline succeeds
     let output1 = run_rush("cat /tmp/rush_test_exit.txt | grep --no-color -N line1");
-    assert_eq!(output1.status.code(), Some(0), "Pipeline should succeed when last command succeeds");
+    assert_eq!(
+        output1.status.code(),
+        Some(0),
+        "Pipeline should succeed when last command succeeds"
+    );
 
     // Test 2: Last command fails -> pipeline fails
     let output2 = run_rush("cat /tmp/rush_test_exit.txt | grep --no-color -N nonexistent");
-    assert_eq!(output2.status.code(), Some(1), "Pipeline should fail when last command fails");
+    assert_eq!(
+        output2.status.code(),
+        Some(1),
+        "Pipeline should fail when last command fails"
+    );
 
     fs::remove_file("/tmp/rush_test_exit.txt").ok();
 }

@@ -137,13 +137,11 @@ impl TableRenderer {
 pub fn render_value(value: &Value) -> String {
     match value {
         Value::Table(table) => TableRenderer::new().render(table),
-        Value::List(items) => {
-            items
-                .iter()
-                .map(render_value)
-                .collect::<Vec<_>>()
-                .join("\n")
-        }
+        Value::List(items) => items
+            .iter()
+            .map(render_value)
+            .collect::<Vec<_>>()
+            .join("\n"),
         Value::Record(map) => {
             let columns: Vec<String> = map.keys().cloned().collect();
             let mut table = Table::new(columns);

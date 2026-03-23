@@ -7,7 +7,7 @@
 //! - Stack traces for nested command/function calls
 //! - Common typo suggestions
 
-use crate::error::{RushError, SourceLocation, CommandContext, help_db};
+use crate::error::{help_db, CommandContext, RushError, SourceLocation};
 
 /// ANSI color codes for terminal output
 pub mod ansi {
@@ -83,10 +83,7 @@ impl ErrorFormatter {
         let mut output = String::new();
 
         // Location header
-        let filename = location
-            .filename
-            .as_deref()
-            .unwrap_or("<stdin>");
+        let filename = location.filename.as_deref().unwrap_or("<stdin>");
         output.push_str(&format!(
             "{}{}:{}:{}{}",
             ansi::DIM,
@@ -169,11 +166,7 @@ impl ErrorFormatter {
     /// Format additional context information
     fn format_additional_context(context: &serde_json::Value) -> String {
         let mut output = String::new();
-        output.push_str(&format!(
-            "{}Additional Info:{}",
-            ansi::BOLD,
-            ansi::RESET
-        ));
+        output.push_str(&format!("{}Additional Info:{}", ansi::BOLD, ansi::RESET));
 
         match context {
             serde_json::Value::Object(map) => {
@@ -210,7 +203,8 @@ impl ErrorFormatter {
             help_entry.title,
             ansi::RESET
         ));
-        output.push_str(&format!("\n{}{}What to do:{}",
+        output.push_str(&format!(
+            "\n{}{}What to do:{}",
             ansi::BOLD,
             ansi::RESET,
             ansi::DIM
@@ -296,8 +290,7 @@ mod tests {
         let location = SourceLocation::new(5, 10)
             .with_line_content("let x = invalid".to_string())
             .with_filename("test.rush".to_string());
-        let error = RushError::new("PARSE_ERROR", "Invalid syntax", 1)
-            .with_location(location);
+        let error = RushError::new("PARSE_ERROR", "Invalid syntax", 1).with_location(location);
 
         let formatted = ErrorFormatter::format_error(&error);
         assert!(formatted.contains("test.rush:5:10"));
@@ -307,10 +300,9 @@ mod tests {
 
     #[test]
     fn test_format_with_command_context() {
-        let ctx = CommandContext::new("echo")
-            .with_args(vec!["hello".to_string(), "world".to_string()]);
-        let error = RushError::new("EXECUTION_ERROR", "Failed", 1)
-            .with_command_context(ctx);
+        let ctx =
+            CommandContext::new("echo").with_args(vec!["hello".to_string(), "world".to_string()]);
+        let error = RushError::new("EXECUTION_ERROR", "Failed", 1).with_command_context(ctx);
 
         let formatted = ErrorFormatter::format_error(&error);
         assert!(formatted.contains("Context:"));
@@ -322,8 +314,7 @@ mod tests {
     fn test_format_with_function_stack() {
         let ctx = CommandContext::new("cmd")
             .with_function_stack(vec!["main".to_string(), "helper".to_string()]);
-        let error = RushError::new("RUNTIME_ERROR", "Error", 1)
-            .with_command_context(ctx);
+        let error = RushError::new("RUNTIME_ERROR", "Error", 1).with_command_context(ctx);
 
         let formatted = ErrorFormatter::format_error(&error);
         assert!(formatted.contains("Stack:"));
@@ -333,11 +324,10 @@ mod tests {
 
     #[test]
     fn test_format_with_additional_context() {
-        let error = RushError::new("ERROR", "Test", 1)
-            .with_context(serde_json::json!({
-                "file": "/tmp/test.txt",
-                "reason": "Permission denied"
-            }));
+        let error = RushError::new("ERROR", "Test", 1).with_context(serde_json::json!({
+            "file": "/tmp/test.txt",
+            "reason": "Permission denied"
+        }));
 
         let formatted = ErrorFormatter::format_error(&error);
         assert!(formatted.contains("Additional Info:"));
@@ -350,8 +340,7 @@ mod tests {
         let location = SourceLocation::new(3, 5)
             .with_line_content("invalid code".to_string())
             .with_filename("script.rush".to_string());
-        let error = RushError::new("SYNTAX_ERROR", "Bad syntax", 1)
-            .with_location(location);
+        let error = RushError::new("SYNTAX_ERROR", "Bad syntax", 1).with_location(location);
 
         let formatted = ErrorFormatter::format_plain(&error);
         assert!(formatted.contains("error [SYNTAX_ERROR]"));
@@ -361,12 +350,30 @@ mod tests {
 
     #[test]
     fn test_error_type_classification() {
-        assert_eq!(ErrorFormatter::classify_error("SYNTAX_ERROR"), ErrorType::Syntax);
-        assert_eq!(ErrorFormatter::classify_error("PARSE_ERROR"), ErrorType::Syntax);
-        assert_eq!(ErrorFormatter::classify_error("EXECUTION_ERROR"), ErrorType::Runtime);
-        assert_eq!(ErrorFormatter::classify_error("RUNTIME_ERROR"), ErrorType::Runtime);
-        assert_eq!(ErrorFormatter::classify_error("LOGIC_ERROR"), ErrorType::Logic);
-        assert_eq!(ErrorFormatter::classify_error("FILE_NOT_FOUND"), ErrorType::Info);
+        assert_eq!(
+            ErrorFormatter::classify_error("SYNTAX_ERROR"),
+            ErrorType::Syntax
+        );
+        assert_eq!(
+            ErrorFormatter::classify_error("PARSE_ERROR"),
+            ErrorType::Syntax
+        );
+        assert_eq!(
+            ErrorFormatter::classify_error("EXECUTION_ERROR"),
+            ErrorType::Runtime
+        );
+        assert_eq!(
+            ErrorFormatter::classify_error("RUNTIME_ERROR"),
+            ErrorType::Runtime
+        );
+        assert_eq!(
+            ErrorFormatter::classify_error("LOGIC_ERROR"),
+            ErrorType::Logic
+        );
+        assert_eq!(
+            ErrorFormatter::classify_error("FILE_NOT_FOUND"),
+            ErrorType::Info
+        );
     }
 
     #[test]
@@ -412,7 +419,11 @@ mod tests {
 
     #[test]
     fn test_format_error_with_help_text() {
-        let error = RushError::new("FILE_NOT_FOUND", "missing.txt: No such file or directory", 1);
+        let error = RushError::new(
+            "FILE_NOT_FOUND",
+            "missing.txt: No such file or directory",
+            1,
+        );
         let formatted = ErrorFormatter::format_error(&error);
         assert!(formatted.contains("FILE_NOT_FOUND"));
         assert!(formatted.contains("missing.txt: No such file or directory"));

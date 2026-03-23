@@ -137,15 +137,13 @@ pub struct StatsResponse {
     pub updated_at: u64,
 }
 
-
-
 /// Encode a message into the wire format
 ///
 /// Format: [4-byte length][4-byte message ID][bincode payload]
 pub fn encode_message(message: &Message, message_id: MessageId) -> io::Result<Vec<u8>> {
     // Serialize the message to bincode
-    let payload = bincode::serialize(message)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let payload =
+        bincode::serialize(message).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     // Check size limit
     let payload_len = payload.len() as u32;
@@ -344,7 +342,7 @@ pub enum RushToPi {
         context: ShellContext,
     },
     /// Convert natural language intent to shell command(s)
-    /// 
+    ///
     /// Used by the `? <intent>` prefix. Pi returns a suggested command
     /// that the user can accept, edit, or cancel.
     #[serde(rename = "intent")]
@@ -409,7 +407,7 @@ pub enum PiToRush {
         args: serde_json::Value,
     },
     /// Suggested command(s) for an intent query
-    /// 
+    ///
     /// Response to `RushToPi::Intent`. Contains one or more shell commands
     /// that the user can accept, edit, or cancel.
     #[serde(rename = "suggested_command")]
@@ -434,8 +432,7 @@ pub fn encode_jsonl<T: Serialize>(message: &T) -> io::Result<String> {
 
 /// Decode a Rush ↔ Pi message from a JSONL line
 pub fn decode_jsonl<T: for<'de> Deserialize<'de>>(line: &str) -> io::Result<T> {
-    serde_json::from_str(line.trim())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    serde_json::from_str(line.trim()).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 #[cfg(test)]
@@ -555,7 +552,11 @@ mod tests {
     fn test_encode_decode_stats_request() {
         // Test with specific stats
         let message = Message::StatsRequest(StatsRequest {
-            stats: vec!["memory".to_string(), "cpu".to_string(), "uptime".to_string()],
+            stats: vec![
+                "memory".to_string(),
+                "cpu".to_string(),
+                "uptime".to_string(),
+            ],
         });
 
         let message_id = 48;

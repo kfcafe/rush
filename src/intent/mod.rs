@@ -43,7 +43,7 @@ pub struct SuggestedCommand {
 /// Returns a project type identifier like "rust", "node", "python", etc.
 pub fn detect_project_type() -> Option<String> {
     let cwd = std::env::current_dir().ok()?;
-    
+
     // Check for various project markers in order of specificity
     let checks: &[(&str, &str)] = &[
         ("Cargo.toml", "rust"),
@@ -61,15 +61,15 @@ pub fn detect_project_type() -> Option<String> {
         ("docker-compose.yml", "docker"),
         ("docker-compose.yaml", "docker"),
         ("Dockerfile", "docker"),
-        (".git", "git"),  // At least detect if it's a git repo
+        (".git", "git"), // At least detect if it's a git repo
     ];
-    
+
     for (file, project_type) in checks {
         if cwd.join(file).exists() {
             return Some(project_type.to_string());
         }
     }
-    
+
     None
 }
 
@@ -82,7 +82,7 @@ pub fn build_shell_context(
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| ".".to_string());
-    
+
     // Collect relevant environment variables
     let mut env = HashMap::new();
     for key in &["PATH", "HOME", "USER", "SHELL", "EDITOR", "TERM"] {
@@ -90,7 +90,7 @@ pub fn build_shell_context(
             env.insert(key.to_string(), val);
         }
     }
-    
+
     ShellContext {
         cwd,
         last_command: last_command.map(String::from),
@@ -110,7 +110,7 @@ pub fn query_intent(
     project_type: Option<&str>,
 ) -> Result<SuggestedCommand, PiClientError> {
     let mut responses = client.intent(intent, context, project_type)?;
-    
+
     // Collect responses - we expect a SuggestedCommand followed by Done
     for response in responses.by_ref() {
         match response? {
@@ -146,7 +146,7 @@ pub fn query_intent(
             }
         }
     }
-    
+
     Err(PiClientError::ProtocolError(
         "Connection closed without response".to_string(),
     ))
@@ -158,7 +158,7 @@ pub fn display_suggestion(suggestion: &SuggestedCommand) {
     let command_style = Color::Cyan.bold();
     let explanation_style = Color::DarkGray;
     let prompt_style = Color::Yellow;
-    
+
     println!();
     println!(
         "{}",
@@ -166,7 +166,7 @@ pub fn display_suggestion(suggestion: &SuggestedCommand) {
     );
     println!("{}", command_style.paint(&suggestion.command));
     println!();
-    
+
     // Show confidence indicator if low
     if suggestion.confidence < 0.7 {
         println!(
@@ -178,7 +178,7 @@ pub fn display_suggestion(suggestion: &SuggestedCommand) {
         );
         println!();
     }
-    
+
     // Show action hints
     println!(
         "{}",
@@ -193,12 +193,12 @@ pub fn display_suggestion(suggestion: &SuggestedCommand) {
 pub fn prompt_user_action() -> IntentResult {
     use crossterm::event::{self, Event, KeyCode, KeyModifiers};
     use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-    
+
     // Enable raw mode for key-by-key input
     if enable_raw_mode().is_err() {
         return IntentResult::Error("Failed to enable raw mode".to_string());
     }
-    
+
     let result = loop {
         match event::read() {
             Ok(Event::Key(key_event)) => {
@@ -232,11 +232,11 @@ pub fn prompt_user_action() -> IntentResult {
             }
         }
     };
-    
+
     // Restore terminal
     let _ = disable_raw_mode();
     println!(); // Move to next line
-    
+
     result
 }
 
@@ -265,25 +265,23 @@ pub fn process_intent(
             return IntentResult::Error("Pi daemon not running".to_string());
         }
         Err(e) => {
-            eprintln!("{}", Color::Red.paint(format!("Failed to connect to Pi: {}", e)));
+            eprintln!(
+                "{}",
+                Color::Red.paint(format!("Failed to connect to Pi: {}", e))
+            );
             return IntentResult::Error(e.to_string());
         }
     };
-    
+
     // Build context
     let context = build_shell_context(last_command, last_exit_code, history);
     let project_type = detect_project_type();
-    
+
     // Query Pi for suggested command
     print!("{}", Color::DarkGray.paint("Thinking..."));
     io::stdout().flush().ok();
-    
-    let suggestion = match query_intent(
-        &mut client,
-        intent,
-        context,
-        project_type.as_deref(),
-    ) {
+
+    let suggestion = match query_intent(&mut client, intent, context, project_type.as_deref()) {
         Ok(s) => s,
         Err(e) => {
             // Clear "Thinking..." line
@@ -293,14 +291,14 @@ pub fn process_intent(
             return IntentResult::Error(e.to_string());
         }
     };
-    
+
     // Clear "Thinking..." line
     print!("\r                \r");
     io::stdout().flush().ok();
-    
+
     // Display the suggestion
     display_suggestion(&suggestion);
-    
+
     // Get user action
     match prompt_user_action() {
         IntentResult::Accept(_) => IntentResult::Accept(suggestion.command),
@@ -340,13 +338,16 @@ mod tests {
         assert!(is_intent_query("?"));
         assert!(is_intent_query("  ? deploy to staging"));
         assert!(!is_intent_query("echo hello"));
-        assert!(!is_intent_query("?command"));  // No space after ?
+        assert!(!is_intent_query("?command")); // No space after ?
         assert!(!is_intent_query("echo ?"));
     }
 
     #[test]
     fn test_extract_intent() {
-        assert_eq!(extract_intent("? find all rust files"), "find all rust files");
+        assert_eq!(
+            extract_intent("? find all rust files"),
+            "find all rust files"
+        );
         assert_eq!(extract_intent("?"), "");
         assert_eq!(extract_intent("  ? deploy  "), "deploy");
     }
@@ -364,7 +365,7 @@ mod tests {
             Some(0),
             vec!["cd /tmp".to_string(), "ls".to_string()],
         );
-        
+
         assert!(!context.cwd.is_empty());
         assert_eq!(context.last_command, Some("ls -la".to_string()));
         assert_eq!(context.last_exit_code, Some(0));
@@ -378,7 +379,7 @@ mod tests {
             explanation: "Find all Rust files modified today".to_string(),
             confidence: 0.95,
         };
-        
+
         assert!(suggestion.confidence > 0.9);
         assert!(suggestion.command.contains("find"));
     }

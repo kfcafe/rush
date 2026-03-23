@@ -214,9 +214,7 @@ fn remove_file(
 
     // Track in undo system before deletion
     let description = format!("rm {}", display_path);
-    runtime
-        .undo_manager_mut()
-        .track_delete(path, description)?;
+    runtime.undo_manager_mut().track_delete(path, description)?;
 
     // Perform the deletion
     fs::remove_file(path)?;
@@ -263,9 +261,7 @@ fn remove_dir_recursive(
     output: &mut String,
 ) -> Result<()> {
     // First, recursively process contents
-    let entries: Vec<_> = fs::read_dir(path)?
-        .filter_map(|e| e.ok())
-        .collect();
+    let entries: Vec<_> = fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
 
     for entry in entries {
         let entry_path = entry.path();
@@ -352,7 +348,8 @@ pub fn builtin_rm(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
                         paths_to_process.push((path.clone(), original.clone()));
                     }
                     Err(e) => {
-                        stderr_output.push_str(&format!("rm: cannot access '{}': {}\n", original, e));
+                        stderr_output
+                            .push_str(&format!("rm: cannot access '{}': {}\n", original, e));
                         exit_code = 1;
                     }
                 }
@@ -367,11 +364,9 @@ pub fn builtin_rm(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
         }
 
         // Show what will be deleted and ask for confirmation
-        if !paths_to_process.is_empty() && (total_stats.file_count > 0 || total_stats.dir_count > 0) {
-            let prompt = format!(
-                "rm: about to delete {}\nProceed?",
-                total_stats.summary()
-            );
+        if !paths_to_process.is_empty() && (total_stats.file_count > 0 || total_stats.dir_count > 0)
+        {
+            let prompt = format!("rm: about to delete {}\nProceed?", total_stats.summary());
 
             if !prompt_confirmation(&prompt) {
                 return Ok(ExecutionResult {
@@ -414,7 +409,9 @@ pub fn builtin_rm(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
         if path.is_dir() && !path.is_symlink() {
             if opts.recursive {
                 // Recursive removal
-                if let Err(e) = remove_dir_recursive(path, runtime, opts.verbose, &mut stdout_output) {
+                if let Err(e) =
+                    remove_dir_recursive(path, runtime, opts.verbose, &mut stdout_output)
+                {
                     stderr_output.push_str(&format!("rm: cannot remove '{}': {}\n", original, e));
                     exit_code = 1;
                 }
@@ -520,7 +517,11 @@ mod tests {
         fs::write(&file3, "3").unwrap();
 
         let result = builtin_rm(
-            &["file1.txt".to_string(), "file2.txt".to_string(), "file3.txt".to_string()],
+            &[
+                "file1.txt".to_string(),
+                "file2.txt".to_string(),
+                "file3.txt".to_string(),
+            ],
             &mut runtime,
         )
         .unwrap();
@@ -549,7 +550,11 @@ mod tests {
         let mut runtime = Runtime::new();
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
-        let result = builtin_rm(&["-f".to_string(), "nonexistent.txt".to_string()], &mut runtime).unwrap();
+        let result = builtin_rm(
+            &["-f".to_string(), "nonexistent.txt".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(result.stderr.is_empty());
@@ -638,11 +643,8 @@ mod tests {
         fs::create_dir(&test_dir).unwrap();
         fs::write(&file1, "content").unwrap();
 
-        let result = builtin_rm(
-            &["-rf".to_string(), "force_dir".to_string()],
-            &mut runtime,
-        )
-        .unwrap();
+        let result =
+            builtin_rm(&["-rf".to_string(), "force_dir".to_string()], &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(!test_dir.exists());
@@ -657,7 +659,8 @@ mod tests {
         let test_file = temp_dir.path().join("verbose.txt");
         fs::write(&test_file, "content").unwrap();
 
-        let result = builtin_rm(&["-v".to_string(), "verbose.txt".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_rm(&["-v".to_string(), "verbose.txt".to_string()], &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(result.stdout().contains("removed"));
@@ -797,13 +800,19 @@ mod tests {
         assert_eq!(opts.paths, vec!["file.txt"]);
 
         // Test long flags
-        let opts = RmOptions::parse(&["--recursive".to_string(), "--yes".to_string(), "dir".to_string()]).unwrap();
+        let opts = RmOptions::parse(&[
+            "--recursive".to_string(),
+            "--yes".to_string(),
+            "dir".to_string(),
+        ])
+        .unwrap();
         assert!(opts.recursive);
         assert!(opts.yes);
         assert_eq!(opts.paths, vec!["dir"]);
 
         // Test combined flags
-        let opts = RmOptions::parse(&["-rvy".to_string(), "a".to_string(), "b".to_string()]).unwrap();
+        let opts =
+            RmOptions::parse(&["-rvy".to_string(), "a".to_string(), "b".to_string()]).unwrap();
         assert!(opts.recursive);
         assert!(opts.verbose);
         assert!(opts.yes);

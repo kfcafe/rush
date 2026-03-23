@@ -13,21 +13,10 @@ const UNDO_DIR: &str = ".rush_undo";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileOperation {
-    Create {
-        path: PathBuf,
-    },
-    Delete {
-        path: PathBuf,
-        backup_path: PathBuf,
-    },
-    Modify {
-        path: PathBuf,
-        backup_path: PathBuf,
-    },
-    Move {
-        from: PathBuf,
-        to: PathBuf,
-    },
+    Create { path: PathBuf },
+    Delete { path: PathBuf, backup_path: PathBuf },
+    Modify { path: PathBuf, backup_path: PathBuf },
+    Move { from: PathBuf, to: PathBuf },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,7 +162,9 @@ impl UndoManager {
 
     /// Undo the last operation
     pub fn undo(&mut self) -> Result<String> {
-        let entry = self.operations.pop_back()
+        let entry = self
+            .operations
+            .pop_back()
             .ok_or_else(|| anyhow!("No operations to undo"))?;
 
         match entry.operation {
@@ -185,38 +176,46 @@ impl UndoManager {
                         fs::remove_file(&path)?;
                     }
                 }
-                Ok(format!("Undone: {} (deleted {:?})", entry.description, path))
+                Ok(format!(
+                    "Undone: {} (deleted {:?})",
+                    entry.description, path
+                ))
             }
             FileOperation::Delete { path, backup_path } => {
                 if backup_path.exists() {
                     fs::copy(&backup_path, &path)?;
                     fs::remove_file(&backup_path)?;
                 }
-                Ok(format!("Undone: {} (restored {:?})", entry.description, path))
+                Ok(format!(
+                    "Undone: {} (restored {:?})",
+                    entry.description, path
+                ))
             }
             FileOperation::Modify { path, backup_path } => {
                 if backup_path.exists() {
                     fs::copy(&backup_path, &path)?;
                     fs::remove_file(&backup_path)?;
                 }
-                Ok(format!("Undone: {} (restored {:?})", entry.description, path))
+                Ok(format!(
+                    "Undone: {} (restored {:?})",
+                    entry.description, path
+                ))
             }
             FileOperation::Move { from, to } => {
                 if to.exists() {
                     fs::rename(&to, &from)?;
                 }
-                Ok(format!("Undone: {} (moved {:?} back to {:?})", entry.description, to, from))
+                Ok(format!(
+                    "Undone: {} (moved {:?} back to {:?})",
+                    entry.description, to, from
+                ))
             }
         }
     }
 
     /// List recent operations that can be undone
     pub fn list_operations(&self, limit: usize) -> Vec<&UndoEntry> {
-        self.operations
-            .iter()
-            .rev()
-            .take(limit)
-            .collect()
+        self.operations.iter().rev().take(limit).collect()
     }
 
     /// Clear all undo history
@@ -224,8 +223,8 @@ impl UndoManager {
         // Remove all backup files
         for entry in &self.operations {
             match &entry.operation {
-                FileOperation::Delete { backup_path, .. } |
-                FileOperation::Modify { backup_path, .. } => {
+                FileOperation::Delete { backup_path, .. }
+                | FileOperation::Modify { backup_path, .. } => {
                     if backup_path.exists() {
                         fs::remove_file(backup_path).ok();
                     }
@@ -246,8 +245,8 @@ impl UndoManager {
             if let Some(old_entry) = self.operations.pop_front() {
                 // Clean up old backups
                 match old_entry.operation {
-                    FileOperation::Delete { backup_path, .. } |
-                    FileOperation::Modify { backup_path, .. } => {
+                    FileOperation::Delete { backup_path, .. }
+                    | FileOperation::Modify { backup_path, .. } => {
                         fs::remove_file(&backup_path).ok();
                     }
                     _ => {}
@@ -257,13 +256,14 @@ impl UndoManager {
     }
 
     fn create_backup(&self, path: &Path) -> Result<PathBuf> {
-        let file_name = path.file_name()
+        let file_name = path
+            .file_name()
             .ok_or_else(|| anyhow!("Invalid file path"))?;
-        
+
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
             .as_secs();
-        
+
         let backup_name = format!("{}_{}", timestamp, file_name.to_string_lossy());
         let backup_path = self.undo_dir.join(backup_name);
 
@@ -282,16 +282,16 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         let test_file = temp_dir.path().join("test.txt");
         fs::write(&test_file, "content")?;
-        
+
         undo_manager.track_create(test_file.clone(), "create test.txt".to_string());
         assert!(test_file.exists());
-        
+
         undo_manager.undo()?;
         assert!(!test_file.exists());
-        
+
         Ok(())
     }
 
@@ -300,18 +300,18 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         let test_file = temp_dir.path().join("test.txt");
         fs::write(&test_file, "original content")?;
-        
+
         undo_manager.track_delete(&test_file, "delete test.txt".to_string())?;
         fs::remove_file(&test_file)?;
         assert!(!test_file.exists());
-        
+
         undo_manager.undo()?;
         assert!(test_file.exists());
         assert_eq!(fs::read_to_string(&test_file)?, "original content");
-        
+
         Ok(())
     }
 
@@ -320,17 +320,17 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         let test_file = temp_dir.path().join("test.txt");
         fs::write(&test_file, "original")?;
-        
+
         undo_manager.track_modify(&test_file, "modify test.txt".to_string())?;
         fs::write(&test_file, "modified")?;
         assert_eq!(fs::read_to_string(&test_file)?, "modified");
-        
+
         undo_manager.undo()?;
         assert_eq!(fs::read_to_string(&test_file)?, "original");
-        
+
         Ok(())
     }
 
@@ -339,22 +339,22 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         let from_path = temp_dir.path().join("from.txt");
         let to_path = temp_dir.path().join("to.txt");
-        
+
         fs::write(&from_path, "content")?;
-        
+
         undo_manager.track_move(from_path.clone(), to_path.clone(), "move file".to_string());
         fs::rename(&from_path, &to_path)?;
-        
+
         assert!(!from_path.exists());
         assert!(to_path.exists());
-        
+
         undo_manager.undo()?;
         assert!(from_path.exists());
         assert!(!to_path.exists());
-        
+
         Ok(())
     }
 
@@ -363,16 +363,16 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         undo_manager.track_create(PathBuf::from("file1.txt"), "create 1".to_string());
         undo_manager.track_create(PathBuf::from("file2.txt"), "create 2".to_string());
         undo_manager.track_create(PathBuf::from("file3.txt"), "create 3".to_string());
-        
+
         let ops = undo_manager.list_operations(2);
         assert_eq!(ops.len(), 2);
         assert_eq!(ops[0].description, "create 3");
         assert_eq!(ops[1].description, "create 2");
-        
+
         Ok(())
     }
 
@@ -381,7 +381,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         // Add more than MAX_UNDO_OPERATIONS
         for i in 0..MAX_UNDO_OPERATIONS + 10 {
             undo_manager.track_create(
@@ -389,9 +389,9 @@ mod tests {
                 format!("create {}", i),
             );
         }
-        
+
         assert_eq!(undo_manager.operations.len(), MAX_UNDO_OPERATIONS);
-        
+
         Ok(())
     }
 
@@ -400,19 +400,19 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let undo_dir = temp_dir.path().join("undo");
         let mut undo_manager = UndoManager::with_undo_dir(undo_dir)?;
-        
+
         assert!(undo_manager.is_enabled());
-        
+
         undo_manager.disable();
         assert!(!undo_manager.is_enabled());
-        
+
         undo_manager.track_create(PathBuf::from("file.txt"), "create".to_string());
         assert_eq!(undo_manager.operations.len(), 0);
-        
+
         undo_manager.enable();
         undo_manager.track_create(PathBuf::from("file.txt"), "create".to_string());
         assert_eq!(undo_manager.operations.len(), 1);
-        
+
         Ok(())
     }
 }

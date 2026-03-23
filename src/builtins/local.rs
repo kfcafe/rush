@@ -134,11 +134,7 @@ mod tests {
 
         // Multiple declarations at once
         let result = builtin_local(
-            &[
-                "a=1".to_string(),
-                "b=2".to_string(),
-                "c=3".to_string(),
-            ],
+            &["a=1".to_string(), "b=2".to_string(), "c=3".to_string()],
             &mut runtime,
         );
         assert!(result.is_ok());
@@ -186,11 +182,7 @@ mod tests {
         runtime.push_scope();
 
         // Create local variables
-        builtin_local(
-            &["a=1".to_string(), "b=2".to_string()],
-            &mut runtime,
-        )
-        .unwrap();
+        builtin_local(&["a=1".to_string(), "b=2".to_string()], &mut runtime).unwrap();
 
         assert_eq!(runtime.get_variable("a"), Some("1".to_string()));
         assert_eq!(runtime.get_variable("b"), Some("2".to_string()));
@@ -246,14 +238,7 @@ mod tests {
         runtime.push_scope();
 
         // Valid names
-        let valid_names = vec![
-            "x=1",
-            "var=2",
-            "_private=3",
-            "MY_VAR=4",
-            "var123=5",
-            "_=6",
-        ];
+        let valid_names = vec!["x=1", "var=2", "_private=3", "MY_VAR=4", "var123=5", "_=6"];
 
         for name in valid_names {
             let result = builtin_local(&[name.to_string()], &mut runtime);

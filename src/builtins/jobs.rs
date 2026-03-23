@@ -117,7 +117,9 @@ pub fn builtin_fg(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
     #[cfg(unix)]
     {
         use std::os::unix::io::AsRawFd;
-        unsafe { libc::tcsetpgrp(std::io::stdin().as_raw_fd(), pgid.as_raw()); }
+        unsafe {
+            libc::tcsetpgrp(std::io::stdin().as_raw_fd(), pgid.as_raw());
+        }
     }
 
     // If the job is stopped, continue it
@@ -144,9 +146,7 @@ pub fn builtin_fg(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
                 WaitStatus::Signaled(_, sig, _) => 128 + sig as i32,
                 WaitStatus::Stopped(_, sig) => {
                     // Job was stopped again (Ctrl+Z), add it back
-                    let new_id = runtime
-                        .job_manager()
-                        .add_job(pid, job.command.clone());
+                    let new_id = runtime.job_manager().add_job(pid, job.command.clone());
                     runtime
                         .job_manager()
                         .set_job_status(new_id, JobStatus::Stopped);
@@ -171,7 +171,9 @@ pub fn builtin_fg(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
         use nix::unistd::getpgrp;
         use std::os::unix::io::AsRawFd;
         let shell_pgid = getpgrp();
-        unsafe { libc::tcsetpgrp(std::io::stdin().as_raw_fd(), shell_pgid.as_raw()); }
+        unsafe {
+            libc::tcsetpgrp(std::io::stdin().as_raw_fd(), shell_pgid.as_raw());
+        }
     }
 
     result
@@ -282,7 +284,11 @@ mod tests {
 
         let result = builtin_jobs(&[], &mut runtime).unwrap();
         // Running jobs should show & suffix
-        assert!(result.stdout().contains(" &"), "Output was: {}", result.stdout());
+        assert!(
+            result.stdout().contains(" &"),
+            "Output was: {}",
+            result.stdout()
+        );
 
         // Clean up the spawned process
         use nix::sys::signal::{kill, Signal};

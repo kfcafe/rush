@@ -36,7 +36,9 @@ impl MkdirOptions {
         }
 
         if opts.directories.is_empty() {
-            return Err(anyhow!("mkdir: missing operand\nTry 'mkdir --help' for more information."));
+            return Err(anyhow!(
+                "mkdir: missing operand\nTry 'mkdir --help' for more information."
+            ));
         }
 
         Ok(opts)
@@ -52,7 +54,8 @@ pub fn builtin_mkdir(args: &[String], runtime: &mut Runtime) -> Result<Execution
              \n\
              Options:\n\
              -p          create parent directories as needed\n\
-             --help      display this help and exit\n".to_string()
+             --help      display this help and exit\n"
+                .to_string(),
         ));
     }
 
@@ -84,7 +87,10 @@ pub fn builtin_mkdir(args: &[String], runtime: &mut Runtime) -> Result<Execution
         };
 
         if let Err(e) = result {
-            stderr_output.push_str(&format!("mkdir: cannot create directory '{}': {}\n", dir_arg, e));
+            stderr_output.push_str(&format!(
+                "mkdir: cannot create directory '{}': {}\n",
+                dir_arg, e
+            ));
             exit_code = 1;
         }
     }
@@ -93,7 +99,9 @@ pub fn builtin_mkdir(args: &[String], runtime: &mut Runtime) -> Result<Execution
     if !created_dirs.is_empty() {
         for dir_path in created_dirs {
             let description = format!("mkdir {}", dir_path.display());
-            runtime.undo_manager_mut().track_create(dir_path, description);
+            runtime
+                .undo_manager_mut()
+                .track_create(dir_path, description);
         }
     }
 
@@ -142,8 +150,7 @@ fn create_dir_single(path: &Path, created_dirs: &mut Vec<PathBuf>) -> Result<()>
         }
     }
 
-    fs::create_dir(path)
-        .with_context(|| format!("Failed to create directory {:?}", path))?;
+    fs::create_dir(path).with_context(|| format!("Failed to create directory {:?}", path))?;
 
     created_dirs.push(path.to_path_buf());
     Ok(())
@@ -176,8 +183,7 @@ fn create_dir_with_parents(path: &Path, created_dirs: &mut Vec<PathBuf>) -> Resu
 
     // Create directories from parent to child
     for dir in dirs_to_create.iter().rev() {
-        fs::create_dir(dir)
-            .with_context(|| format!("Failed to create directory {:?}", dir))?;
+        fs::create_dir(dir).with_context(|| format!("Failed to create directory {:?}", dir))?;
         created_dirs.push(dir.clone());
     }
 
@@ -215,8 +221,9 @@ mod tests {
 
         let result = builtin_mkdir(
             &["dir1".to_string(), "dir2".to_string(), "dir3".to_string()],
-            &mut runtime
-        ).unwrap();
+            &mut runtime,
+        )
+        .unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(dir1.exists() && dir1.is_dir());
@@ -230,11 +237,16 @@ mod tests {
         let mut runtime = Runtime::new();
         runtime.set_cwd(temp_dir.path().to_path_buf());
 
-        let nested_dir = temp_dir.path().join("parent").join("child").join("grandchild");
+        let nested_dir = temp_dir
+            .path()
+            .join("parent")
+            .join("child")
+            .join("grandchild");
         let result = builtin_mkdir(
             &["-p".to_string(), "parent/child/grandchild".to_string()],
-            &mut runtime
-        ).unwrap();
+            &mut runtime,
+        )
+        .unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(nested_dir.exists());
@@ -265,7 +277,8 @@ mod tests {
         let test_dir = temp_dir.path().join("existing");
         fs::create_dir(&test_dir).unwrap();
 
-        let result = builtin_mkdir(&["-p".to_string(), "existing".to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_mkdir(&["-p".to_string(), "existing".to_string()], &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(test_dir.exists());
@@ -332,7 +345,8 @@ mod tests {
         let mut runtime = Runtime::new();
 
         let abs_path = temp_dir.path().join("absolute_dir");
-        let result = builtin_mkdir(&[abs_path.to_string_lossy().to_string()], &mut runtime).unwrap();
+        let result =
+            builtin_mkdir(&[abs_path.to_string_lossy().to_string()], &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
         assert!(abs_path.exists());
@@ -400,8 +414,9 @@ mod tests {
         // Try to create existing and a new one
         let result = builtin_mkdir(
             &["existing".to_string(), "newdir".to_string()],
-            &mut runtime
-        ).unwrap();
+            &mut runtime,
+        )
+        .unwrap();
 
         // Should have partial failure
         assert_eq!(result.exit_code, 1);

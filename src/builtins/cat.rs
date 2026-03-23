@@ -73,7 +73,9 @@ pub fn builtin_cat(args: &[String], _runtime: &mut Runtime) -> Result<ExecutionR
             // Read from stdin
             let stdin = io::stdin();
             let reader = stdin.lock();
-            if let Err(e) = read_with_line_numbers(reader, &mut output, &mut line_number, opts.number_lines) {
+            if let Err(e) =
+                read_with_line_numbers(reader, &mut output, &mut line_number, opts.number_lines)
+            {
                 stderr_output.push_str(&e.to_string());
                 stderr_output.push('\n');
                 exit_code = 1;
@@ -97,7 +99,11 @@ pub fn builtin_cat(args: &[String], _runtime: &mut Runtime) -> Result<ExecutionR
 }
 
 /// Execute cat with provided stdin data (for pipelines)
-pub fn builtin_cat_with_stdin(args: &[String], _runtime: &mut Runtime, stdin_data: &[u8]) -> Result<ExecutionResult> {
+pub fn builtin_cat_with_stdin(
+    args: &[String],
+    _runtime: &mut Runtime,
+    stdin_data: &[u8],
+) -> Result<ExecutionResult> {
     let opts = CatOptions::parse(args)?;
     let mut output = String::new();
     let mut line_number = 1;
@@ -133,10 +139,11 @@ fn read_file(
         return Err(anyhow!("cat: {}: Is a directory", path));
     }
 
-    let file = File::open(file_path)
-        .with_context(|| format!("cat: {}: Failed to open file", path))?;
+    let file =
+        File::open(file_path).with_context(|| format!("cat: {}: Failed to open file", path))?;
 
-    let metadata = file.metadata()
+    let metadata = file
+        .metadata()
         .with_context(|| format!("cat: {}: Failed to read metadata", path))?;
 
     let file_size = metadata.len();
@@ -180,8 +187,8 @@ fn read_small_file(
         }
     } else {
         // For text files, process normally
-        let content = String::from_utf8(buffer)
-            .with_context(|| format!("cat: {}: Invalid UTF-8", path))?;
+        let content =
+            String::from_utf8(buffer).with_context(|| format!("cat: {}: Invalid UTF-8", path))?;
 
         if number_lines {
             for line in content.lines() {
@@ -207,8 +214,7 @@ fn read_mmap(
     // Safety: We're reading a file that we just opened and verified exists.
     // The file descriptor is valid for the lifetime of the mmap.
     let mmap = unsafe {
-        Mmap::map(file)
-            .with_context(|| format!("cat: {}: Failed to memory-map file", path))?
+        Mmap::map(file).with_context(|| format!("cat: {}: Failed to memory-map file", path))?
     };
 
     // Check if the file contains null bytes (binary file detection)
@@ -333,7 +339,10 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_cat(&["-n".to_string(), path.to_string()], &mut runtime).unwrap();
 
-        assert_eq!(result.stdout(), "     1\tLine 1\n     2\tLine 2\n     3\tLine 3\n");
+        assert_eq!(
+            result.stdout(),
+            "     1\tLine 1\n     2\tLine 2\n     3\tLine 3\n"
+        );
         assert_eq!(result.exit_code, 0);
     }
 
@@ -406,7 +415,9 @@ mod tests {
 
         // Verify line numbers are present
         assert!(result.stdout().contains("     1\tThis is line number 0"));
-        assert!(result.stdout().contains(" 50000\tThis is line number 49999"));
+        assert!(result
+            .stdout()
+            .contains(" 50000\tThis is line number 49999"));
         assert_eq!(result.exit_code, 0);
     }
 
@@ -439,8 +450,9 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_cat(
             &["-n".to_string(), path1.to_string(), path2.to_string()],
-            &mut runtime
-        ).unwrap();
+            &mut runtime,
+        )
+        .unwrap();
 
         // Line numbers should be continuous across files
         assert!(result.stdout().contains("     1\tFile 1 Line 1"));

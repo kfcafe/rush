@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rush::builtins::Builtins;
 use rush::runtime::Runtime;
 use std::process::Command;
@@ -80,9 +80,7 @@ fn bench_pwd_builtin(c: &mut Criterion) {
     // Benchmark GNU pwd directly (baseline)
     group.bench_function("gnu_baseline", |b| {
         b.iter(|| {
-            let output = Command::new("pwd")
-                .output()
-                .expect("Failed to execute");
+            let output = Command::new("pwd").output().expect("Failed to execute");
             black_box(output);
         });
     });
@@ -218,8 +216,8 @@ fn bench_builtins_init(c: &mut Criterion) {
 
 /// Benchmark find builtin vs GNU find
 fn bench_find_builtin(c: &mut Criterion) {
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     let mut group = c.benchmark_group("find");
     group.measurement_time(Duration::from_secs(10));

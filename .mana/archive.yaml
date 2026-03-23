@@ -1,0 +1,83 @@
+units:
+- id: '7'
+  title: 'goal: Rush programmatic/agent API'
+  status: closed
+  priority: 1
+  labels:
+  - api
+  - agent
+  - programmatic
+  updated_at: '2026-03-22T23:38:11.409945Z'
+  has_verify: true
+  verify: 'cd /Users/asher/rush && cargo test -p rush run_api agent_mode output_budget 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-22T21:56:35.212428Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '7.1'
+  title: One-shot rush::run() programmatic API
+  status: closed
+  priority: 0
+  parent: '7'
+  labels:
+  - api
+  - lib
+  updated_at: '2026-03-22T22:57:37.080614Z'
+  produces:
+  - rush::run
+  - rush::RunOptions
+  - rush::RunResult
+  has_verify: true
+  verify: cd /Users/asher/rush && cargo test -p rush test_run_one_shot 2>&1 | grep -E "[1-9][0-9]* passed"
+  created_at: '2026-03-22T22:03:30.682156Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '7.2'
+  title: Agent output mode (RUSH_AGENT_MODE)
+  status: closed
+  priority: 1
+  parent: '7'
+  dependencies:
+  - '7.1'
+  labels:
+  - api
+  - agent
+  - output
+  updated_at: '2026-03-22T23:38:05.816707Z'
+  produces:
+  - RUSH_AGENT_MODE
+  requires:
+  - rush::run
+  - rush::RunOptions
+  has_verify: true
+  verify: cd /Users/asher/rush && cargo test -p rush test_agent_mode 2>&1 | grep -E "[1-9][0-9]* passed"
+  created_at: '2026-03-22T22:03:56.333752Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '7.3'
+  title: Shell-level output budget (--max-output)
+  status: closed
+  priority: 2
+  parent: '7'
+  dependencies:
+  - '7.1'
+  labels:
+  - api
+  - agent
+  - output
+  updated_at: '2026-03-22T23:38:10.745616Z'
+  produces:
+  - max_output_flag
+  - RUSH_MAX_OUTPUT
+  requires:
+  - rush::run
+  - rush::RunOptions
+  - rush::RunResult
+  has_verify: true
+  verify: cd /Users/asher/rush && cargo test -p rush test_output_budget 2>&1 | grep -E "[1-9][0-9]* passed"
+  created_at: '2026-03-22T22:04:35.055852Z'
+  attempts: 0
+  feature: false
+  has_decisions: false

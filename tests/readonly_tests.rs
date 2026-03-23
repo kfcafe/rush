@@ -13,7 +13,10 @@ fn test_readonly_create_with_value() {
     assert!(result.is_ok());
 
     // Variable should be set
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("value".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("value".to_string())
+    );
 
     // Variable should be readonly
     assert!(executor.runtime_mut().is_readonly("VAR"));
@@ -37,7 +40,10 @@ fn test_readonly_mark_existing_variable() {
     assert!(result.is_ok());
 
     // Variable should still have its value
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("initial".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("initial".to_string())
+    );
 
     // Variable should be readonly
     assert!(executor.runtime_mut().is_readonly("VAR"));
@@ -64,7 +70,10 @@ fn test_readonly_cannot_reassign_via_readonly() {
     assert!(err_msg.contains("readonly variable"));
 
     // Value should not have changed
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("value".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("value".to_string())
+    );
 }
 
 #[test]
@@ -89,7 +98,10 @@ fn test_readonly_cannot_unset() {
     assert!(err_msg.contains("readonly"));
 
     // Variable should still exist
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("value".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("value".to_string())
+    );
 }
 
 #[test]
@@ -109,9 +121,18 @@ fn test_readonly_multiple_variables() {
     assert!(executor.runtime_mut().is_readonly("C"));
 
     // All should have values
-    assert_eq!(executor.runtime_mut().get_variable("A"), Some("1".to_string()));
-    assert_eq!(executor.runtime_mut().get_variable("B"), Some("2".to_string()));
-    assert_eq!(executor.runtime_mut().get_variable("C"), Some("3".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("A"),
+        Some("1".to_string())
+    );
+    assert_eq!(
+        executor.runtime_mut().get_variable("B"),
+        Some("2".to_string())
+    );
+    assert_eq!(
+        executor.runtime_mut().get_variable("C"),
+        Some("3".to_string())
+    );
 }
 
 #[test]
@@ -189,7 +210,10 @@ fn test_readonly_with_spaces_in_value() {
     assert!(result.is_ok());
 
     // Variable should have the value with spaces
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("hello world".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("hello world".to_string())
+    );
     assert!(executor.runtime_mut().is_readonly("VAR"));
 }
 
@@ -235,7 +259,10 @@ fn test_readonly_persists_across_function_calls() {
 
     // Variable should still be readonly
     assert!(executor.runtime_mut().is_readonly("GLOBAL"));
-    assert_eq!(executor.runtime_mut().get_variable("GLOBAL"), Some("value".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("GLOBAL"),
+        Some("value".to_string())
+    );
 }
 
 #[test]
@@ -250,7 +277,10 @@ fn test_readonly_empty_value() {
     assert!(result.is_ok());
 
     // Variable should be set to empty string
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("".to_string())
+    );
     assert!(executor.runtime_mut().is_readonly("VAR"));
 }
 
@@ -276,8 +306,14 @@ fn test_readonly_multiple_with_mixed_assignment() {
     assert!(executor.runtime_mut().is_readonly("EXISTING"));
 
     // NEW has new value, EXISTING keeps old value
-    assert_eq!(executor.runtime_mut().get_variable("NEW"), Some("value".to_string()));
-    assert_eq!(executor.runtime_mut().get_variable("EXISTING"), Some("old".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("NEW"),
+        Some("value".to_string())
+    );
+    assert_eq!(
+        executor.runtime_mut().get_variable("EXISTING"),
+        Some("old".to_string())
+    );
 }
 
 #[test]
@@ -315,6 +351,9 @@ fn test_readonly_special_characters_in_value() {
     assert!(result.is_ok());
 
     // Variable should preserve the literal string
-    assert_eq!(executor.runtime_mut().get_variable("VAR"), Some("$PATH:/extra".to_string()));
+    assert_eq!(
+        executor.runtime_mut().get_variable("VAR"),
+        Some("$PATH:/extra".to_string())
+    );
     assert!(executor.runtime_mut().is_readonly("VAR"));
 }

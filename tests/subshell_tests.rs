@@ -1,4 +1,4 @@
-use rush::executor::{Executor, ExecutionResult};
+use rush::executor::{ExecutionResult, Executor};
 use rush::lexer::Lexer;
 use rush::parser::Parser;
 
@@ -122,9 +122,9 @@ fn test_deeply_nested_variable_isolation() {
     let mut executor = Executor::new();
 
     // Set variable at each level and ensure proper isolation
-    let tokens = Lexer::tokenize(
-        "let x = level0 && (let x = level1 && (let x = level2)) && echo $x"
-    ).unwrap();
+    let tokens =
+        Lexer::tokenize("let x = level0 && (let x = level1 && (let x = level2)) && echo $x")
+            .unwrap();
     let mut parser = Parser::new(tokens);
     let statements = parser.parse().unwrap();
 
@@ -223,9 +223,7 @@ fn test_sequential_subshells() {
 fn test_subshell_complex() {
     let mut executor = Executor::new();
 
-    let tokens = Lexer::tokenize(
-        "let x = outer && (let x = inner && echo $x) && echo $x"
-    ).unwrap();
+    let tokens = Lexer::tokenize("let x = outer && (let x = inner && echo $x) && echo $x").unwrap();
     let mut parser = Parser::new(tokens);
     let statements = parser.parse().unwrap();
 
@@ -241,9 +239,7 @@ fn test_subshell_complex() {
 fn test_nested_modifications_dont_leak() {
     let mut executor = Executor::new();
 
-    let tokens = Lexer::tokenize(
-        "let x = a && (let x = b && (let x = c)) && echo $x"
-    ).unwrap();
+    let tokens = Lexer::tokenize("let x = a && (let x = b && (let x = c)) && echo $x").unwrap();
     let mut parser = Parser::new(tokens);
     let statements = parser.parse().unwrap();
 
@@ -293,7 +289,10 @@ fn test_subshell_in_pipeline_parses() {
     let tokens = Lexer::tokenize("echo test | (cat)").unwrap();
     let mut parser = Parser::new(tokens);
     let statements = parser.parse();
-    assert!(statements.is_ok(), "Parsing 'echo test | (cat)' should succeed");
+    assert!(
+        statements.is_ok(),
+        "Parsing 'echo test | (cat)' should succeed"
+    );
 }
 
 /// Test (cd /tmp; pwd) outputs /tmp - subshell cd isolation
@@ -307,8 +306,11 @@ fn test_subshell_cd_semicolon_pwd() {
 
     let result = executor.execute(statements).unwrap();
 
-    assert!(result.stdout().trim().contains("tmp"),
-        "Expected /tmp in output, got: {}", result.stdout());
+    assert!(
+        result.stdout().trim().contains("tmp"),
+        "Expected /tmp in output, got: {}",
+        result.stdout()
+    );
     assert_eq!(result.exit_code, 0);
 }
 
@@ -347,5 +349,9 @@ fn test_pipeline_with_subshell_at_end() {
     let tokens = Lexer::tokenize("(echo hello) | (cat)").unwrap();
     let mut parser = Parser::new(tokens);
     let statements = parser.parse();
-    assert!(statements.is_ok(), "Pipeline with subshells should parse: {:?}", statements.err());
+    assert!(
+        statements.is_ok(),
+        "Pipeline with subshells should parse: {:?}",
+        statements.err()
+    );
 }

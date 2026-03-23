@@ -8,9 +8,9 @@
 //! It integrates with the Corrector module which uses Levenshtein distance
 //! and fuzzy matching to find similar commands and flags.
 
-use crate::correction::{Corrector, Suggestion};
 #[allow(unused_imports)]
 use crate::correction::SuggestionKind;
+use crate::correction::{Corrector, Suggestion};
 use std::path::Path;
 
 /// Configuration for suggestion behavior
@@ -341,9 +341,15 @@ mod tests {
 
         // Search for "carg" should suggest cargo from history
         let suggestions = engine.suggest_command("carg", &builtins, &aliases, &history, cwd);
-        assert!(!suggestions.is_empty(), "Expected suggestions for 'carg' with history");
-        assert!(suggestions.iter().any(|s| s.text == "cargo"), 
-            "Expected 'cargo' in suggestions from history: {:?}", suggestions);
+        assert!(
+            !suggestions.is_empty(),
+            "Expected suggestions for 'carg' with history"
+        );
+        assert!(
+            suggestions.iter().any(|s| s.text == "cargo"),
+            "Expected 'cargo' in suggestions from history: {:?}",
+            suggestions
+        );
     }
 
     #[test]
@@ -360,8 +366,11 @@ mod tests {
 
         // Search for "mycustom" should find it in history
         let suggestions = engine.suggest_command("mycustom", &builtins, &aliases, &history, cwd);
-        assert!(suggestions.iter().any(|s| s.text == "mycustomcmd"),
-            "Expected 'mycustomcmd' extracted from history: {:?}", suggestions);
+        assert!(
+            suggestions.iter().any(|s| s.text == "mycustomcmd"),
+            "Expected 'mycustomcmd' extracted from history: {:?}",
+            suggestions
+        );
     }
 
     #[test]
@@ -372,12 +381,12 @@ mod tests {
             min_score: 30,
         };
         let mut engine = SuggestionEngine::with_config(config);
-        
+
         // Disable history suggestions
         let mut _corrector_config = crate::correction::SuggestionConfig::default();
         _corrector_config.use_history = false;
         engine.corrector_mut().set_enabled(false);
-        
+
         let builtins = vec![];
         let aliases = vec![];
         let history = vec!["mycustomcmd".to_string()];
@@ -386,7 +395,10 @@ mod tests {
         // Even with history, if disabled, should not suggest
         engine.set_enabled(false);
         let suggestions = engine.suggest_command("mycustom", &builtins, &aliases, &history, cwd);
-        assert!(suggestions.is_empty(), "History suggestions should be empty when disabled");
+        assert!(
+            suggestions.is_empty(),
+            "History suggestions should be empty when disabled"
+        );
     }
 
     #[test]
@@ -397,14 +409,20 @@ mod tests {
         let aliases = vec![];
         let history = vec![];
         let cwd = std::env::current_dir().unwrap();
-        
+
         // If we're in a Cargo project, search for "carg" should suggest "cargo"
         if cwd.join("Cargo.toml").exists() {
             let suggestions = engine.suggest_command("carg", &builtins, &aliases, &history, &cwd);
-            assert!(!suggestions.is_empty(), "Expected suggestions for 'carg' in Cargo project");
+            assert!(
+                !suggestions.is_empty(),
+                "Expected suggestions for 'carg' in Cargo project"
+            );
             // Should include cargo as a contextual suggestion
-            assert!(suggestions.iter().any(|s| s.text == "cargo"),
-                "Expected 'cargo' in suggestions when in Cargo project: {:?}", suggestions);
+            assert!(
+                suggestions.iter().any(|s| s.text == "cargo"),
+                "Expected 'cargo' in suggestions when in Cargo project: {:?}",
+                suggestions
+            );
         }
     }
 
@@ -416,14 +434,20 @@ mod tests {
         let aliases = vec![];
         let history = vec![];
         let cwd = std::env::current_dir().unwrap();
-        
+
         // If we're in a git repo (check for .git directory), search for "gi" should suggest "git"
         if cwd.join(".git").exists() {
             let suggestions = engine.suggest_command("gi", &builtins, &aliases, &history, &cwd);
-            assert!(!suggestions.is_empty(), "Expected suggestions for 'gi' in git repo");
+            assert!(
+                !suggestions.is_empty(),
+                "Expected suggestions for 'gi' in git repo"
+            );
             // Should include git as a contextual suggestion
-            assert!(suggestions.iter().any(|s| s.text == "git"),
-                "Expected 'git' in suggestions when in git repo: {:?}", suggestions);
+            assert!(
+                suggestions.iter().any(|s| s.text == "git"),
+                "Expected 'git' in suggestions when in git repo: {:?}",
+                suggestions
+            );
         }
     }
 }

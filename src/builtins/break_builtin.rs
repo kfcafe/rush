@@ -33,7 +33,9 @@ impl std::error::Error for BreakSignal {}
 pub fn builtin_break(args: &[String], runtime: &mut Runtime) -> Result<ExecutionResult> {
     // Check if we're in a loop context
     if runtime.get_loop_depth() == 0 {
-        return Err(anyhow!("break: only meaningful in a `for', `while', or `until' loop"));
+        return Err(anyhow!(
+            "break: only meaningful in a `for', `while', or `until' loop"
+        ));
     }
 
     // Parse the number of levels to break
@@ -75,7 +77,10 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_break(&[], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("only meaningful in a"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("only meaningful in a"));
     }
 
     #[test]
@@ -110,7 +115,10 @@ mod tests {
         runtime.enter_loop();
         let result = builtin_break(&["0".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("loop count out of range"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("loop count out of range"));
         runtime.exit_loop();
     }
 
@@ -120,7 +128,10 @@ mod tests {
         runtime.enter_loop();
         let result = builtin_break(&["not_a_number".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("numeric argument required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("numeric argument required"));
         runtime.exit_loop();
     }
 
@@ -130,7 +141,10 @@ mod tests {
         runtime.enter_loop();
         let result = builtin_break(&["1".to_string(), "2".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("too many arguments"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("too many arguments"));
         runtime.exit_loop();
     }
 
@@ -140,7 +154,10 @@ mod tests {
         runtime.enter_loop();
         let result = builtin_break(&["2".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("loop count out of range"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("loop count out of range"));
         runtime.exit_loop();
     }
 }

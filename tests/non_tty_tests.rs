@@ -101,16 +101,17 @@ fn test_piped_input_with_builtin_commands() {
         .expect("Failed to spawn rush");
 
     if let Some(stdin) = child.stdin.as_mut() {
-        stdin
-            .write_all(b"pwd\necho builtin test\n")
-            .unwrap();
+        stdin.write_all(b"pwd\necho builtin test\n").unwrap();
     }
 
     let output = child.wait_with_output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success());
-    assert!(stdout.contains("builtin test"), "Should execute builtin commands");
+    assert!(
+        stdout.contains("builtin test"),
+        "Should execute builtin commands"
+    );
     assert!(!stdout.is_empty(), "Should output from pwd");
 }
 
@@ -164,7 +165,10 @@ fn test_stdin_redirection_with_comments() {
     assert!(output.status.success());
     assert!(stdout.contains("visible"));
     assert!(stdout.contains("also visible"));
-    assert!(!stdout.contains("comment"), "Comments should not appear in output");
+    assert!(
+        !stdout.contains("comment"),
+        "Comments should not appear in output"
+    );
 }
 
 #[test]
@@ -330,8 +334,14 @@ fn test_error_handling_multiple_commands_one_fails() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Should still execute commands before and after the failed command
-    assert!(stdout.contains("before"), "Should execute command before failure");
-    assert!(stdout.contains("after"), "Should execute command after failure");
+    assert!(
+        stdout.contains("before"),
+        "Should execute command before failure"
+    );
+    assert!(
+        stdout.contains("after"),
+        "Should execute command after failure"
+    );
 }
 
 #[test]

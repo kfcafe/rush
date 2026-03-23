@@ -1,5 +1,5 @@
 use rush::executor::Executor;
-use rush::parser::ast::{Statement, Command, Argument};
+use rush::parser::ast::{Argument, Command, Statement};
 
 #[test]
 fn test_eval_basic_echo() {
@@ -25,8 +25,12 @@ fn test_eval_basic_echo() {
 #[test]
 fn test_eval_variable_expansion() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_variable("cmd".to_string(), "echo".to_string());
-    executor.runtime_mut().set_variable("msg".to_string(), "hello".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("cmd".to_string(), "echo".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("msg".to_string(), "hello".to_string());
 
     // Execute: eval $cmd $msg
     let command = Statement::Command(Command {
@@ -51,9 +55,7 @@ fn test_eval_command_substitution() {
     // Execute: eval "echo $(echo nested)"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("echo $(echo nested)".to_string()),
-        ],
+        args: vec![Argument::Literal("echo $(echo nested)".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -70,9 +72,7 @@ fn test_eval_multiple_statements() {
     // Execute: eval "echo first ; echo second"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("echo first ; echo second".to_string()),
-        ],
+        args: vec![Argument::Literal("echo first ; echo second".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -89,9 +89,7 @@ fn test_eval_exit_code_propagation() {
     // Execute: eval false
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("false".to_string()),
-        ],
+        args: vec![Argument::Literal("false".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -107,9 +105,7 @@ fn test_eval_with_pipes() {
     // Execute: eval "echo hello | cat"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("echo hello | cat".to_string()),
-        ],
+        args: vec![Argument::Literal("echo hello | cat".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -126,9 +122,7 @@ fn test_eval_with_and_operator() {
     // Execute: eval "true && echo success"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("true && echo success".to_string()),
-        ],
+        args: vec![Argument::Literal("true && echo success".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -145,9 +139,7 @@ fn test_eval_with_or_operator() {
     // Execute: eval "false || echo fallback"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("false || echo fallback".to_string()),
-        ],
+        args: vec![Argument::Literal("false || echo fallback".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -177,14 +169,14 @@ fn test_eval_no_arguments() {
 #[test]
 fn test_eval_with_test_builtin() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_variable("VAR".to_string(), "value".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("VAR".to_string(), "value".to_string());
 
     // Execute: eval "test -n $VAR && echo yes"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("test -n $VAR && echo yes".to_string()),
-        ],
+        args: vec![Argument::Literal("test -n $VAR && echo yes".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -218,16 +210,18 @@ fn test_eval_concatenates_args() {
 #[test]
 fn test_eval_double_expansion() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_variable("x".to_string(), "5".to_string());
-    executor.runtime_mut().set_variable("y".to_string(), "10".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("x".to_string(), "5".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("y".to_string(), "10".to_string());
 
     // Execute: eval "echo $x $y"
     // Variables are expanded by shell before eval, then eval expands again
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("echo $x $y".to_string()),
-        ],
+        args: vec![Argument::Literal("echo $x $y".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -244,9 +238,7 @@ fn test_eval_with_pwd() {
     // Execute: eval pwd
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("pwd".to_string()),
-        ],
+        args: vec![Argument::Literal("pwd".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });
@@ -264,9 +256,7 @@ fn test_eval_sequential_commands() {
     // Execute: eval "echo a ; echo b ; echo c"
     let command = Statement::Command(Command {
         name: "eval".to_string(),
-        args: vec![
-            Argument::Literal("echo a ; echo b ; echo c".to_string()),
-        ],
+        args: vec![Argument::Literal("echo a ; echo b ; echo c".to_string())],
         redirects: vec![],
         prefix_env: vec![],
     });

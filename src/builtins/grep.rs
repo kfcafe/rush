@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use grep_matcher::Matcher;
 use grep_regex::RegexMatcherBuilder;
 use grep_searcher::sinks::UTF8;
-use grep_searcher::{SearcherBuilder, BinaryDetection};
+use grep_searcher::{BinaryDetection, SearcherBuilder};
 use ignore::WalkBuilder;
 use serde::Serialize;
 use std::cell::Cell;
@@ -28,7 +28,10 @@ struct GrepMatch {
 }
 
 pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionResult> {
-    let config = parse_args(args)?;
+    let mut config = parse_args(args)?;
+    if runtime.agent_mode() {
+        config.json_output = true;
+    }
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -54,7 +57,13 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                     match entry {
                         Ok(entry) => {
                             if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                                if search_file_json(&matcher, entry.path(), &config, &mut json_matches, &mut stderr)? {
+                                if search_file_json(
+                                    &matcher,
+                                    entry.path(),
+                                    &config,
+                                    &mut json_matches,
+                                    &mut stderr,
+                                )? {
                                     found_any = true;
                                 }
                             }
@@ -79,7 +88,11 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                 }
 
                 if !path_buf.exists() {
-                    writeln!(&mut stderr, "grep: {}: No such file or directory", path.display())?;
+                    writeln!(
+                        &mut stderr,
+                        "grep: {}: No such file or directory",
+                        path.display()
+                    )?;
                     continue;
                 }
 
@@ -104,7 +117,15 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                 for entry in walker {
                     match entry {
                         Ok(entry) => {
-                            if entry.file_type().is_some_and(|ft| ft.is_file()) && search_file(&matcher, entry.path(), &config, &mut stdout, &mut stderr)? {
+                            if entry.file_type().is_some_and(|ft| ft.is_file())
+                                && search_file(
+                                    &matcher,
+                                    entry.path(),
+                                    &config,
+                                    &mut stdout,
+                                    &mut stderr,
+                                )?
+                            {
                                 found_any = true;
                             }
                         }
@@ -128,7 +149,11 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
                 }
 
                 if !path_buf.exists() {
-                    writeln!(&mut stderr, "grep: {}: No such file or directory", path.display())?;
+                    writeln!(
+                        &mut stderr,
+                        "grep: {}: No such file or directory",
+                        path.display()
+                    )?;
                     continue;
                 }
 
@@ -150,8 +175,15 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
 }
 
 /// Execute grep with stdin data (for pipelines)
-pub fn builtin_grep_with_stdin(args: &[String], _runtime: &mut Runtime, stdin_data: &[u8]) -> Result<ExecutionResult> {
-    let config = parse_args(args)?;
+pub fn builtin_grep_with_stdin(
+    args: &[String],
+    runtime: &mut Runtime,
+    stdin_data: &[u8],
+) -> Result<ExecutionResult> {
+    let mut config = parse_args(args)?;
+    if runtime.agent_mode() {
+        config.json_output = true;
+    }
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -213,8 +245,10 @@ fn search_stdin(
 
             // Write line with color highlighting if enabled
             if config.color && !config.invert_match {
-                if let Some(m) = matcher.find(line.as_bytes())
-                    .map_err(|e| std::io::Error::other(e.to_string()))? {
+                if let Some(m) = matcher
+                    .find(line.as_bytes())
+                    .map_err(|e| std::io::Error::other(e.to_string()))?
+                {
                     write_colored_line(stdout, line, m.start(), m.end())
                         .map_err(|e| std::io::Error::other(e.to_string()))?;
                 } else {
@@ -266,7 +300,8 @@ fn search_file(
             // Write line with color highlighting if enabled (only for normal matches, not inverted)
             if config.color && !config.invert_match {
                 // Find first match for highlighting
-                let match_result = matcher.find(line.as_bytes())
+                let match_result = matcher
+                    .find(line.as_bytes())
                     .map_err(|e| std::io::Error::other(e.to_string()))?;
                 if let Some(m) = match_result {
                     write_colored_line(stdout, line, m.start(), m.end())
@@ -308,7 +343,13 @@ fn search_file_json(
         }
     };
 
-    let found = search_lines_json(matcher, &content, path.to_string_lossy().to_string(), config, matches)?;
+    let found = search_lines_json(
+        matcher,
+        &content,
+        path.to_string_lossy().to_string(),
+        config,
+        matches,
+    )?;
     Ok(found)
 }
 
@@ -319,7 +360,13 @@ fn search_stdin_json(
     config: &GrepConfig,
     matches: &mut Vec<GrepMatch>,
 ) -> Result<bool> {
-    search_lines_json(matcher, stdin_data, "(standard input)".to_string(), config, matches)
+    search_lines_json(
+        matcher,
+        stdin_data,
+        "(standard input)".to_string(),
+        config,
+        matches,
+    )
 }
 
 /// Core JSON search logic with context support
@@ -349,7 +396,8 @@ fn search_lines_json(
         }
 
         // Check if this line matches
-        let is_match = matcher.is_match(line.as_bytes())
+        let is_match = matcher
+            .is_match(line.as_bytes())
             .map_err(|e| anyhow!("Matcher error: {}", e))?;
 
         let should_include = if config.invert_match {
@@ -363,7 +411,8 @@ fn search_lines_json(
 
             // Extract the match text
             let match_info = if !config.invert_match {
-                matcher.find(line.as_bytes())
+                matcher
+                    .find(line.as_bytes())
                     .map_err(|e| anyhow!("Matcher error: {}", e))?
             } else {
                 None
@@ -378,7 +427,8 @@ fn search_lines_json(
             // Build context_before from buffer
             let context_before = if config.context_before > 0 && context_buffer.len() > 1 {
                 // Remove the current line from buffer
-                let before_lines: Vec<String> = context_buffer.iter()
+                let before_lines: Vec<String> = context_buffer
+                    .iter()
                     .take(context_buffer.len() - 1)
                     .cloned()
                     .collect();
@@ -550,7 +600,8 @@ fn parse_args(args: &[String]) -> Result<GrepConfig> {
                 if i >= args.len() {
                     return Err(anyhow!("grep: -C requires an argument"));
                 }
-                let lines: usize = args[i].parse()
+                let lines: usize = args[i]
+                    .parse()
                     .map_err(|_| anyhow!("grep: -C must be a non-negative integer"))?;
                 config.context_before = lines;
                 config.context_after = lines;
@@ -560,7 +611,8 @@ fn parse_args(args: &[String]) -> Result<GrepConfig> {
                 if i >= args.len() {
                     return Err(anyhow!("grep: -A requires an argument"));
                 }
-                config.context_after = args[i].parse()
+                config.context_after = args[i]
+                    .parse()
                     .map_err(|_| anyhow!("grep: -A must be a non-negative integer"))?;
             }
             "-B" | "--before-context" => {
@@ -568,7 +620,8 @@ fn parse_args(args: &[String]) -> Result<GrepConfig> {
                 if i >= args.len() {
                     return Err(anyhow!("grep: -B requires an argument"));
                 }
-                config.context_before = args[i].parse()
+                config.context_before = args[i]
+                    .parse()
                     .map_err(|_| anyhow!("grep: -B must be a non-negative integer"))?;
             }
             "--help" => {

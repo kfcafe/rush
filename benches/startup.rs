@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::process::Command;
 use std::time::Duration;
 
@@ -51,18 +51,15 @@ fn bench_lexer_init(c: &mut Criterion) {
 
     group.bench_function("tokenize_complex", |b| {
         b.iter(|| {
-            let tokens = rush::lexer::Lexer::tokenize(
-                black_box("ls -la | grep .rs | wc -l")
-            );
+            let tokens = rush::lexer::Lexer::tokenize(black_box("ls -la | grep .rs | wc -l"));
             black_box(tokens);
         });
     });
 
     group.bench_function("tokenize_pipeline", |b| {
         b.iter(|| {
-            let tokens = rush::lexer::Lexer::tokenize(
-                black_box("cat file.txt | sort | uniq | head -n 10")
-            );
+            let tokens =
+                rush::lexer::Lexer::tokenize(black_box("cat file.txt | sort | uniq | head -n 10"));
             black_box(tokens);
         });
     });

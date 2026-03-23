@@ -129,10 +129,7 @@ impl CompatibilityReport {
         let mut output = String::new();
 
         // Header
-        output.push_str(&format!(
-            "Bash Compatibility Report: {}\n",
-            self.filename
-        ));
+        output.push_str(&format!("Bash Compatibility Report: {}\n", self.filename));
         output.push_str("═════════════════════════════════════════\n\n");
 
         // Overall compatibility percentage
@@ -144,14 +141,8 @@ impl CompatibilityReport {
             format!("\x1b[31m{:.0}%\x1b[0m", self.compatibility_percentage) // Red
         };
 
-        output.push_str(&format!(
-            "Overall: {} compatible\n",
-            compatibility_str
-        ));
-        output.push_str(&format!(
-            "Lines analyzed: {}\n\n",
-            self.lines_analyzed
-        ));
+        output.push_str(&format!("Overall: {} compatible\n", compatibility_str));
+        output.push_str(&format!("Lines analyzed: {}\n\n", self.lines_analyzed));
 
         // Supported features
         if !self.supported.issues.is_empty() {
@@ -229,7 +220,9 @@ impl CompatibilityReport {
         // Migration suggestions section
         if !self.migration_suggestions.is_empty() {
             output.push('\n');
-            output.push_str(&MigrationEngine::format_suggestions(&self.migration_suggestions));
+            output.push_str(&MigrationEngine::format_suggestions(
+                &self.migration_suggestions,
+            ));
         }
 
         output

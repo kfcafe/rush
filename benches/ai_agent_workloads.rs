@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rush::executor::Executor;
 use rush::lexer::Lexer;
 use rush::parser::Parser;
@@ -76,7 +76,11 @@ fn setup_git_repo() -> TempDir {
     }
 
     // Make some files modified but not staged
-    fs::write(src_dir.join("file1.rs"), "// Modified\npub fn modified() {}\n").unwrap();
+    fs::write(
+        src_dir.join("file1.rs"),
+        "// Modified\npub fn modified() {}\n",
+    )
+    .unwrap();
     fs::write(repo_path.join("untracked.rs"), "// Untracked\n").unwrap();
 
     temp_dir
@@ -144,10 +148,7 @@ fn bench_git_status_loop(c: &mut Criterion) {
     c.bench_function("git_status_json_100x", |b| {
         b.iter(|| {
             for _ in 0..100 {
-                let output = execute_command(
-                    black_box("git_status --json"),
-                    black_box(&repo_path),
-                );
+                let output = execute_command(black_box("git_status --json"), black_box(&repo_path));
                 black_box(output);
             }
         });
@@ -156,10 +157,7 @@ fn bench_git_status_loop(c: &mut Criterion) {
     // Single call benchmark for detailed timing
     c.bench_function("git_status_json_single", |b| {
         b.iter(|| {
-            let output = execute_command(
-                black_box("git_status --json"),
-                black_box(&repo_path),
-            );
+            let output = execute_command(black_box("git_status --json"), black_box(&repo_path));
             black_box(output);
         });
     });
@@ -222,10 +220,7 @@ fn bench_git_log_analysis(c: &mut Criterion) {
     // Get 100 commits as JSON
     group.bench_function("git_log_100_commits", |b| {
         b.iter(|| {
-            let output = execute_command(
-                black_box("git_log --json -n 100"),
-                black_box(&repo_path),
-            );
+            let output = execute_command(black_box("git_log --json -n 100"), black_box(&repo_path));
             black_box(output);
         });
     });
@@ -233,10 +228,7 @@ fn bench_git_log_analysis(c: &mut Criterion) {
     // Get 10 commits (common case)
     group.bench_function("git_log_10_commits", |b| {
         b.iter(|| {
-            let output = execute_command(
-                black_box("git_log --json -n 10"),
-                black_box(&repo_path),
-            );
+            let output = execute_command(black_box("git_log --json -n 10"), black_box(&repo_path));
             black_box(output);
         });
     });
@@ -344,10 +336,8 @@ fn bench_complex_pipeline(c: &mut Criterion) {
     c.bench_function("complex_pipeline_git_status_to_grep", |b| {
         b.iter(|| {
             // Get unstaged files
-            let status_output = execute_command(
-                black_box("git_status --json"),
-                black_box(&repo_path),
-            );
+            let status_output =
+                execute_command(black_box("git_status --json"), black_box(&repo_path));
             black_box(status_output);
 
             // In a real pipeline, we'd parse the JSON and grep each file
@@ -421,10 +411,7 @@ fn bench_rapid_fire(c: &mut Criterion) {
     c.bench_function("rapid_fire_git_status_1000x", |b| {
         b.iter(|| {
             for _ in 0..1000 {
-                let output = execute_command(
-                    black_box("git_status --json"),
-                    black_box(&repo_path),
-                );
+                let output = execute_command(black_box("git_status --json"), black_box(&repo_path));
                 black_box(output);
             }
         });

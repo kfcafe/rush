@@ -44,7 +44,10 @@ fn test_last_bg_pid_empty() {
 
     // $! should be empty - test by checking if it's empty via assignment and default operator
     let output = execute_line("let X = $!; echo ${X:-EMPTY}", &mut executor).unwrap();
-    assert_eq!(output, "EMPTY", "$! should be empty when no background jobs");
+    assert_eq!(
+        output, "EMPTY",
+        "$! should be empty when no background jobs"
+    );
 }
 
 #[test]
@@ -64,7 +67,10 @@ fn test_last_bg_pid_after_background_job() {
     let bang_output = execute_line("echo $!", &mut executor).unwrap();
     let bang_pid: u32 = bang_output.parse().expect("$! should be a number");
 
-    assert_eq!(bang_pid, expected_pid, "$! should match the last background job PID");
+    assert_eq!(
+        bang_pid, expected_pid,
+        "$! should match the last background job PID"
+    );
 }
 
 #[test]
@@ -101,7 +107,10 @@ fn test_option_flags_errexit() {
 
     let output = execute_line("set -e; echo $-", &mut executor).unwrap();
 
-    assert!(output.contains('e'), "$- should contain 'e' when set -e is active");
+    assert!(
+        output.contains('e'),
+        "$- should contain 'e' when set -e is active"
+    );
 }
 
 #[test]
@@ -206,11 +215,17 @@ fn test_braced_special_vars() {
 
     // Test ${!}
     let output = execute_line("let X = ${!}; echo ${X:-EMPTY}", &mut executor).unwrap();
-    assert_eq!(output, "EMPTY", "${{!}} should be empty when no background jobs");
+    assert_eq!(
+        output, "EMPTY",
+        "${{!}} should be empty when no background jobs"
+    );
 
     // Test ${-}
     let output = execute_line("let X = ${-}; echo ${X:-EMPTY}", &mut executor).unwrap();
-    assert_eq!(output, "EMPTY", "${{-}} should be empty when no options set");
+    assert_eq!(
+        output, "EMPTY",
+        "${{-}} should be empty when no options set"
+    );
 
     // Test ${_}
     let output = execute_line("let X = ${_}; echo ${X:-EMPTY}", &mut executor).unwrap();

@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::process::{Command, Stdio};
@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 // ---------------------------------------------------------------------------
 
 fn socket_path() -> String {
-    format!("{}/.rush/daemon.sock", std::env::var("HOME").unwrap_or_default())
+    format!(
+        "{}/.rush/daemon.sock",
+        std::env::var("HOME").unwrap_or_default()
+    )
 }
 
 fn is_daemon_running() -> bool {
@@ -64,11 +67,10 @@ fn ensure_daemon() {
 // ---------------------------------------------------------------------------
 
 fn execute_via_daemon(cmd: &str) -> i32 {
-    use rush::daemon::protocol::{Message, SessionInit, write_message, read_message};
+    use rush::daemon::protocol::{read_message, write_message, Message, SessionInit};
 
     let path = socket_path();
-    let mut stream = UnixStream::connect(&path)
-        .expect("Failed to connect to daemon socket");
+    let mut stream = UnixStream::connect(&path).expect("Failed to connect to daemon socket");
 
     let working_dir = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
@@ -76,7 +78,10 @@ fn execute_via_daemon(cmd: &str) -> i32 {
         .to_string();
 
     let mut env = HashMap::new();
-    env.insert("PATH".to_string(), std::env::var("PATH").unwrap_or_default());
+    env.insert(
+        "PATH".to_string(),
+        std::env::var("PATH").unwrap_or_default(),
+    );
 
     let init = SessionInit {
         working_dir,
@@ -85,11 +90,9 @@ fn execute_via_daemon(cmd: &str) -> i32 {
         stdin_mode: "null".to_string(),
     };
 
-    write_message(&mut stream, &Message::SessionInit(init), 1)
-        .expect("Failed to write message");
+    write_message(&mut stream, &Message::SessionInit(init), 1).expect("Failed to write message");
 
-    let (response, _) = read_message(&mut stream)
-        .expect("Failed to read response");
+    let (response, _) = read_message(&mut stream).expect("Failed to read response");
 
     match response {
         Message::ExecutionResult(result) => result.exit_code,
@@ -115,15 +118,11 @@ fn bench_daemon_execution(c: &mut Criterion) {
         ("arithmetic", "echo $((2+3))"),
         ("pipe", "echo hello | cat"),
     ] {
-        group.bench_with_input(
-            BenchmarkId::new("exec", name),
-            &cmd,
-            |b, cmd| {
-                b.iter(|| {
-                    black_box(execute_via_daemon(black_box(cmd)));
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("exec", name), &cmd, |b, cmd| {
+            b.iter(|| {
+                black_box(execute_via_daemon(black_box(cmd)));
+            });
+        });
     }
 
     group.finish();
@@ -141,10 +140,7 @@ fn bench_daemon_throughput(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(20);
 
-    for (name, cmd, batch) in [
-        ("100x_true", "true", 100),
-        ("100x_echo", "echo hello", 100),
-    ] {
+    for (name, cmd, batch) in [("100x_true", "true", 100), ("100x_echo", "echo hello", 100)] {
         group.bench_function(name, |b| {
             b.iter(|| {
                 for _ in 0..batch {
@@ -196,25 +192,18 @@ fn bench_cold_startup(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(50);
 
-    for (name, cmd) in [
-        ("true", "true"),
-        ("echo_hello", "echo hello"),
-    ] {
-        group.bench_with_input(
-            BenchmarkId::new("rush_c", name),
-            &cmd,
-            |b, cmd| {
-                b.iter(|| {
-                    black_box(
-                        Command::new("target/release/rush")
-                            .arg("-c")
-                            .arg(cmd)
-                            .output()
-                            .expect("Failed to execute rush"),
-                    );
-                });
-            },
-        );
+    for (name, cmd) in [("true", "true"), ("echo_hello", "echo hello")] {
+        group.bench_with_input(BenchmarkId::new("rush_c", name), &cmd, |b, cmd| {
+            b.iter(|| {
+                black_box(
+                    Command::new("target/release/rush")
+                        .arg("-c")
+                        .arg(cmd)
+                        .output()
+                        .expect("Failed to execute rush"),
+                );
+            });
+        });
     }
 
     group.finish();
@@ -269,11 +258,11 @@ fn bench_shell_comparison(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_daemon_execution,       // PRIMARY: daemon warm execution
-    bench_daemon_throughput,       // Sustained throughput
-    bench_daemon_cold_start,       // Cold start overhead
-    bench_cold_startup,            // rush -c reference (single variable)
-    bench_shell_comparison,        // Context: rush vs bash vs zsh
+    bench_daemon_execution,  // PRIMARY: daemon warm execution
+    bench_daemon_throughput, // Sustained throughput
+    bench_daemon_cold_start, // Cold start overhead
+    bench_cold_startup,      // rush -c reference (single variable)
+    bench_shell_comparison,  // Context: rush vs bash vs zsh
 );
 
 criterion_main!(benches);

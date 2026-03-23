@@ -4,7 +4,7 @@ use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
 use ignore::WalkBuilder;
 use nu_ansi_term::{Color, Style};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fs::{self, Metadata};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -36,20 +36,24 @@ struct FileEntry {
 
 #[derive(Default)]
 struct LsFlags {
-    long: bool,        // -l: long format
-    all: bool,         // -a: show hidden files
-    human: bool,       // -h: human-readable sizes
-    color: bool,       // default: color output
-    json: bool,        // --json: JSON output
+    long: bool,  // -l: long format
+    all: bool,   // -a: show hidden files
+    human: bool, // -h: human-readable sizes
+    color: bool, // default: color output
+    json: bool,  // --json: JSON output
 }
 
 pub fn builtin_ls(args: &[String], runtime: &mut Runtime) -> Result<ExecutionResult> {
-    let (flags, paths) = parse_args(args)?;
+    let (mut flags, paths) = parse_args(args)?;
+    if runtime.agent_mode() {
+        flags.json = true;
+    }
 
     let targets = if paths.is_empty() {
         vec![runtime.get_cwd().clone()]
     } else {
-        paths.into_iter()
+        paths
+            .into_iter()
             .map(|p| {
                 let path = PathBuf::from(p);
                 if path.is_absolute() {
@@ -148,7 +152,10 @@ fn parse_args(args: &[String]) -> Result<(LsFlags, Vec<String>)> {
 
 fn collect_entries(path: &Path, flags: &LsFlags) -> Result<Vec<FileEntry>> {
     if !path.exists() {
-        return Err(anyhow!("cannot access '{}': No such file or directory", path.display()));
+        return Err(anyhow!(
+            "cannot access '{}': No such file or directory",
+            path.display()
+        ));
     }
 
     if path.is_file() {
@@ -221,13 +228,11 @@ fn metadata_to_file_entry(path: &Path, metadata: &Metadata) -> Result<FileEntry>
         .modified()
         .ok()
         .and_then(|time| {
-            time.duration_since(std::time::UNIX_EPOCH)
-                .ok()
-                .map(|d| {
-                    let timestamp = d.as_secs() as i64;
-                    let iso_time = format_iso8601(timestamp);
-                    (iso_time, timestamp)
-                })
+            time.duration_since(std::time::UNIX_EPOCH).ok().map(|d| {
+                let timestamp = d.as_secs() as i64;
+                let iso_time = format_iso8601(timestamp);
+                (iso_time, timestamp)
+            })
         })
         .unwrap_or_else(|| ("1970-01-01T00:00:00Z".to_string(), 0));
 
@@ -268,7 +273,7 @@ fn format_iso8601(timestamp: i64) -> String {
     // Calculate year (rough approximation)
     let mut year = 1970;
     let mut days_left = days_since_epoch;
-    
+
     loop {
         let days_in_year = if is_leap_year(year) { 366 } else { 365 };
         if days_left < days_in_year {
@@ -312,7 +317,10 @@ fn is_leap_year(year: i64) -> bool {
 
 fn list_path(path: &Path, flags: &LsFlags) -> Result<String> {
     if !path.exists() {
-        return Err(anyhow!("cannot access '{}': No such file or directory", path.display()));
+        return Err(anyhow!(
+            "cannot access '{}': No such file or directory",
+            path.display()
+        ));
     }
 
     if path.is_file() {
@@ -410,10 +418,7 @@ fn format_long_entry(path: &Path, metadata: &Metadata, flags: &LsFlags) -> Strin
 
     let name = format_name(path, metadata, flags.color);
 
-    format!(
-        "{} {:>3} {:>8} {} {}\n",
-        perms, nlink, size, modified, name
-    )
+    format!("{} {:>3} {:>8} {} {}\n", perms, nlink, size, modified, name)
 }
 
 fn format_permissions(metadata: &Metadata) -> String {
@@ -471,7 +476,8 @@ fn format_time(time: SystemTime) -> Option<String> {
 
     // Simple format (this is simplified; real ls uses locale-aware formatting)
     if let Ok(duration_since) = now.duration_since(datetime) {
-        if duration_since.as_secs() < 15_552_000 { // 180 days
+        if duration_since.as_secs() < 15_552_000 {
+            // 180 days
             // Recent file: show time
             Some(format_timestamp(timestamp, false))
         } else {
@@ -487,8 +493,7 @@ fn format_timestamp(timestamp: u64, show_year: bool) -> String {
     // Simplified timestamp formatting
     // In a production system, you'd want to use chrono or similar
     const MONTH_NAMES: &[&str] = &[
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
 
     let seconds_in_day = 86400;
@@ -507,7 +512,10 @@ fn format_timestamp(timestamp: u64, show_year: bool) -> String {
     if show_year {
         format!("{} {:>2}  {}", MONTH_NAMES[month], day, year)
     } else {
-        format!("{} {:>2} {:>02}:{:>02}", MONTH_NAMES[month], day, hour, minute)
+        format!(
+            "{} {:>2} {:>02}:{:>02}",
+            MONTH_NAMES[month], day, hour, minute
+        )
     }
 }
 
@@ -674,7 +682,8 @@ mod tests {
         let result = builtin_ls(
             &["/nonexistent/path/that/does/not/exist".to_string()],
             &mut runtime,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Should have non-zero exit code
         assert_eq!(result.exit_code, 1);
@@ -855,7 +864,11 @@ mod tests {
         let mut runtime = Runtime::new();
         runtime.set_cwd(dir.path().to_path_buf());
 
-        let result = builtin_ls(&["--json".to_string(), "specific.txt".to_string()], &mut runtime).unwrap();
+        let result = builtin_ls(
+            &["--json".to_string(), "specific.txt".to_string()],
+            &mut runtime,
+        )
+        .unwrap();
         assert_eq!(result.exit_code, 0);
 
         let json_output: Vec<FileEntry> = serde_json::from_str(result.stdout().trim()).unwrap();
@@ -887,7 +900,7 @@ mod tests {
     fn test_format_iso8601() {
         // Test epoch time
         assert_eq!(format_iso8601(0), "1970-01-01T00:00:00Z");
-        
+
         // Test a known timestamp: 2024-01-15 12:30:45 UTC (1705322445)
         let result = format_iso8601(1705322445);
         assert!(result.starts_with("2024-01-"));

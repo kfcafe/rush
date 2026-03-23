@@ -678,10 +678,7 @@ mod tests {
 
         assert_eq!(result.exit_code, 0);
         // In non-raw mode, \n becomes just n
-        assert_eq!(
-            runtime.get_variable("var"),
-            Some("hellonworld".to_string())
-        );
+        assert_eq!(runtime.get_variable("var"), Some("hellonworld".to_string()));
     }
 
     #[test]

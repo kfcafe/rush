@@ -255,7 +255,10 @@ fn test_mixed_quoted_arguments() {
 
     let result = executor.execute(statements).unwrap();
     // Note: echo adds spaces between arguments
-    assert_eq!(result.stdout().as_str().trim(), "single double value unquoted");
+    assert_eq!(
+        result.stdout().as_str().trim(),
+        "single double value unquoted"
+    );
 }
 
 // =============================================================================

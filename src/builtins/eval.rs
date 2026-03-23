@@ -21,17 +21,18 @@ pub fn builtin_eval(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
 
     // Parse and execute the command string
     // We need to use the lexer and parser to tokenize and parse the command
+    use crate::executor::Executor;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
-    use crate::executor::Executor;
 
     // Tokenize the command string
-    let tokens = Lexer::tokenize(&command_string)
-        .map_err(|e| anyhow!("eval: tokenize error: {}", e))?;
+    let tokens =
+        Lexer::tokenize(&command_string).map_err(|e| anyhow!("eval: tokenize error: {}", e))?;
 
     // Parse the tokens into statements
     let mut parser = Parser::new(tokens);
-    let statements = parser.parse()
+    let statements = parser
+        .parse()
         .map_err(|e| anyhow!("eval: parse error: {}", e))?;
 
     // Create a temporary executor with the current runtime state
@@ -42,7 +43,8 @@ pub fn builtin_eval(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
     *executor.runtime_mut() = runtime.clone();
 
     // Execute the parsed statements
-    let result = executor.execute(statements)
+    let result = executor
+        .execute(statements)
         .map_err(|e| anyhow!("eval: execution error: {}", e))?;
 
     // Copy back the runtime state to preserve variable changes, etc.
@@ -82,7 +84,11 @@ mod tests {
     fn test_eval_command_substitution() {
         let mut runtime = Runtime::new();
 
-        let args = vec!["echo".to_string(), "$(echo".to_string(), "nested)".to_string()];
+        let args = vec![
+            "echo".to_string(),
+            "$(echo".to_string(),
+            "nested)".to_string(),
+        ];
         let result = builtin_eval(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
@@ -93,8 +99,12 @@ mod tests {
     fn test_eval_with_pipes() {
         let mut runtime = Runtime::new();
 
-        let args = vec!["echo".to_string(), "hello".to_string(), "|".to_string(),
-                        "cat".to_string()];
+        let args = vec![
+            "echo".to_string(),
+            "hello".to_string(),
+            "|".to_string(),
+            "cat".to_string(),
+        ];
         let result = builtin_eval(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
@@ -153,8 +163,13 @@ mod tests {
     fn test_eval_multiple_statements() {
         let mut runtime = Runtime::new();
 
-        let args = vec!["echo".to_string(), "first".to_string(), ";".to_string(),
-                        "echo".to_string(), "second".to_string()];
+        let args = vec![
+            "echo".to_string(),
+            "first".to_string(),
+            ";".to_string(),
+            "echo".to_string(),
+            "second".to_string(),
+        ];
         let result = builtin_eval(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
@@ -167,9 +182,14 @@ mod tests {
         runtime.set_variable("VAR".to_string(), "value".to_string());
 
         // Simpler test with && instead of if/then/fi
-        let args = vec!["test".to_string(), "-n".to_string(),
-                        "$VAR".to_string(), "&&".to_string(),
-                        "echo".to_string(), "yes".to_string()];
+        let args = vec![
+            "test".to_string(),
+            "-n".to_string(),
+            "$VAR".to_string(),
+            "&&".to_string(),
+            "echo".to_string(),
+            "yes".to_string(),
+        ];
         let result = builtin_eval(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
@@ -180,8 +200,12 @@ mod tests {
     fn test_eval_with_conditionals() {
         let mut runtime = Runtime::new();
 
-        let args = vec!["true".to_string(), "&&".to_string(),
-                        "echo".to_string(), "success".to_string()];
+        let args = vec![
+            "true".to_string(),
+            "&&".to_string(),
+            "echo".to_string(),
+            "success".to_string(),
+        ];
         let result = builtin_eval(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
@@ -192,8 +216,12 @@ mod tests {
     fn test_eval_with_or_conditional() {
         let mut runtime = Runtime::new();
 
-        let args = vec!["false".to_string(), "||".to_string(),
-                        "echo".to_string(), "fallback".to_string()];
+        let args = vec![
+            "false".to_string(),
+            "||".to_string(),
+            "echo".to_string(),
+            "fallback".to_string(),
+        ];
         let result = builtin_eval(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);

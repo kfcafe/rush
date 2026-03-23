@@ -13,16 +13,21 @@ fn test_grep_basic_search() {
     runtime.set_cwd(tmp.path().to_path_buf());
 
     let builtins = Builtins::new();
-    let args = vec![
-        "hello".to_string(),
-        file_path.to_string_lossy().to_string(),
-    ];
+    let args = vec!["hello".to_string(), file_path.to_string_lossy().to_string()];
 
     let result = builtins.execute("grep", args, &mut runtime).unwrap();
     assert_eq!(result.exit_code, 0);
     // Output includes line numbers (1:, 3:) and ANSI color codes
-    assert!(result.stdout().contains("1:") && result.stdout().contains("hello") && result.stdout().contains("world"));
-    assert!(result.stdout().contains("3:") && result.stdout().contains("hello") && result.stdout().contains("rust"));
+    assert!(
+        result.stdout().contains("1:")
+            && result.stdout().contains("hello")
+            && result.stdout().contains("world")
+    );
+    assert!(
+        result.stdout().contains("3:")
+            && result.stdout().contains("hello")
+            && result.stdout().contains("rust")
+    );
     // "foo bar" should not appear in results
     assert!(!result.stdout().contains("foo") || !result.stdout().contains("bar"));
 }
@@ -152,7 +157,11 @@ fn test_grep_json_output() {
 fn test_grep_json_with_context() {
     let tmp = TempDir::new().unwrap();
     let file_path = tmp.path().join("test.txt");
-    fs::write(&file_path, "line 1\nline 2 match\nline 3\nline 4\nline 5 match\nline 6\n").unwrap();
+    fs::write(
+        &file_path,
+        "line 1\nline 2 match\nline 3\nline 4\nline 5 match\nline 6\n",
+    )
+    .unwrap();
 
     let mut runtime = Runtime::new();
     runtime.set_cwd(tmp.path().to_path_buf());

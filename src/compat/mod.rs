@@ -8,14 +8,14 @@
 //! - Planned: Will be implemented
 //! - Not Supported: Has clear workarounds
 
-pub mod features;
-pub mod database;
 pub mod analyzer;
-pub mod report;
+pub mod database;
+pub mod features;
 pub mod migrate;
+pub mod report;
 
-pub use features::RushCompatFeature;
+pub use analyzer::{AnalysisResult, ScriptAnalyzer};
 pub use database::CompatDatabase;
-pub use analyzer::{ScriptAnalyzer, AnalysisResult};
-pub use report::CompatibilityReport;
+pub use features::RushCompatFeature;
 pub use migrate::MigrationEngine;
+pub use report::CompatibilityReport;

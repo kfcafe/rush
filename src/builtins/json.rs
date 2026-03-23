@@ -1,7 +1,7 @@
 use crate::executor::{ExecutionResult, Output};
 use crate::runtime::Runtime;
 use anyhow::{anyhow, Context, Result};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
@@ -24,7 +24,8 @@ fn get_json_input(args: &[String], stdin_data: Option<&[u8]>) -> Result<(Value, 
     if args.is_empty() {
         // Try to read from stdin
         let mut buffer = String::new();
-        io::stdin().read_to_string(&mut buffer)
+        io::stdin()
+            .read_to_string(&mut buffer)
             .context("Failed to read from stdin")?;
         let value = parse_json(&buffer)?;
         return Ok((value, 0));
@@ -46,7 +47,9 @@ fn get_json_input(args: &[String], stdin_data: Option<&[u8]>) -> Result<(Value, 
     }
 
     // No valid JSON input found
-    Err(anyhow!("No valid JSON input provided. Use stdin, a file path, or a JSON string."))
+    Err(anyhow!(
+        "No valid JSON input provided. Use stdin, a file path, or a JSON string."
+    ))
 }
 
 /// Navigate a JSON path (simple implementation)
@@ -79,11 +82,13 @@ fn navigate_path(value: &Value, path: &str) -> Result<Value> {
                 }
             } else {
                 // .[0] - array index
-                let index: usize = index_str.parse()
+                let index: usize = index_str
+                    .parse()
                     .with_context(|| format!("Invalid array index: {}", index_str))?;
 
                 if let Value::Array(arr) = &current {
-                    current = arr.get(index)
+                    current = arr
+                        .get(index)
                         .ok_or_else(|| anyhow!("Array index {} out of bounds", index))?
                         .clone();
                 } else {
@@ -98,7 +103,8 @@ fn navigate_path(value: &Value, path: &str) -> Result<Value> {
 
             // Navigate to field first
             if let Value::Object(map) = &current {
-                current = map.get(field)
+                current = map
+                    .get(field)
                     .ok_or_else(|| anyhow!("Field '{}' not found", field))?
                     .clone();
             } else {
@@ -108,11 +114,13 @@ fn navigate_path(value: &Value, path: &str) -> Result<Value> {
             // Then handle array access
             if rest.starts_with('[') && rest.ends_with(']') {
                 let index_str = &rest[1..rest.len() - 1];
-                let index: usize = index_str.parse()
+                let index: usize = index_str
+                    .parse()
                     .with_context(|| format!("Invalid array index: {}", index_str))?;
 
                 if let Value::Array(arr) = &current {
-                    current = arr.get(index)
+                    current = arr
+                        .get(index)
                         .ok_or_else(|| anyhow!("Array index {} out of bounds", index))?
                         .clone();
                 } else {
@@ -122,7 +130,8 @@ fn navigate_path(value: &Value, path: &str) -> Result<Value> {
         } else {
             // Regular field access
             if let Value::Object(map) = &current {
-                current = map.get(part)
+                current = map
+                    .get(part)
                     .ok_or_else(|| anyhow!("Field '{}' not found", part))?
                     .clone();
             } else {
@@ -161,7 +170,8 @@ fn set_at_path(value: &mut Value, path: &str, new_value: Value) -> Result<()> {
         // Handle array access
         if part.starts_with('[') && part.ends_with(']') {
             let index_str = &part[1..part.len() - 1];
-            let index: usize = index_str.parse()
+            let index: usize = index_str
+                .parse()
                 .with_context(|| format!("Invalid array index: {}", index_str))?;
 
             if let Value::Array(arr) = current {
@@ -172,7 +182,8 @@ fn set_at_path(value: &mut Value, path: &str, new_value: Value) -> Result<()> {
                     arr[index] = new_value;
                     return Ok(());
                 } else {
-                    current = arr.get_mut(index)
+                    current = arr
+                        .get_mut(index)
                         .ok_or_else(|| anyhow!("Array index {} out of bounds", index))?;
                 }
             } else {
@@ -185,7 +196,8 @@ fn set_at_path(value: &mut Value, path: &str, new_value: Value) -> Result<()> {
                     map.insert(part.to_string(), new_value);
                     return Ok(());
                 } else {
-                    current = map.get_mut(*part)
+                    current = map
+                        .get_mut(*part)
                         .ok_or_else(|| anyhow!("Field '{}' not found", part))?;
                 }
             } else {
@@ -216,7 +228,11 @@ pub fn builtin_json_get(args: &[String], _runtime: &mut Runtime) -> Result<Execu
     builtin_json_get_impl(args, None)
 }
 
-pub fn builtin_json_get_with_stdin(args: &[String], _runtime: &mut Runtime, stdin_data: &[u8]) -> Result<ExecutionResult> {
+pub fn builtin_json_get_with_stdin(
+    args: &[String],
+    _runtime: &mut Runtime,
+    stdin_data: &[u8],
+) -> Result<ExecutionResult> {
     builtin_json_get_impl(args, Some(stdin_data))
 }
 
@@ -252,7 +268,7 @@ fn builtin_json_get_impl(args: &[String], stdin_data: Option<&[u8]>) -> Result<E
                 output: Output::Text(String::new()),
                 stderr: format!("json_get: unknown option: {}\n", arg),
                 exit_code: 1,
-            error: None,
+                error: None,
             });
         }
         i += 1;
@@ -275,7 +291,7 @@ fn builtin_json_get_impl(args: &[String], stdin_data: Option<&[u8]>) -> Result<E
                 output: Output::Text(String::new()),
                 stderr: format!("json_get: {}\n", e),
                 exit_code: 1,
-            error: None,
+                error: None,
             });
         }
     };
@@ -336,7 +352,7 @@ fn builtin_json_get_impl(args: &[String], stdin_data: Option<&[u8]>) -> Result<E
         output: Output::Text(output),
         stderr: String::new(),
         exit_code,
-            error: None,
+        error: None,
     })
 }
 
@@ -348,7 +364,11 @@ pub fn builtin_json_set(args: &[String], _runtime: &mut Runtime) -> Result<Execu
     builtin_json_set_impl(args, None)
 }
 
-pub fn builtin_json_set_with_stdin(args: &[String], _runtime: &mut Runtime, stdin_data: &[u8]) -> Result<ExecutionResult> {
+pub fn builtin_json_set_with_stdin(
+    args: &[String],
+    _runtime: &mut Runtime,
+    stdin_data: &[u8],
+) -> Result<ExecutionResult> {
     builtin_json_set_impl(args, Some(stdin_data))
 }
 
@@ -380,7 +400,7 @@ fn builtin_json_set_impl(args: &[String], stdin_data: Option<&[u8]>) -> Result<E
                 output: Output::Text(String::new()),
                 stderr: format!("json_set: unknown option: {}\n", arg),
                 exit_code: 1,
-            error: None,
+                error: None,
             });
         }
         i += 1;
@@ -421,7 +441,7 @@ fn builtin_json_set_impl(args: &[String], stdin_data: Option<&[u8]>) -> Result<E
                 output: Output::Text(String::new()),
                 stderr: format!("json_set: {}\n", e),
                 exit_code: 1,
-            error: None,
+                error: None,
             });
         }
     };
@@ -453,7 +473,11 @@ pub fn builtin_json_query(args: &[String], _runtime: &mut Runtime) -> Result<Exe
     builtin_json_query_impl(args, None)
 }
 
-pub fn builtin_json_query_with_stdin(args: &[String], _runtime: &mut Runtime, stdin_data: &[u8]) -> Result<ExecutionResult> {
+pub fn builtin_json_query_with_stdin(
+    args: &[String],
+    _runtime: &mut Runtime,
+    stdin_data: &[u8],
+) -> Result<ExecutionResult> {
     builtin_json_query_impl(args, Some(stdin_data))
 }
 
@@ -478,7 +502,7 @@ fn builtin_json_query_impl(args: &[String], stdin_data: Option<&[u8]>) -> Result
                 output: Output::Text(String::new()),
                 stderr: format!("json_query: {}\n", e),
                 exit_code: 1,
-            error: None,
+                error: None,
             });
         }
     };
@@ -516,7 +540,11 @@ fn execute_complex_query(value: &Value, query: &str) -> Result<Value> {
                 Value::Array(arr) => json!(arr.len()),
                 Value::Object(map) => json!(map.len()),
                 Value::String(s) => json!(s.len()),
-                _ => return Err(anyhow!("length can only be used on arrays, objects, or strings")),
+                _ => {
+                    return Err(anyhow!(
+                        "length can only be used on arrays, objects, or strings"
+                    ))
+                }
             };
         } else if part == "keys" {
             // Get keys of object
@@ -548,7 +576,8 @@ fn execute_complex_query(value: &Value, query: &str) -> Result<Value> {
 /// Apply a filter to an array
 fn apply_filter(value: &Value, filter: &str) -> Result<Value> {
     if let Value::Array(arr) = value {
-        let filtered: Vec<Value> = arr.iter()
+        let filtered: Vec<Value> = arr
+            .iter()
             .filter(|item| matches_filter(item, filter))
             .cloned()
             .collect();
@@ -623,7 +652,14 @@ fn matches_filter(value: &Value, filter: &str) -> bool {
         field_value != right_value
     } else {
         // Just a path - check if it exists and is truthy
-        matches!(navigate_path(value, filter), Ok(Value::Bool(true)) | Ok(Value::String(_)) | Ok(Value::Number(_)) | Ok(Value::Array(_)) | Ok(Value::Object(_)))
+        matches!(
+            navigate_path(value, filter),
+            Ok(Value::Bool(true))
+                | Ok(Value::String(_))
+                | Ok(Value::Number(_))
+                | Ok(Value::Array(_))
+                | Ok(Value::Object(_))
+        )
     }
 }
 
@@ -763,7 +799,10 @@ mod tests {
     fn test_json_query_with_filter() {
         let mut runtime = Runtime::new();
         let json = r#"[{"name": "Alice", "active": true}, {"name": "Bob", "active": false}]"#;
-        let args = vec![".[] | select(.active == true)".to_string(), json.to_string()];
+        let args = vec![
+            ".[] | select(.active == true)".to_string(),
+            json.to_string(),
+        ];
         let result = builtin_json_query(&args, &mut runtime).unwrap();
         assert!(result.stdout().contains("Alice"));
         assert!(!result.stdout().contains("Bob"));

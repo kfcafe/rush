@@ -99,10 +99,9 @@ fn test_shift_by_two() {
 #[test]
 fn test_shift_by_zero_is_noop() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_positional_params(vec![
-        "first".to_string(),
-        "second".to_string(),
-    ]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["first".to_string(), "second".to_string()]);
 
     execute_line("shift 0", &mut executor).unwrap();
 
@@ -145,10 +144,9 @@ fn test_shift_empty_params_error() {
 #[test]
 fn test_shift_beyond_available_params_error() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_positional_params(vec![
-        "a".to_string(),
-        "b".to_string(),
-    ]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["a".to_string(), "b".to_string()]);
 
     // shift 3 when only 2 params exist should fail
     let result = execute_line("shift 3", &mut executor);
@@ -159,7 +157,9 @@ fn test_shift_beyond_available_params_error() {
 #[test]
 fn test_shift_non_numeric_argument_error() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_positional_params(vec!["a".to_string()]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["a".to_string()]);
 
     let result = execute_line("shift abc", &mut executor);
     assert!(result.is_err());
@@ -169,7 +169,9 @@ fn test_shift_non_numeric_argument_error() {
 #[test]
 fn test_shift_too_many_arguments_error() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_positional_params(vec!["a".to_string()]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["a".to_string()]);
 
     let result = execute_line("shift 1 2", &mut executor);
     assert!(result.is_err());
@@ -212,10 +214,9 @@ fn test_shift_in_function_scope() {
     let mut executor = Executor::new();
 
     // Set global positional params
-    executor.runtime_mut().set_positional_params(vec![
-        "global1".to_string(),
-        "global2".to_string(),
-    ]);
+    executor
+        .runtime_mut()
+        .set_positional_params(vec!["global1".to_string(), "global2".to_string()]);
 
     // Define a function that uses shift
     execute_line("shift_test() { echo $1; shift; echo $1; }", &mut executor).unwrap();
@@ -268,8 +269,9 @@ fn test_shift_in_while_loop() {
     // Use test builtin without brackets for simpler parsing
     let output = execute_line(
         r#"while test $# -gt 0; do echo $1; shift; done"#,
-        &mut executor
-    ).unwrap();
+        &mut executor,
+    )
+    .unwrap();
 
     assert_eq!(output, "first\nsecond\nthird");
     assert_eq!(execute_line("echo $#", &mut executor).unwrap(), "0");

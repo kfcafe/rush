@@ -71,9 +71,41 @@ impl JsonOutput {
     }
 }
 
+/// Strip ANSI escape sequences from a string.
+///
+/// Removes all sequences of the form `\x1b[...m` and similar control codes,
+/// leaving only the plain text content. Used in agent mode to ensure output
+/// is clean for programmatic consumers.
+pub fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            // Skip ESC [ ... <final byte in range 0x40–0x7e>
+            i += 2;
+            while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
+                i += 1;
+            }
+            i += 1; // skip the final byte
+        } else if bytes[i] == 0x1b && i + 1 < bytes.len() {
+            // Other ESC sequences (e.g. ESC c) — skip just the two bytes
+            i += 2;
+        } else {
+            result.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    result
+}
+
 impl std::fmt::Display for JsonOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(self).unwrap_or_default())
+        write!(
+            f,
+            "{}",
+            serde_json::to_string_pretty(self).unwrap_or_default()
+        )
     }
 }
 
@@ -94,7 +126,7 @@ mod tests {
         let mut formatter = OutputFormatter::new();
         formatter.set_json_mode(true);
         assert!(formatter.is_json_mode());
-        
+
         let output = formatter.format_result("hello\n", "", 0);
         assert!(output.contains("\"stdout\""));
         assert!(output.contains("\"success\": true"));
@@ -103,9 +135,8 @@ mod tests {
     #[test]
     fn test_json_output() {
         let data = json!({"files": ["file1.txt", "file2.txt"]});
-        let output = JsonOutput::new(data)
-            .with_metadata("count".to_string(), json!(2));
-        
+        let output = JsonOutput::new(data).with_metadata("count".to_string(), json!(2));
+
         let json_str = output.to_string();
         assert!(json_str.contains("files"));
         assert!(json_str.contains("metadata"));

@@ -83,7 +83,7 @@ fn stderr(output: &std::process::Output) -> String {
 mod ansi_c_quoting {
     //! Tests for $'...' ANSI-C quoting (new in POSIX.1-2024)
     //! This is one of the major additions in the 2024 revision.
-    
+
     use super::*;
 
     #[test]
@@ -108,7 +108,11 @@ mod ansi_c_quoting {
         let output = run_rush(r#"echo $'line\r'"#);
         // Don't trim - carriage return would be stripped
         let out = stdout(&output);
-        assert!(out.starts_with("line\r"), "expected 'line\\r', got {:?}", out);
+        assert!(
+            out.starts_with("line\r"),
+            "expected 'line\\r', got {:?}",
+            out
+        );
         assert!(output.status.success());
     }
 
@@ -168,7 +172,11 @@ mod ansi_c_quoting {
         let output = run_rush(r#"echo $'\v'"#);
         // Don't trim - vertical tab would be stripped as whitespace
         let out = stdout(&output);
-        assert!(out.starts_with("\x0b"), "expected vertical tab, got {:?}", out);
+        assert!(
+            out.starts_with("\x0b"),
+            "expected vertical tab, got {:?}",
+            out
+        );
         assert!(output.status.success());
     }
 
@@ -237,18 +245,20 @@ mod case_terminators {
     //! ;; - Standard terminator, exits case statement
     //! ;& - Fallthrough: execute next case body unconditionally
     //! ;| - Continue matching: check remaining patterns
-    
+
     use super::*;
 
     #[test]
     fn test_case_standard_terminator() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case foo in
                 foo) echo matched;;
                 bar) echo bar;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "matched");
         assert!(output.status.success());
     }
@@ -256,12 +266,14 @@ mod case_terminators {
     #[test]
     fn test_case_multiple_patterns() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case bar in
                 foo|bar|baz) echo matched;;
                 *) echo default;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "matched");
         assert!(output.status.success());
     }
@@ -269,12 +281,14 @@ mod case_terminators {
     #[test]
     fn test_case_glob_star() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case file.txt in
                 *.txt) echo text;;
                 *) echo other;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "text");
         assert!(output.status.success());
     }
@@ -282,12 +296,14 @@ mod case_terminators {
     #[test]
     fn test_case_glob_question() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case a in
                 ?) echo single;;
                 *) echo multi;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "single");
         assert!(output.status.success());
     }
@@ -296,12 +312,14 @@ mod case_terminators {
     #[ignore = "bracket patterns [abc] in case statements not supported yet"]
     fn test_case_glob_bracket() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case b in
                 [abc]) echo in_set;;
                 *) echo not_in_set;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "in_set");
         assert!(output.status.success());
     }
@@ -309,13 +327,15 @@ mod case_terminators {
     #[test]
     fn test_case_default_pattern() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case nomatch in
                 foo) echo foo;;
                 bar) echo bar;;
                 *) echo default;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "default");
         assert!(output.status.success());
     }
@@ -324,13 +344,15 @@ mod case_terminators {
     #[ignore = "case statement with no match produces parser error"]
     fn test_case_no_match() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case nomatch in
                 foo) echo foo;;
                 bar) echo bar;;
             esac
             echo done
-        "#);
+        "#,
+        );
         // Should not match anything but should continue
         assert!(stdout(&output).contains("done"));
         assert!(output.status.success());
@@ -339,13 +361,15 @@ mod case_terminators {
     #[test]
     fn test_case_with_variable() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             X=hello
             case $X in
                 hello) echo matched;;
                 *) echo nomatch;;
             esac
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "matched");
         assert!(output.status.success());
     }
@@ -353,22 +377,26 @@ mod case_terminators {
     #[test]
     fn test_case_exit_code_success() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case foo in
                 foo) true;;
             esac
-        "#);
+        "#,
+        );
         assert!(output.status.success());
     }
 
     #[test]
     fn test_case_exit_code_from_body() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case foo in
                 foo) false;;
             esac
-        "#);
+        "#,
+        );
         assert!(!output.status.success());
     }
 
@@ -378,12 +406,14 @@ mod case_terminators {
     #[ignore = "POSIX.1-2024 ;& fallthrough may not be implemented yet"]
     fn test_case_fallthrough() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case foo in
                 foo) echo first;&
                 bar) echo second;;
             esac
-        "#);
+        "#,
+        );
         // With fallthrough, both should print
         assert!(stdout(&output).contains("first"));
         assert!(stdout(&output).contains("second"));
@@ -396,12 +426,14 @@ mod case_terminators {
     #[ignore = "POSIX.1-2024 ;| continue-matching may not be implemented yet"]
     fn test_case_continue_matching() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             case foobar in
                 foo*) echo matched_foo;|
                 *bar) echo matched_bar;;
             esac
-        "#);
+        "#,
+        );
         // With continue matching, both patterns can match
         assert!(stdout(&output).contains("matched_foo"));
         assert!(stdout(&output).contains("matched_bar"));
@@ -412,7 +444,7 @@ mod case_terminators {
 mod fd_notation {
     //! Tests for {n} file descriptor notation (new in POSIX.1-2024)
     //! This allows dynamic file descriptor allocation
-    
+
     use super::*;
 
     // POSIX.1-2024: {varname} notation for dynamic FD allocation
@@ -421,13 +453,15 @@ mod fd_notation {
     #[ignore = "POSIX.1-2024 {n} FD notation may not be implemented yet"]
     fn test_fd_dynamic_allocation() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             exec {fd}>test_fd_file.tmp
             echo "test" >&$fd
             exec {fd}>&-
             cat test_fd_file.tmp
             rm test_fd_file.tmp
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "test");
         assert!(output.status.success());
     }
@@ -435,7 +469,7 @@ mod fd_notation {
 
 mod read_builtin_2024 {
     //! Tests for read builtin including POSIX.1-2024 -d option
-    
+
     use super::*;
 
     #[test]
@@ -542,14 +576,17 @@ mod read_builtin_2024 {
 
 mod cd_builtin_2024 {
     //! Tests for cd builtin including POSIX.1-2024 -e option
-    
+
     use super::*;
 
     #[test]
     fn test_cd_basic() {
         ensure_rush_binary().unwrap();
         let output = run_rush("cd /tmp && pwd");
-        assert_eq!(stdout(&output).trim(), "/private/tmp".to_string().replace("/private", ""));
+        assert_eq!(
+            stdout(&output).trim(),
+            "/private/tmp".to_string().replace("/private", "")
+        );
         // macOS uses /private/tmp
         assert!(stdout(&output).contains("tmp"));
         assert!(output.status.success());
@@ -598,7 +635,7 @@ mod cd_builtin_2024 {
 mod special_builtins {
     //! POSIX special built-in utilities
     //! These are required to be built into the shell
-    
+
     use super::*;
 
     #[test]
@@ -614,7 +651,8 @@ mod special_builtins {
     #[ignore = "break builtin not fully implemented - loop continues instead of breaking"]
     fn test_break_with_level() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             for i in 1 2; do
                 for j in a b; do
                     echo $i$j
@@ -622,7 +660,8 @@ mod special_builtins {
                 done
             done
             echo done
-        "#);
+        "#,
+        );
         assert!(stdout(&output).contains("1a"));
         assert!(stdout(&output).contains("done"));
         assert!(!stdout(&output).contains("1b"));
@@ -646,12 +685,14 @@ mod special_builtins {
     #[ignore = "break/continue not fully implemented yet"]
     fn test_continue() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             for i in 1 2 3; do
                 test $i = 2 && continue
                 echo $i
             done
-        "#);
+        "#,
+        );
         assert!(stdout(&output).contains("1"));
         assert!(!stdout(&output).contains("2"));
         assert!(stdout(&output).contains("3"));
@@ -661,12 +702,14 @@ mod special_builtins {
     fn test_dot_source() {
         ensure_rush_binary().unwrap();
         // Create a temp file and source it
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             echo 'SOURCED_VAR=hello' > /tmp/test_source.sh
             . /tmp/test_source.sh
             echo $SOURCED_VAR
             rm /tmp/test_source.sh
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "hello");
     }
 
@@ -818,7 +861,7 @@ mod special_builtins {
 mod intrinsic_utilities {
     //! POSIX intrinsic utilities
     //! These should be built-in for performance
-    
+
     use super::*;
 
     #[test]
@@ -965,12 +1008,14 @@ mod intrinsic_utilities {
     #[test]
     fn test_getopts() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             set -- -a -b arg
             while getopts "ab:" opt; do
                 echo "opt=$opt OPTARG=$OPTARG"
             done
-        "#);
+        "#,
+        );
         assert!(output.status.success());
     }
 
@@ -1027,7 +1072,7 @@ mod intrinsic_utilities {
 
 mod parameter_expansion {
     //! POSIX parameter expansion tests
-    
+
     use super::*;
 
     #[test]
@@ -1171,7 +1216,7 @@ mod parameter_expansion {
 
 mod control_flow {
     //! POSIX control flow tests
-    
+
     use super::*;
 
     #[test]
@@ -1237,13 +1282,15 @@ mod control_flow {
     fn test_nested_loops() {
         ensure_rush_binary().unwrap();
         // Quote the variables to prevent word splitting
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             for i in 1 2; do
                 for j in a b; do
                     echo "$i$j"
                 done
             done
-        "#);
+        "#,
+        );
         assert!(stdout(&output).contains("1a"));
         assert!(stdout(&output).contains("1b"));
         assert!(stdout(&output).contains("2a"));
@@ -1299,7 +1346,7 @@ mod control_flow {
 
 mod pipelines {
     //! POSIX pipeline tests
-    
+
     use super::*;
 
     #[test]
@@ -1344,7 +1391,7 @@ mod pipelines {
 
 mod redirection {
     //! POSIX I/O redirection tests
-    
+
     use super::*;
 
     #[test]
@@ -1357,12 +1404,14 @@ mod redirection {
     #[test]
     fn test_stdout_append() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             echo first > /tmp/rush_test_append.txt
             echo second >> /tmp/rush_test_append.txt
             cat /tmp/rush_test_append.txt
             rm /tmp/rush_test_append.txt
-        "#);
+        "#,
+        );
         assert!(stdout(&output).contains("first"));
         assert!(stdout(&output).contains("second"));
     }
@@ -1379,7 +1428,12 @@ mod redirection {
         ensure_rush_binary().unwrap();
         let output = run_rush("ls /nonexistent 2> /tmp/rush_test_stderr.txt; cat /tmp/rush_test_stderr.txt; rm /tmp/rush_test_stderr.txt");
         // Should have captured error
-        assert!(stdout(&output).contains("No such file") || stdout(&output).contains("cannot access") || stdout(&output).is_empty() || !output.status.success());
+        assert!(
+            stdout(&output).contains("No such file")
+                || stdout(&output).contains("cannot access")
+                || stdout(&output).is_empty()
+                || !output.status.success()
+        );
     }
 
     #[test]
@@ -1393,12 +1447,14 @@ mod redirection {
     #[test]
     fn test_here_document() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             cat <<EOF
 hello
 world
 EOF
-        "#);
+        "#,
+        );
         assert!(stdout(&output).contains("hello"));
         assert!(stdout(&output).contains("world"));
     }
@@ -1423,19 +1479,21 @@ EOF
     #[test]
     fn test_noclobber_not_set() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             echo first > /tmp/rush_noclobber.txt
             echo second > /tmp/rush_noclobber.txt
             cat /tmp/rush_noclobber.txt
             rm /tmp/rush_noclobber.txt
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "second");
     }
 }
 
 mod functions {
     //! POSIX shell function tests
-    
+
     use super::*;
 
     #[test]
@@ -1463,7 +1521,8 @@ mod functions {
     #[test]
     fn test_function_local_positional() {
         ensure_rush_binary().unwrap();
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             set -- outer
             foo() {
                 set -- inner
@@ -1471,7 +1530,8 @@ mod functions {
             }
             foo
             echo $1
-        "#);
+        "#,
+        );
         let binding = stdout(&output);
         let lines: Vec<&str> = binding.trim().lines().collect();
         assert_eq!(lines[0], "inner");
@@ -1482,7 +1542,8 @@ mod functions {
     fn test_recursive_function() {
         ensure_rush_binary().unwrap();
         // Use test instead of [ ] bracket syntax
-        let output = run_rush(r#"
+        let output = run_rush(
+            r#"
             factorial() {
                 if test $1 -le 1; then
                     echo 1
@@ -1492,7 +1553,8 @@ mod functions {
                 fi
             }
             factorial 5
-        "#);
+        "#,
+        );
         assert_eq!(stdout(&output).trim(), "120");
     }
 
@@ -1507,7 +1569,7 @@ mod functions {
 
 mod arithmetic {
     //! POSIX arithmetic expansion tests
-    
+
     use super::*;
 
     #[test]
@@ -1602,7 +1664,7 @@ mod arithmetic {
 
 mod command_substitution {
     //! POSIX command substitution tests
-    
+
     use super::*;
 
     #[test]
@@ -1644,7 +1706,7 @@ mod command_substitution {
 
 mod quoting {
     //! POSIX quoting tests
-    
+
     use super::*;
 
     #[test]
@@ -1698,7 +1760,7 @@ mod quoting {
 mod job_control {
     //! POSIX job control tests
     //! Note: Many job control features require a terminal
-    
+
     use super::*;
 
     #[test]
@@ -1738,7 +1800,7 @@ mod job_control {
 
 mod signal_handling {
     //! POSIX signal handling tests
-    
+
     use super::*;
 
     #[test]
@@ -1791,7 +1853,7 @@ mod shellspec_integration {
     /// Run ShellSpec tests with given arguments
     fn run_shellspec(spec_file: &str) -> Result<std::process::Output, std::io::Error> {
         let posix_dir = project_root().join("tests/posix");
-        
+
         // Build release binary for shellspec tests
         let _ = Command::new("cargo")
             .args(["build", "--release"])
@@ -1819,8 +1881,8 @@ mod shellspec_integration {
             return;
         }
 
-        let output = run_shellspec("shellspec/posix_2024_spec.sh")
-            .expect("Failed to run ShellSpec tests");
+        let output =
+            run_shellspec("shellspec/posix_2024_spec.sh").expect("Failed to run ShellSpec tests");
 
         if !output.status.success() {
             eprintln!("STDOUT:\n{}", String::from_utf8_lossy(&output.stdout));

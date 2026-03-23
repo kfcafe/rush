@@ -2,10 +2,10 @@
 //!
 //! Parses bash scripts and identifies syntax features used, with line number tracking.
 
-use crate::lexer::Lexer;
-use crate::parser::Parser;
-use crate::parser::ast::*;
 use super::features::feature_database;
+use crate::lexer::Lexer;
+use crate::parser::ast::*;
+use crate::parser::Parser;
 use std::collections::HashMap;
 
 /// A single occurrence of a feature in a script
@@ -102,12 +102,7 @@ impl ScriptAnalyzer {
     }
 
     /// Analyze a single statement
-    fn analyze_statement(
-        &self,
-        stmt: &Statement,
-        lines: &[&str],
-        result: &mut AnalysisResult,
-    ) {
+    fn analyze_statement(&self, stmt: &Statement, lines: &[&str], result: &mut AnalysisResult) {
         match stmt {
             Statement::Command(cmd) => {
                 // Identify command type and features
@@ -165,12 +160,7 @@ impl ScriptAnalyzer {
     }
 
     /// Analyze a command for features
-    fn analyze_command(
-        &self,
-        cmd: &Command,
-        lines: &[&str],
-        result: &mut AnalysisResult,
-    ) {
+    fn analyze_command(&self, cmd: &Command, lines: &[&str], result: &mut AnalysisResult) {
         // Check command name for builtin commands
         match cmd.name.as_str() {
             "declare" => self.add_feature("declare_command", 0, 0, "declare", result),
@@ -196,12 +186,7 @@ impl ScriptAnalyzer {
     }
 
     /// Analyze an argument for features
-    fn analyze_argument(
-        &self,
-        arg: &Argument,
-        _lines: &[&str],
-        result: &mut AnalysisResult,
-    ) {
+    fn analyze_argument(&self, arg: &Argument, _lines: &[&str], result: &mut AnalysisResult) {
         match arg {
             Argument::Literal(_s) => {
                 // Literal string
@@ -226,6 +211,12 @@ impl ScriptAnalyzer {
             }
             Argument::Glob(_glob) => {
                 self.add_feature("glob_expansion", 0, 0, "glob pattern", result);
+            }
+            Argument::SingleQuoted(_s) => {
+                self.add_feature("word_splitting", 0, 0, "single-quoted argument", result);
+            }
+            Argument::DoubleQuoted(_parts) => {
+                self.add_feature("word_splitting", 0, 0, "double-quoted argument", result);
             }
         }
     }

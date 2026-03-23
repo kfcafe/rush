@@ -170,10 +170,7 @@ fn tokenize(input: &str) -> Result<Vec<ArithToken>> {
             '!' => ArithToken::Bang,
             '=' => ArithToken::Eq,
             _ => {
-                return Err(anyhow!(
-                    "arithmetic: unexpected character '{}'",
-                    ch
-                ));
+                return Err(anyhow!("arithmetic: unexpected character '{}'", ch));
             }
         };
         tokens.push(tok);

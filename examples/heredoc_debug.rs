@@ -1,4 +1,3 @@
-
 use rush::lexer::{Lexer, Token};
 use rush::parser::Parser;
 
@@ -11,7 +10,7 @@ EOF";
     for (i, token) in tokens.iter().enumerate() {
         println!("  [{}] {:?}", i, token);
     }
-    
+
     let tokens2 = Lexer::tokenize(input).unwrap();
     let mut parser = Parser::new(tokens2);
     let stmts = parser.parse().unwrap();

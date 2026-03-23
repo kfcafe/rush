@@ -1,6 +1,6 @@
 use crate::executor::{ExecutionResult, Output};
-use crate::runtime::Runtime;
 use crate::jobs::JobStatus;
+use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
 use nix::sys::wait::{waitpid, WaitPidFlag};
 use nix::unistd::Pid;
@@ -167,11 +167,16 @@ fn wait_for_pid_blocking(pid: u32) -> Result<i32> {
         }
         Err(nix::errno::Errno::ECHILD) => {
             // Process doesn't exist or is not a child
-            Err(anyhow!("wait: pid {} is not a child of this shell", pid.as_raw()))
+            Err(anyhow!(
+                "wait: pid {} is not a child of this shell",
+                pid.as_raw()
+            ))
         }
-        Err(e) => {
-            Err(anyhow!("wait: failed to wait for pid {}: {}", pid.as_raw(), e))
-        }
+        Err(e) => Err(anyhow!(
+            "wait: failed to wait for pid {}: {}",
+            pid.as_raw(),
+            e
+        )),
     }
 }
 
@@ -201,7 +206,11 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_wait(&["%1".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().to_lowercase().contains("no such job"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .to_lowercase()
+            .contains("no such job"));
     }
 
     #[test]
@@ -217,7 +226,11 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_wait(&["%%".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().to_lowercase().contains("no current job"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .to_lowercase()
+            .contains("no current job"));
     }
 
     #[test]
@@ -225,7 +238,11 @@ mod tests {
         let mut runtime = Runtime::new();
         let result = builtin_wait(&["%-".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().to_lowercase().contains("no previous job"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .to_lowercase()
+            .contains("no previous job"));
     }
 
     #[test]
@@ -256,7 +273,7 @@ mod tests {
         // Try to wait for the job (should timeout or fail)
         // Just verify it doesn't crash
         let result = builtin_wait(&["%1".to_string()], &mut runtime);
-        
+
         // The result depends on whether the process exists, but should be handled gracefully
         // We're just verifying it doesn't panic
         let _ = result;
@@ -268,7 +285,7 @@ mod tests {
 
         // Wait for a non-existent PID (should fail gracefully)
         let result = builtin_wait(&["99999".to_string()], &mut runtime);
-        
+
         // Should fail because 99999 is not a child process
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not a child"));
@@ -286,14 +303,15 @@ mod tests {
         let pid2 = child2.id() as i32;
 
         // Add them as jobs
-        let job_id1 = runtime.job_manager().add_job(pid1 as u32, "true".to_string());
-        let job_id2 = runtime.job_manager().add_job(pid2 as u32, "false".to_string());
+        let job_id1 = runtime
+            .job_manager()
+            .add_job(pid1 as u32, "true".to_string());
+        let job_id2 = runtime
+            .job_manager()
+            .add_job(pid2 as u32, "false".to_string());
 
         // Wait for both jobs by PIDs (not by job IDs since they're not true shell-spawned jobs)
-        let result = builtin_wait(
-            &[pid1.to_string(), pid2.to_string()],
-            &mut runtime
-        ).unwrap();
+        let result = builtin_wait(&[pid1.to_string(), pid2.to_string()], &mut runtime).unwrap();
 
         // Should return exit code of last job (false = 1)
         assert_eq!(result.exit_code, 1);

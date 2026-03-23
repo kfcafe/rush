@@ -45,7 +45,10 @@ fn start_daemon() -> Result<()> {
     if socket_path.exists() {
         // Try to connect to verify it's actually running
         if let Ok(_stream) = std::os::unix::net::UnixStream::connect(&socket_path) {
-            eprintln!("Error: Daemon is already running at {}", socket_path.display());
+            eprintln!(
+                "Error: Daemon is already running at {}",
+                socket_path.display()
+            );
             eprintln!("Use 'rushd stop' to stop it first, or 'rushd restart' to restart.");
             process::exit(1);
         } else {
@@ -105,13 +108,16 @@ fn stop_daemon() -> Result<()> {
             // In a full implementation, we'd send a Shutdown message
 
             // Read PID from a potential PID file
-            let pid_path = socket_path.parent()
+            let pid_path = socket_path
+                .parent()
                 .ok_or_else(|| anyhow!("Invalid socket path"))?
                 .join("daemon.pid");
 
             if pid_path.exists() {
                 let pid_str = fs::read_to_string(&pid_path)?;
-                let pid: i32 = pid_str.trim().parse()
+                let pid: i32 = pid_str
+                    .trim()
+                    .parse()
                     .map_err(|_| anyhow!("Invalid PID in daemon.pid"))?;
 
                 // Send SIGTERM to the daemon
@@ -162,7 +168,8 @@ fn check_status() -> Result<()> {
             println!("Daemon is running at {}", socket_path.display());
 
             // Try to read PID
-            let pid_path = socket_path.parent()
+            let pid_path = socket_path
+                .parent()
                 .ok_or_else(|| anyhow!("Invalid socket path"))?
                 .join("daemon.pid");
 
@@ -195,7 +202,7 @@ fn restart_daemon() -> Result<()> {
 }
 
 /// Reload daemon configuration by sending SIGHUP
-/// 
+///
 /// This is equivalent to `kill -HUP $(cat ~/.rush/daemon.pid)` but more convenient.
 /// The daemon will re-parse .rushrc and update custom stat definitions without restart.
 fn reload_config() -> Result<()> {
@@ -214,7 +221,8 @@ fn reload_config() -> Result<()> {
     }
 
     // Read PID from pid file
-    let pid_path = socket_path.parent()
+    let pid_path = socket_path
+        .parent()
         .ok_or_else(|| anyhow!("Invalid socket path"))?
         .join("daemon.pid");
 
@@ -225,12 +233,14 @@ fn reload_config() -> Result<()> {
     }
 
     let pid_str = fs::read_to_string(&pid_path)?;
-    let pid: i32 = pid_str.trim().parse()
+    let pid: i32 = pid_str
+        .trim()
+        .parse()
         .map_err(|_| anyhow!("Invalid PID in daemon.pid"))?;
 
     // Send SIGHUP to the daemon
     let result = unsafe { libc::kill(pid, libc::SIGHUP) };
-    
+
     if result == 0 {
         println!("Sent reload signal (SIGHUP) to daemon (PID {}).", pid);
         println!("Configuration will be reloaded from ~/.rushrc");

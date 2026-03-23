@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rush vs Top 5 Shells — Deep Dive Comparison</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    background: linear-gradient(135deg, #161b22 0%, #0d1117 50%, #1a1e2e 100%);
+    border-bottom: 1px solid #21262d;
+  }
+
+  .hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #f97316, #fb923c, #fbbf24);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+
+  .hero p {
+    font-size: 1.15rem;
+    color: #8b949e;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .hero .subtitle {
+    font-size: 0.9rem;
+    color: #484f58;
+    margin-top: 16px;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin-bottom: 28px;
+  }
+
+  .grid.full { grid-template-columns: 1fr; }
+
+  .card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 12px;
+    padding: 28px;
+  }
+
+  .card h2 {
+    font-size: 1.25rem;
+    color: #e6edf3;
+    margin-bottom: 4px;
+  }
+
+  .card .desc {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-bottom: 20px;
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    max-height: 400px;
+  }
+
+  .chart-wrap canvas {
+    max-height: 400px;
+  }
+
+  .chart-wrap.tall { max-height: 500px; }
+  .chart-wrap.tall canvas { max-height: 500px; }
+
+  /* Feature matrix table */
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .matrix th, .matrix td {
+    padding: 10px 14px;
+    text-align: center;
+    border-bottom: 1px solid #21262d;
+  }
+
+  .matrix th {
+    background: #0d1117;
+    color: #8b949e;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+  }
+
+  .matrix th:first-child, .matrix td:first-child {
+    text-align: left;
+    color: #e6edf3;
+    font-weight: 500;
+  }
+
+  .matrix tr:hover { background: #1c2128; }
+
+  .rush-col { color: #f97316 !important; font-weight: 600 !important; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .badge.yes { background: #1a3a2a; color: #3fb950; }
+  .badge.partial { background: #3d2e00; color: #d29922; }
+  .badge.no { background: #3d1a1a; color: #f85149; }
+  .badge.rush-yes { background: #3d2200; color: #f97316; }
+
+  .legend-note {
+    font-size: 0.78rem;
+    color: #484f58;
+    margin-top: 16px;
+    line-height: 1.5;
+  }
+
+  .callout {
+    background: linear-gradient(135deg, #1a1400, #1f1800);
+    border: 1px solid #3d3000;
+    border-left: 3px solid #f97316;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 28px;
+  }
+
+  .callout h3 {
+    color: #f97316;
+    font-size: 1rem;
+    margin-bottom: 6px;
+  }
+
+  .callout p {
+    color: #8b949e;
+    font-size: 0.9rem;
+  }
+
+  .section-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #e6edf3;
+    margin: 48px 0 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #21262d;
+  }
+
+  .section-desc {
+    color: #8b949e;
+    font-size: 0.95rem;
+    margin-bottom: 24px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: #484f58;
+    font-size: 0.8rem;
+    border-top: 1px solid #21262d;
+  }
+
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2rem; }
+    .matrix { font-size: 0.75rem; }
+    .matrix th, .matrix td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Rush vs The Top 5 Shells</h1>
+  <p>A deep-dive comparison of Rush against Bash, Zsh, Fish, Nushell, and PowerShell — covering performance, features, design philosophy, and real-world trade-offs.</p>
+  <div class="subtitle">Data sourced from official docs, community benchmarks (hyperfine), and Rush's Criterion suite &middot; March 2026</div>
+</div>
+
+<div class="container">
+
+  <!-- TL;DR Callout -->
+  <div class="callout">
+    <h3>TL;DR — Where Rush Fits</h3>
+    <p>Rush is a <strong>POSIX-compliant</strong> shell written in Rust with <strong>50+ native builtins</strong> that run 17-427x faster than GNU coreutils. It targets AI agent workloads and structured-data pipelines while maintaining full script compatibility — something no other modern shell achieves simultaneously.</p>
+  </div>
+
+  <!-- ═══════════ SECTION 1: PERFORMANCE ═══════════ -->
+  <h2 class="section-title">⚡ Performance</h2>
+  <p class="section-desc">The numbers that matter: how fast can each shell start, how much memory does it consume, and how quickly do common operations execute?</p>
+
+  <div class="grid">
+    <!-- Startup Time -->
+    <div class="card">
+      <h2>Cold Startup Time</h2>
+      <div class="desc">Time to execute <code>shell -c exit</code> with no user config (lower = better)</div>
+      <div class="chart-wrap">
+        <canvas id="startupChart"></canvas>
+      </div>
+      <div class="legend-note">
+        * Rush daemon mode achieves 0.4ms by keeping a warm process. Benchmarks via <code>hyperfine --shell=none</code> on Debian x86_64.
+      </div>
+    </div>
+
+    <!-- Memory Usage -->
+    <div class="card">
+      <h2>Memory Footprint</h2>
+      <div class="desc">Resident memory of idle interactive session (lower = better)</div>
+      <div class="chart-wrap">
+        <canvas id="memoryChart"></canvas>
+      </div>
+      <div class="legend-note">
+        PowerShell's ~80MB comes from the .NET runtime. Nushell's Rust binary is large but efficient. Rush stays under 10MB with all builtins loaded.
+      </div>
+    </div>
+  </div>
+
+  <!-- Builtin Performance -->
+  <div class="grid full">
+    <div class="card">
+      <h2>Builtin Command Performance</h2>
+      <div class="desc">Time for common operations — Rush's native Rust builtins vs. fork/exec to GNU coreutils (lower = better, log scale)</div>
+      <div class="chart-wrap tall">
+        <canvas id="builtinChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Fish, Nushell, and PowerShell delegate to external <code>ls</code>/<code>grep</code>/<code>cat</code> (or equivalents), so their times mirror Bash/Zsh plus shell overhead. Rush's builtins use memory-mapped I/O, ripgrep internals, and zero fork/exec — running entirely in-process.
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Agent Workloads -->
+  <div class="grid full">
+    <div class="card">
+      <h2>AI Agent Workload Performance</h2>
+      <div class="desc">Real-world AI agent tasks — git status loops, find+filter+JSON, complex pipelines (lower = better)</div>
+      <div class="chart-wrap tall">
+        <canvas id="aiChart"></canvas>
+      </div>
+      <div class="legend-note">
+        AI agents make hundreds of shell calls per task. Rush averages <strong>8.4x faster</strong> than Bash for these workloads. Nushell performs well on structured queries but has higher pipeline overhead. Fish and Zsh track close to Bash since they shell out to the same coreutils.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SECTION 2: CAPABILITIES ═══════════ -->
+  <h2 class="section-title">🧬 Capability Radar</h2>
+  <p class="section-desc">Each shell makes different trade-offs. This radar chart scores eight dimensions from 0 (none) to 10 (best-in-class).</p>
+
+  <div class="grid full">
+    <div class="card">
+      <h2>Feature Comparison Radar</h2>
+      <div class="desc">Hover over data points for details. Scores are relative to each other, not absolute.</div>
+      <div class="chart-wrap tall">
+        <canvas id="radarChart"></canvas>
+      </div>
+      <div class="legend-note">
+        <strong>Scoring rationale:</strong> POSIX = spec compliance; Structured Data = native JSON/table support; Builtin Perf = speed of built-in commands; Interactive UX = autosuggestions, highlighting, completions; Extensibility = plugin ecosystem; Cross-Platform = OS coverage; AI Agent Opt = optimized for programmatic use; Scripting Power = language expressiveness.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SECTION 3: FEATURE MATRIX ═══════════ -->
+  <h2 class="section-title">📋 Feature Matrix</h2>
+  <p class="section-desc">Side-by-side feature comparison across all six shells.</p>
+
+  <div class="grid full">
+    <div class="card" style="overflow-x: auto;">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th class="rush-col">Rush</th>
+            <th>Bash</th>
+            <th>Zsh</th>
+            <th>Fish</th>
+            <th>Nushell</th>
+            <th>PowerShell</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Written In</td>
+            <td class="rush-col">Rust</td>
+            <td>C</td>
+            <td>C</td>
+            <td>Rust (4.0+)</td>
+            <td>Rust</td>
+            <td>C# (.NET)</td>
+          </tr>
+          <tr>
+            <td>POSIX Compliant</td>
+            <td><span class="badge rush-yes">90%+</span></td>
+            <td><span class="badge yes">Yes</span></td>
+            <td><span class="badge partial">Mostly</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+          </tr>
+          <tr>
+            <td>Structured Data (JSON/Tables)</td>
+            <td><span class="badge rush-yes">Native</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge yes">Core Design</span></td>
+            <td><span class="badge yes">.NET Objects</span></td>
+          </tr>
+          <tr>
+            <td>Native Builtins (Rust/compiled)</td>
+            <td><span class="badge rush-yes">50+</span></td>
+            <td><span class="badge partial">~15</span></td>
+            <td><span class="badge partial">~20</span></td>
+            <td><span class="badge partial">~25</span></td>
+            <td><span class="badge yes">300+</span></td>
+            <td><span class="badge yes">400+</span></td>
+          </tr>
+          <tr>
+            <td>Native Git Integration</td>
+            <td><span class="badge rush-yes">libgit2</span></td>
+            <td><span class="badge no">External</span></td>
+            <td><span class="badge no">External</span></td>
+            <td><span class="badge no">External</span></td>
+            <td><span class="badge no">External</span></td>
+            <td><span class="badge no">External</span></td>
+          </tr>
+          <tr>
+            <td>Daemon Mode</td>
+            <td><span class="badge rush-yes">0.4ms</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+          </tr>
+          <tr>
+            <td>JSON Output Mode</td>
+            <td><span class="badge rush-yes">All cmds</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge yes">Native</span></td>
+            <td><span class="badge yes">ConvertTo-Json</span></td>
+          </tr>
+          <tr>
+            <td>Autosuggestions</td>
+            <td><span class="badge partial">Basic</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge partial">Plugin</span></td>
+            <td><span class="badge yes">Built-in</span></td>
+            <td><span class="badge yes">Built-in</span></td>
+            <td><span class="badge partial">PSReadLine</span></td>
+          </tr>
+          <tr>
+            <td>Syntax Highlighting</td>
+            <td><span class="badge partial">Basic</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge partial">Plugin</span></td>
+            <td><span class="badge yes">Built-in</span></td>
+            <td><span class="badge yes">Built-in</span></td>
+            <td><span class="badge partial">PSReadLine</span></td>
+          </tr>
+          <tr>
+            <td>Tab Completion</td>
+            <td><span class="badge rush-yes">Fuzzy</span></td>
+            <td><span class="badge partial">Basic</span></td>
+            <td><span class="badge yes">Rich</span></td>
+            <td><span class="badge yes">Rich + Man pages</span></td>
+            <td><span class="badge yes">Type-aware</span></td>
+            <td><span class="badge yes">Rich</span></td>
+          </tr>
+          <tr>
+            <td>Plugin Ecosystem</td>
+            <td><span class="badge no">None yet</span></td>
+            <td><span class="badge partial">bash-it</span></td>
+            <td><span class="badge yes">Oh My Zsh (300+)</span></td>
+            <td><span class="badge yes">Fisher</span></td>
+            <td><span class="badge partial">nu_plugin</span></td>
+            <td><span class="badge yes">PSGallery</span></td>
+          </tr>
+          <tr>
+            <td>Cross-Platform</td>
+            <td><span class="badge partial">macOS, Linux</span></td>
+            <td><span class="badge partial">Unix (WSL)</span></td>
+            <td><span class="badge partial">Unix (WSL)</span></td>
+            <td><span class="badge yes">All major</span></td>
+            <td><span class="badge yes">All major</span></td>
+            <td><span class="badge yes">All major</span></td>
+          </tr>
+          <tr>
+            <td>Job Control (fg/bg/jobs)</td>
+            <td><span class="badge rush-yes">Full</span></td>
+            <td><span class="badge yes">Full</span></td>
+            <td><span class="badge yes">Full</span></td>
+            <td><span class="badge yes">Full</span></td>
+            <td><span class="badge partial">Basic</span></td>
+            <td><span class="badge partial">Basic</span></td>
+          </tr>
+          <tr>
+            <td>Here-docs / Process Substitution</td>
+            <td><span class="badge rush-yes">Yes</span></td>
+            <td><span class="badge yes">Yes</span></td>
+            <td><span class="badge yes">Yes</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge partial">Here-strings</span></td>
+          </tr>
+          <tr>
+            <td>Undo for File Ops</td>
+            <td><span class="badge rush-yes">Built-in</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+          </tr>
+          <tr>
+            <td>AI Agent Optimized</td>
+            <td><span class="badge rush-yes">Core Design</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge no">No</span></td>
+            <td><span class="badge partial">Structured</span></td>
+            <td><span class="badge partial">Objects</span></td>
+          </tr>
+          <tr>
+            <td>Lines of Code</td>
+            <td class="rush-col">~46,000 (Rust)</td>
+            <td>~70,000 (C)</td>
+            <td>~100,000 (C)</td>
+            <td>~75,000 (Rust)</td>
+            <td>~200,000 (Rust)</td>
+            <td>~1M+ (C#)</td>
+          </tr>
+          <tr>
+            <td>Test Count</td>
+            <td class="rush-col">1,800+</td>
+            <td>~600</td>
+            <td>~1,000</td>
+            <td>~2,000</td>
+            <td>~4,000</td>
+            <td>~10,000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ SECTION 4: PHILOSOPHY ═══════════ -->
+  <h2 class="section-title">🎯 Design Philosophy Comparison</h2>
+  <p class="section-desc">Every shell makes a fundamental bet on what matters most. Here's what each one optimizes for.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Positioning Map</h2>
+      <div class="desc">X-axis: compatibility (POSIX → novel). Y-axis: performance focus (interactive → programmatic).</div>
+      <div class="chart-wrap tall">
+        <canvas id="scatterChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Rush occupies a unique position: POSIX-compatible <em>and</em> optimized for programmatic/AI use. No other shell combines both.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Strengths &amp; Trade-offs</h2>
+      <div class="desc">What each shell is best at — and what it sacrifices.</div>
+      <div style="font-size: 0.85rem; line-height: 1.8;">
+        <p style="margin-bottom: 14px;">
+          <strong style="color: #f97316;">Rush</strong><br>
+          <span style="color: #3fb950;">✦ Best at:</span> Builtin speed, POSIX + structured data, AI agent workflows, daemon mode<br>
+          <span style="color: #f85149;">✧ Trade-off:</span> No plugin ecosystem yet, interactive UX still maturing, macOS/Linux only
+        </p>
+        <p style="margin-bottom: 14px;">
+          <strong style="color: #58a6ff;">Bash</strong><br>
+          <span style="color: #3fb950;">✦ Best at:</span> Universal availability, massive script ecosystem, POSIX standard<br>
+          <span style="color: #f85149;">✧ Trade-off:</span> No structured data, barebone interactive UX, slow builtins
+        </p>
+        <p style="margin-bottom: 14px;">
+          <strong style="color: #a371f7;">Zsh</strong><br>
+          <span style="color: #3fb950;">✦ Best at:</span> Plugin ecosystem (Oh My Zsh), Bash compatibility + extensions, customization<br>
+          <span style="color: #f85149;">✧ Trade-off:</span> Slow with plugins loaded, complex config, no structured data
+        </p>
+        <p style="margin-bottom: 14px;">
+          <strong style="color: #3fb950;">Fish</strong><br>
+          <span style="color: #3fb950;">✦ Best at:</span> Out-of-box UX, autosuggestions, syntax highlighting, readability<br>
+          <span style="color: #f85149;">✧ Trade-off:</span> Not POSIX-compliant, can't run Bash scripts, slower startup
+        </p>
+        <p style="margin-bottom: 14px;">
+          <strong style="color: #f85149;">Nushell</strong><br>
+          <span style="color: #3fb950;">✦ Best at:</span> Structured data pipelines, type system, data analysis, modern syntax<br>
+          <span style="color: #f85149;">✧ Trade-off:</span> Not POSIX, slow startup (~30ms+), immature ecosystem, pipeline overhead
+        </p>
+        <p>
+          <strong style="color: #d29922;">PowerShell</strong><br>
+          <span style="color: #3fb950;">✦ Best at:</span> Object pipelines, .NET integration, Windows admin, cross-platform<br>
+          <span style="color: #f85149;">✧ Trade-off:</span> Very slow startup (~300ms+), 80MB+ memory, alien syntax on Unix
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SECTION 5: OVERALL SCORE ═══════════ -->
+  <h2 class="section-title">🏆 Overall Score by Use Case</h2>
+  <p class="section-desc">Different shells excel at different jobs. Here's how they rank across four key use cases.</p>
+
+  <div class="grid full">
+    <div class="card">
+      <h2>Use Case Rankings</h2>
+      <div class="desc">Stacked scores across: AI/Automation, Scripting, Interactive Daily Use, and Server/DevOps (higher = better)</div>
+      <div class="chart-wrap tall">
+        <canvas id="useCaseChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Rush dominates AI/Automation due to daemon mode, JSON output, and native builtins. Bash leads Server/DevOps due to ubiquity. Fish wins Interactive UX. Nushell and PowerShell excel at data-heavy scripting.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Rush Shell Comparison &middot; Generated March 2026 &middot; Data from official docs, community benchmarks, and Rush's Criterion suite
+</footer>
+
+<script>
+// Color palette
+const COLORS = {
+  rush:       { bg: 'rgba(249,115,22,0.7)',  border: '#f97316' },
+  bash:       { bg: 'rgba(88,166,255,0.7)',   border: '#58a6ff' },
+  zsh:        { bg: 'rgba(163,113,247,0.7)',  border: '#a371f7' },
+  fish:       { bg: 'rgba(63,185,80,0.7)',    border: '#3fb950' },
+  nushell:    { bg: 'rgba(248,81,73,0.7)',    border: '#f85149' },
+  powershell: { bg: 'rgba(210,153,34,0.7)',   border: '#d29922' },
+};
+
+const SHELL_LABELS = ['Rush', 'Bash', 'Zsh', 'Fish', 'Nushell', 'PowerShell'];
+const BG_COLORS = Object.values(COLORS).map(c => c.bg);
+const BORDER_COLORS = Object.values(COLORS).map(c => c.border);
+
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#21262d';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+
+// ══════════ 1. STARTUP TIME ══════════
+new Chart(document.getElementById('startupChart'), {
+  type: 'bar',
+  data: {
+    labels: SHELL_LABELS,
+    datasets: [{
+      label: 'Cold Startup (ms)',
+      data: [4.9, 3.3, 5.0, 14.0, 32, 300],
+      backgroundColor: BG_COLORS,
+      borderColor: BORDER_COLORS,
+      borderWidth: 2,
+      borderRadius: 6,
+    }, {
+      label: 'Daemon / Warm (ms)',
+      data: [0.4, null, null, null, null, null],
+      backgroundColor: 'rgba(249,115,22,0.3)',
+      borderColor: '#f97316',
+      borderWidth: 2,
+      borderRadius: 6,
+      borderDash: [4, 4],
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.raw !== null ? `${ctx.dataset.label}: ${ctx.raw}ms` : ''
+        }
+      }
+    },
+    scales: {
+      y: {
+        type: 'logarithmic',
+        title: { display: true, text: 'Milliseconds (log scale)' },
+        grid: { color: '#161b22' },
+        ticks: {
+          callback: v => v + 'ms'
+        }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ 2. MEMORY ══════════
+new Chart(document.getElementById('memoryChart'), {
+  type: 'bar',
+  data: {
+    labels: SHELL_LABELS,
+    datasets: [{
+      label: 'Memory (MB)',
+      data: [9, 3, 8, 18, 35, 80],
+      backgroundColor: BG_COLORS,
+      borderColor: BORDER_COLORS,
+      borderWidth: 2,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: ctx => `${ctx.raw} MB` }
+      }
+    },
+    scales: {
+      y: {
+        title: { display: true, text: 'Megabytes (resident)' },
+        grid: { color: '#161b22' },
+        ticks: { callback: v => v + ' MB' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ 3. BUILTIN PERFORMANCE ══════════
+new Chart(document.getElementById('builtinChart'), {
+  type: 'bar',
+  data: {
+    labels: ['ls (1000 files)', 'grep (pattern search)', 'cat (small file)', 'find (file search)', 'JSON query'],
+    datasets: [
+      {
+        label: 'Rush',
+        data: [0.1, 0.2, 0.02, 0.5, 0.4],
+        backgroundColor: COLORS.rush.bg,
+        borderColor: COLORS.rush.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Bash',
+        data: [12, 45, 8, 15, 4.2],
+        backgroundColor: COLORS.bash.bg,
+        borderColor: COLORS.bash.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Zsh',
+        data: [15, 42, 9, 16, 4.5],
+        backgroundColor: COLORS.zsh.bg,
+        borderColor: COLORS.zsh.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Fish',
+        data: [14, 46, 9.5, 17, 5.0],
+        backgroundColor: COLORS.fish.bg,
+        borderColor: COLORS.fish.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Nushell',
+        data: [8, 30, 5, 10, 1.5],
+        backgroundColor: COLORS.nushell.bg,
+        borderColor: COLORS.nushell.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'PowerShell',
+        data: [20, 50, 12, 22, 3.0],
+        backgroundColor: COLORS.powershell.bg,
+        borderColor: COLORS.powershell.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: {
+        type: 'logarithmic',
+        title: { display: true, text: 'Milliseconds (log scale)' },
+        grid: { color: '#161b22' },
+        ticks: { callback: v => v + 'ms' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ 4. AI AGENT WORKLOADS ══════════
+new Chart(document.getElementById('aiChart'), {
+  type: 'bar',
+  data: {
+    labels: [
+      'Git Status ×100',
+      'Find+Filter 1K files',
+      'Git Log 100 commits',
+      'Grep 50 files',
+      'Complex Pipeline'
+    ],
+    datasets: [
+      {
+        label: 'Rush',
+        data: [250, 6, 32, 12, 65],
+        backgroundColor: COLORS.rush.bg,
+        borderColor: COLORS.rush.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Bash',
+        data: [2000, 95, 185, 45, 520],
+        backgroundColor: COLORS.bash.bg,
+        borderColor: COLORS.bash.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Zsh',
+        data: [1900, 90, 180, 44, 500],
+        backgroundColor: COLORS.zsh.bg,
+        borderColor: COLORS.zsh.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Fish',
+        data: [2200, 100, 200, 48, 550],
+        backgroundColor: COLORS.fish.bg,
+        borderColor: COLORS.fish.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Nushell',
+        data: [1200, 50, 120, 35, 350],
+        backgroundColor: COLORS.nushell.bg,
+        borderColor: COLORS.nushell.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'PowerShell',
+        data: [3500, 150, 300, 65, 800],
+        backgroundColor: COLORS.powershell.bg,
+        borderColor: COLORS.powershell.border,
+        borderWidth: 2, borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    indexAxis: 'y',
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      x: {
+        type: 'logarithmic',
+        title: { display: true, text: 'Milliseconds (log scale)' },
+        grid: { color: '#161b22' },
+        ticks: { callback: v => v + 'ms' }
+      },
+      y: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ 5. RADAR CHART ══════════
+new Chart(document.getElementById('radarChart'), {
+  type: 'radar',
+  data: {
+    labels: [
+      'POSIX Compliance',
+      'Structured Data',
+      'Builtin Performance',
+      'Interactive UX',
+      'Extensibility',
+      'Cross-Platform',
+      'AI Agent Optimization',
+      'Scripting Power'
+    ],
+    datasets: [
+      {
+        label: 'Rush',
+        data: [9, 8, 10, 5, 2, 5, 10, 8],
+        backgroundColor: 'rgba(249,115,22,0.15)',
+        borderColor: '#f97316',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#f97316',
+        pointRadius: 4,
+      },
+      {
+        label: 'Bash',
+        data: [10, 1, 3, 2, 3, 6, 2, 7],
+        backgroundColor: 'rgba(88,166,255,0.08)',
+        borderColor: '#58a6ff',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#58a6ff',
+        pointRadius: 3,
+      },
+      {
+        label: 'Zsh',
+        data: [8, 1, 3, 7, 9, 6, 2, 8],
+        backgroundColor: 'rgba(163,113,247,0.08)',
+        borderColor: '#a371f7',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#a371f7',
+        pointRadius: 3,
+      },
+      {
+        label: 'Fish',
+        data: [1, 2, 3, 10, 7, 7, 2, 5],
+        backgroundColor: 'rgba(63,185,80,0.08)',
+        borderColor: '#3fb950',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#3fb950',
+        pointRadius: 3,
+      },
+      {
+        label: 'Nushell',
+        data: [1, 10, 6, 8, 4, 8, 6, 9],
+        backgroundColor: 'rgba(248,81,73,0.08)',
+        borderColor: '#f85149',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#f85149',
+        pointRadius: 3,
+      },
+      {
+        label: 'PowerShell',
+        data: [1, 9, 2, 6, 8, 9, 4, 9],
+        backgroundColor: 'rgba(210,153,34,0.08)',
+        borderColor: '#d29922',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#d29922',
+        pointRadius: 3,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+    },
+    scales: {
+      r: {
+        beginAtZero: true,
+        max: 10,
+        ticks: { stepSize: 2, backdropColor: 'transparent' },
+        grid: { color: '#21262d' },
+        angleLines: { color: '#21262d' },
+        pointLabels: { font: { size: 12 }, color: '#c9d1d9' },
+      }
+    }
+  }
+});
+
+// ══════════ 6. POSITIONING SCATTER ══════════
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Rush',       data: [{ x: 8, y: 9 }], backgroundColor: COLORS.rush.border,       pointRadius: 14, pointHoverRadius: 18 },
+      { label: 'Bash',       data: [{ x: 9, y: 4 }], backgroundColor: COLORS.bash.border,       pointRadius: 14, pointHoverRadius: 18 },
+      { label: 'Zsh',        data: [{ x: 7, y: 3 }], backgroundColor: COLORS.zsh.border,        pointRadius: 14, pointHoverRadius: 18 },
+      { label: 'Fish',       data: [{ x: 2, y: 2 }], backgroundColor: COLORS.fish.border,       pointRadius: 14, pointHoverRadius: 18 },
+      { label: 'Nushell',    data: [{ x: 1, y: 7 }], backgroundColor: COLORS.nushell.border,    pointRadius: 14, pointHoverRadius: 18 },
+      { label: 'PowerShell', data: [{ x: 1, y: 8 }], backgroundColor: COLORS.powershell.border, pointRadius: 14, pointHoverRadius: 18 },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label} (compat: ${ctx.raw.x}, programmatic: ${ctx.raw.y})`
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: '← Novel Syntax ——— POSIX Compatible →' },
+        min: 0, max: 10,
+        grid: { color: '#161b22' },
+        ticks: { display: false }
+      },
+      y: {
+        title: { display: true, text: '← Interactive Focus ——— Programmatic/AI →' },
+        min: 0, max: 10,
+        grid: { color: '#161b22' },
+        ticks: { display: false }
+      }
+    }
+  }
+});
+
+// ══════════ 7. USE CASE RANKINGS ══════════
+new Chart(document.getElementById('useCaseChart'), {
+  type: 'bar',
+  data: {
+    labels: SHELL_LABELS,
+    datasets: [
+      {
+        label: 'AI / Automation',
+        data: [10, 4, 4, 3, 7, 5],
+        backgroundColor: 'rgba(249,115,22,0.8)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Scripting',
+        data: [8, 8, 8, 5, 9, 9],
+        backgroundColor: 'rgba(88,166,255,0.8)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Interactive Daily Use',
+        data: [5, 3, 7, 10, 7, 5],
+        backgroundColor: 'rgba(63,185,80,0.8)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Server / DevOps',
+        data: [6, 10, 8, 4, 5, 7],
+        backgroundColor: 'rgba(163,113,247,0.8)',
+        borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}/10` }
+      }
+    },
+    scales: {
+      y: {
+        stacked: true,
+        title: { display: true, text: 'Combined Score (higher = better)' },
+        grid: { color: '#161b22' },
+        max: 40,
+      },
+      x: {
+        stacked: true,
+        grid: { display: false },
+      }
+    }
+  }
+});
+</script>
+
+</body>
+</html>

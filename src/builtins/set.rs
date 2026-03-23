@@ -180,7 +180,12 @@ mod tests {
 
         // Test setting positional parameters with --
         let result = builtin_set(
-            &["--".to_string(), "one".to_string(), "two".to_string(), "three".to_string()],
+            &[
+                "--".to_string(),
+                "one".to_string(),
+                "two".to_string(),
+                "three".to_string(),
+            ],
             &mut runtime,
         );
         assert!(result.is_ok());
@@ -214,7 +219,12 @@ mod tests {
 
         // Test setting options AND positional parameters
         let result = builtin_set(
-            &["-e".to_string(), "--".to_string(), "arg1".to_string(), "arg2".to_string()],
+            &[
+                "-e".to_string(),
+                "--".to_string(),
+                "arg1".to_string(),
+                "arg2".to_string(),
+            ],
             &mut runtime,
         );
         assert!(result.is_ok());

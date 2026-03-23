@@ -173,7 +173,10 @@ mod tests {
         // Try to reassign - should error
         let result = builtin_readonly(&["VAR=newvalue".to_string()], &mut runtime);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("readonly variable"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("readonly variable"));
 
         // Value should not have changed
         assert_eq!(runtime.get_variable("VAR"), Some("value".to_string()));
@@ -236,16 +239,19 @@ mod tests {
 
         // Invalid names
         let invalid_names = vec![
-            "123VAR",      // starts with number
-            "VAR-NAME",    // contains hyphen
-            "VAR NAME",    // contains space
-            "",            // empty
+            "123VAR",   // starts with number
+            "VAR-NAME", // contains hyphen
+            "VAR NAME", // contains space
+            "",         // empty
         ];
 
         for name in invalid_names {
             let result = builtin_readonly(&[name.to_string()], &mut runtime);
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("not a valid identifier"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("not a valid identifier"));
         }
     }
 

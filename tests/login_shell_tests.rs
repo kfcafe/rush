@@ -42,7 +42,10 @@ fn test_dot_builtin() {
         .unwrap();
 
     assert!(output.status.success(), "dot command should succeed");
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "hello_from_dot");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "hello_from_dot"
+    );
 }
 
 #[test]
@@ -79,7 +82,10 @@ fn test_source_with_tilde() {
     fs::remove_file(test_file).ok();
 
     assert!(output.status.success());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "tilde_success");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "tilde_success"
+    );
 }
 
 #[test]

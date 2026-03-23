@@ -9,14 +9,14 @@ use std::env;
 /// Banner display style
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BannerStyle {
-    /// Block ASCII art (default)
-    #[default]
+    /// Block ASCII art
     Block,
     /// Single line
     Line,
     /// Minimal (version only)
     Minimal,
     /// No banner
+    #[default]
     None,
 }
 
@@ -121,7 +121,7 @@ pub struct BannerConfig {
 impl Default for BannerConfig {
     fn default() -> Self {
         Self {
-            style: BannerStyle::Block,
+            style: BannerStyle::None,
             color: BannerColor::Cyan,
             show: BannerShow::Always,
             stats: Vec::new(),
@@ -145,11 +145,7 @@ impl BannerConfig {
             .unwrap_or_default();
 
         let stats = env::var("RUSH_BANNER_STATS")
-            .map(|s| {
-                s.split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect()
-            })
+            .map(|s| s.split_whitespace().map(|s| s.to_string()).collect())
             .unwrap_or_default();
 
         Self {
@@ -236,7 +232,9 @@ fn display_stats(config: &BannerConfig, stats: &StatsData) {
     let mut stat_values: Vec<(&str, String)> = Vec::new();
 
     for stat_name in &config.stats {
-        let value = stats.builtin.get(stat_name)
+        let value = stats
+            .builtin
+            .get(stat_name)
             .or_else(|| stats.custom.get(stat_name))
             .map(|s| s.to_string())
             .unwrap_or_else(|| "--".to_string());
@@ -248,7 +246,7 @@ fn display_stats(config: &BannerConfig, stats: &StatsData) {
     let mut i = 0;
     while i < stat_values.len() {
         let (name1, val1) = &stat_values[i];
-        
+
         if i + 1 < stat_values.len() {
             let (name2, val2) = &stat_values[i + 1];
             // Two column format with padding
@@ -268,7 +266,7 @@ pub fn increment_rush_level() {
         .ok()
         .and_then(|v| v.parse::<i32>().ok())
         .unwrap_or(0);
-    
+
     env::set_var("RUSH_LEVEL", (level + 1).to_string());
 }
 

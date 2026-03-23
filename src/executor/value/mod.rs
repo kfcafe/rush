@@ -77,12 +77,11 @@ impl Value {
             Value::Float(f) => f.to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Null => String::new(),
-            Value::List(items) => {
-                items.iter()
-                    .map(|v| v.to_text())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            }
+            Value::List(items) => items
+                .iter()
+                .map(|v| v.to_text())
+                .collect::<Vec<_>>()
+                .join("\n"),
             Value::Record(map) => {
                 // Render as JSON for records (most portable)
                 serde_json::to_string_pretty(map).unwrap_or_default()
@@ -101,16 +100,14 @@ impl Value {
 
     /// Convert value to JSON string
     pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|e| {
-            format!("{{\"error\": \"JSON serialization failed: {}\"}}", e)
-        })
+        serde_json::to_string(self)
+            .unwrap_or_else(|e| format!("{{\"error\": \"JSON serialization failed: {}\"}}", e))
     }
 
     /// Convert value to pretty-printed JSON string
     pub fn to_json_pretty(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_else(|e| {
-            format!("{{\"error\": \"JSON serialization failed: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(self)
+            .unwrap_or_else(|e| format!("{{\"error\": \"JSON serialization failed: {}\"}}", e))
     }
 
     /// Try to parse JSON string into a Value
@@ -131,12 +128,10 @@ impl Table {
 
         // Rows
         for row in &self.rows {
-            let values: Vec<String> = self.columns.iter()
-                .map(|col| {
-                    row.get(col)
-                        .map(|v| v.to_text())
-                        .unwrap_or_default()
-                })
+            let values: Vec<String> = self
+                .columns
+                .iter()
+                .map(|col| row.get(col).map(|v| v.to_text()).unwrap_or_default())
                 .collect();
             output.push_str(&values.join("\t"));
             output.push('\n');
@@ -155,11 +150,11 @@ impl Table {
 
         // Rows
         for row in &self.rows {
-            let values: Vec<String> = self.columns.iter()
+            let values: Vec<String> = self
+                .columns
+                .iter()
                 .map(|col| {
-                    let val = row.get(col)
-                        .map(|v| v.to_text())
-                        .unwrap_or_default();
+                    let val = row.get(col).map(|v| v.to_text()).unwrap_or_default();
                     // Escape commas and quotes
                     if val.contains(',') || val.contains('"') {
                         format!("\"{}\"", val.replace('"', "\"\""))
@@ -235,11 +230,7 @@ mod tests {
 
     #[test]
     fn test_value_to_text_list() {
-        let list = Value::List(vec![
-            Value::Int(1),
-            Value::Int(2),
-            Value::Int(3),
-        ]);
+        let list = Value::List(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
         assert_eq!(list.to_text(), "1\n2\n3");
     }
 

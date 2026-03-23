@@ -1,9 +1,9 @@
 use crate::executor::ExecutionResult;
-use crate::git::{GitContext, FileStatusType};
+use crate::git::{FileStatusType, GitContext};
 use crate::runtime::Runtime;
 use anyhow::Result;
 use nu_ansi_term::Color;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 struct GitStatusOutput {
@@ -63,7 +63,7 @@ pub fn builtin_git_status(args: &[String], runtime: &mut Runtime) -> Result<Exec
     }
 
     // Parse arguments
-    let json_output = args.iter().any(|arg| arg == "--json");
+    let json_output = args.iter().any(|arg| arg == "--json") || runtime.agent_mode();
 
     if json_output {
         return output_json(&git_ctx);
@@ -120,7 +120,12 @@ pub fn builtin_git_status(args: &[String], runtime: &mut Runtime) -> Result<Exec
 
     // Staged changes
     if !staged.is_empty() {
-        output.push_str(&Color::Green.bold().paint("Changes to be committed:\n").to_string());
+        output.push_str(
+            &Color::Green
+                .bold()
+                .paint("Changes to be committed:\n")
+                .to_string(),
+        );
         output.push_str("  (use \"git restore --staged <file>...\" to unstage)\n\n");
         for file in &staged {
             let status_text = match file.status {
@@ -130,7 +135,8 @@ pub fn builtin_git_status(args: &[String], runtime: &mut Runtime) -> Result<Exec
                 FileStatusType::Renamed => "renamed:",
                 FileStatusType::Typechange => "typechange:",
             };
-            output.push_str(&format!("\t{} {}\n",
+            output.push_str(&format!(
+                "\t{} {}\n",
                 Color::Green.paint(status_text),
                 Color::Green.paint(file.path.display().to_string())
             ));
@@ -142,7 +148,9 @@ pub fn builtin_git_status(args: &[String], runtime: &mut Runtime) -> Result<Exec
     if !unstaged.is_empty() {
         output.push_str("Changes not staged for commit:\n");
         output.push_str("  (use \"git add <file>...\" to update what will be committed)\n");
-        output.push_str("  (use \"git restore <file>...\" to discard changes in working directory)\n\n");
+        output.push_str(
+            "  (use \"git restore <file>...\" to discard changes in working directory)\n\n",
+        );
         for file in &unstaged {
             let status_text = match file.status {
                 FileStatusType::Modified => "modified:",
@@ -151,7 +159,8 @@ pub fn builtin_git_status(args: &[String], runtime: &mut Runtime) -> Result<Exec
                 FileStatusType::Renamed => "renamed:",
                 FileStatusType::Typechange => "typechange:",
             };
-            output.push_str(&format!("\t{} {}\n",
+            output.push_str(&format!(
+                "\t{} {}\n",
                 Color::Red.paint(status_text),
                 Color::Red.paint(file.path.display().to_string())
             ));
@@ -164,7 +173,8 @@ pub fn builtin_git_status(args: &[String], runtime: &mut Runtime) -> Result<Exec
         output.push_str("Untracked files:\n");
         output.push_str("  (use \"git add <file>...\" to include in what will be committed)\n\n");
         for file in &untracked {
-            output.push_str(&format!("\t{}\n",
+            output.push_str(&format!(
+                "\t{}\n",
                 Color::Red.paint(file.display().to_string())
             ));
         }
@@ -209,15 +219,11 @@ fn output_json(git_ctx: &GitContext) -> Result<ExecutionResult> {
         })
         .collect();
 
-    let untracked_strings: Vec<String> = untracked
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect();
+    let untracked_strings: Vec<String> =
+        untracked.iter().map(|p| p.display().to_string()).collect();
 
-    let conflicted_strings: Vec<String> = conflicted
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect();
+    let conflicted_strings: Vec<String> =
+        conflicted.iter().map(|p| p.display().to_string()).collect();
 
     let output = GitStatusOutput {
         branch,
@@ -300,7 +306,9 @@ mod tests {
         let result = builtin_git_status(&[], &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);
-        assert!(result.stdout().contains("nothing to commit, working tree clean"));
+        assert!(result
+            .stdout()
+            .contains("nothing to commit, working tree clean"));
     }
 
     #[test]
@@ -470,7 +478,10 @@ mod tests {
         // Verify file entries
         assert_eq!(json.staged[0].path, "staged.txt");
         assert_eq!(json.staged[0].status, "added");
-        assert!(json.unstaged.iter().any(|f| f.path == "README.md" && f.status == "modified"));
+        assert!(json
+            .unstaged
+            .iter()
+            .any(|f| f.path == "README.md" && f.status == "modified"));
         assert!(json.untracked.contains(&"untracked.txt".to_string()));
     }
 }

@@ -97,8 +97,11 @@ fn test_whitespace_trimming() {
     let mut executor = Executor::new();
 
     // Test that trailing newlines are trimmed
-    let tokens = Lexer::tokenize(r#"echo $(echo "line1
-line2")"#).unwrap();
+    let tokens = Lexer::tokenize(
+        r#"echo $(echo "line1
+line2")"#,
+    )
+    .unwrap();
     let mut parser = Parser::new(tokens);
     let statements = parser.parse().unwrap();
     let result = executor.execute(statements).unwrap();
@@ -320,7 +323,11 @@ fn test_subst_with_pwd() {
     let result = executor.execute(statements).unwrap();
 
     let output = result.stdout().trim().to_string();
-    assert!(output.starts_with("dir: /"), "Expected 'dir: /' prefix, got: {}", output);
+    assert!(
+        output.starts_with("dir: /"),
+        "Expected 'dir: /' prefix, got: {}",
+        output
+    );
 }
 
 #[test]

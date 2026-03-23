@@ -1,11 +1,11 @@
 // Project and Git context detection
 // Provides smart context awareness for project type detection and Git integration
 
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 #[cfg(feature = "git-builtins")]
 use crate::git::GitContext;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 /// All supported project types with their marker files
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -217,7 +217,8 @@ impl Context {
         if let Some((root, project_type)) = ProjectType::find_project_root(path) {
             self.project_type = project_type.clone();
             self.project_root = Some(root.clone());
-            self.cache.insert(path.to_path_buf(), project_type.clone(), root);
+            self.cache
+                .insert(path.to_path_buf(), project_type.clone(), root);
             project_type
         } else {
             self.project_type = ProjectType::Unknown;
@@ -434,27 +435,51 @@ mod tests {
     #[test]
     fn test_route_command_rust() {
         let project = ProjectType::Rust;
-        assert_eq!(project.route_command("test"), Some("cargo test".to_string()));
-        assert_eq!(project.route_command("build"), Some("cargo build".to_string()));
+        assert_eq!(
+            project.route_command("test"),
+            Some("cargo test".to_string())
+        );
+        assert_eq!(
+            project.route_command("build"),
+            Some("cargo build".to_string())
+        );
         assert_eq!(project.route_command("run"), Some("cargo run".to_string()));
-        assert_eq!(project.route_command("install"), Some("cargo install".to_string()));
-        assert_eq!(project.route_command("format"), Some("cargo fmt".to_string()));
-        assert_eq!(project.route_command("lint"), Some("cargo clippy".to_string()));
+        assert_eq!(
+            project.route_command("install"),
+            Some("cargo install".to_string())
+        );
+        assert_eq!(
+            project.route_command("format"),
+            Some("cargo fmt".to_string())
+        );
+        assert_eq!(
+            project.route_command("lint"),
+            Some("cargo clippy".to_string())
+        );
     }
 
     #[test]
     fn test_route_command_node() {
         let project = ProjectType::Node;
         assert_eq!(project.route_command("test"), Some("npm test".to_string()));
-        assert_eq!(project.route_command("build"), Some("npm run build".to_string()));
-        assert_eq!(project.route_command("install"), Some("npm install".to_string()));
+        assert_eq!(
+            project.route_command("build"),
+            Some("npm run build".to_string())
+        );
+        assert_eq!(
+            project.route_command("install"),
+            Some("npm install".to_string())
+        );
     }
 
     #[test]
     fn test_route_command_python() {
         let project = ProjectType::Python;
         assert_eq!(project.route_command("test"), Some("pytest".to_string()));
-        assert_eq!(project.route_command("install"), Some("pip install".to_string()));
+        assert_eq!(
+            project.route_command("install"),
+            Some("pip install".to_string())
+        );
         assert_eq!(project.route_command("format"), Some("black .".to_string()));
     }
 
@@ -497,7 +522,10 @@ mod tests {
         let ctx = Context::detect(temp_dir.path());
 
         assert_eq!(ctx.route_command("test"), Some("npm test".to_string()));
-        assert_eq!(ctx.route_command("build"), Some("npm run build".to_string()));
+        assert_eq!(
+            ctx.route_command("build"),
+            Some("npm run build".to_string())
+        );
     }
 
     #[test]

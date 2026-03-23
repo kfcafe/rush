@@ -1,9 +1,9 @@
-use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use strsim::jaro_winkler;
-use std::path::{Path, PathBuf};
+use fuzzy_matcher::FuzzyMatcher;
 use std::env;
 use std::fs;
+use std::path::{Path, PathBuf};
+use strsim::jaro_winkler;
 
 /// Configuration for command suggestion behavior
 #[derive(Debug, Clone)]
@@ -65,12 +65,14 @@ impl SuggestionConfig {
 
         // RUSH_SUGGEST_HISTORY
         if let Ok(val) = env::var("RUSH_SUGGEST_HISTORY") {
-            config.use_history = !matches!(val.to_lowercase().as_str(), "0" | "false" | "no" | "off");
+            config.use_history =
+                !matches!(val.to_lowercase().as_str(), "0" | "false" | "no" | "off");
         }
 
         // RUSH_SUGGEST_CONTEXT
         if let Ok(val) = env::var("RUSH_SUGGEST_CONTEXT") {
-            config.use_context = !matches!(val.to_lowercase().as_str(), "0" | "false" | "no" | "off");
+            config.use_context =
+                !matches!(val.to_lowercase().as_str(), "0" | "false" | "no" | "off");
         }
 
         config
@@ -261,7 +263,7 @@ impl Corrector {
 
         // Start with base suggestions from builtins, aliases, and PATH
         let mut all_suggestions = self.suggest_command_with_aliases(input, builtins, aliases);
-        let mut seen: std::collections::HashSet<String> = 
+        let mut seen: std::collections::HashSet<String> =
             all_suggestions.iter().map(|s| s.text.clone()).collect();
 
         // Add history-based suggestions if enabled
@@ -269,7 +271,7 @@ impl Corrector {
             for cmd in history_commands {
                 // Extract the command name (first word)
                 let cmd_name = cmd.split_whitespace().next().unwrap_or(cmd);
-                
+
                 if seen.contains(cmd_name) {
                     continue;
                 }
@@ -299,7 +301,7 @@ impl Corrector {
 
         // Re-sort by score after adding history and context suggestions
         all_suggestions.sort_by(|a, b| b.score.cmp(&a.score));
-        
+
         // Take top N based on config
         all_suggestions.truncate(self.config.max_suggestions);
         all_suggestions
@@ -314,7 +316,7 @@ impl Corrector {
         let mut suggestions = Vec::new();
 
         // Check if we're in a git repository
-        let is_git_repo = current_dir.join(".git").exists() 
+        let is_git_repo = current_dir.join(".git").exists()
             || Self::find_ancestor_with(current_dir, ".git").is_some();
 
         // Check if we're in a Rust/Cargo project
@@ -376,9 +378,7 @@ impl Corrector {
 
         // Get the parent directory and file name
         let (search_dir, target_name) = if let Some(parent) = input.parent() {
-            let name = input.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let name = input.file_name().and_then(|n| n.to_str()).unwrap_or("");
             (parent, name)
         } else {
             (Path::new("."), input.to_str().unwrap_or(""))
@@ -480,15 +480,61 @@ impl Corrector {
         }
 
         let git_subcommands = [
-            "add", "am", "archive", "bisect", "blame", "branch", "bundle",
-            "checkout", "cherry", "cherry-pick", "citool", "clean", "clone",
-            "commit", "config", "describe", "diff", "difftool", "fetch",
-            "format-patch", "gc", "grep", "gui", "help", "init", "instaweb",
-            "log", "merge", "mergetool", "mv", "notes", "pull", "push",
-            "range-diff", "rebase", "reflog", "remote", "repack", "replace",
-            "request-pull", "reset", "restore", "revert", "rm", "send-email",
-            "shortlog", "show", "show-branch", "sparse-checkout", "stash",
-            "status", "submodule", "switch", "tag", "worktree",
+            "add",
+            "am",
+            "archive",
+            "bisect",
+            "blame",
+            "branch",
+            "bundle",
+            "checkout",
+            "cherry",
+            "cherry-pick",
+            "citool",
+            "clean",
+            "clone",
+            "commit",
+            "config",
+            "describe",
+            "diff",
+            "difftool",
+            "fetch",
+            "format-patch",
+            "gc",
+            "grep",
+            "gui",
+            "help",
+            "init",
+            "instaweb",
+            "log",
+            "merge",
+            "mergetool",
+            "mv",
+            "notes",
+            "pull",
+            "push",
+            "range-diff",
+            "rebase",
+            "reflog",
+            "remote",
+            "repack",
+            "replace",
+            "request-pull",
+            "reset",
+            "restore",
+            "revert",
+            "rm",
+            "send-email",
+            "shortlog",
+            "show",
+            "show-branch",
+            "sparse-checkout",
+            "stash",
+            "status",
+            "submodule",
+            "switch",
+            "tag",
+            "worktree",
         ];
 
         let mut suggestions = Vec::new();
@@ -577,11 +623,7 @@ mod tests {
     #[test]
     fn test_command_suggestion_multiple() {
         let corrector = Corrector::new();
-        let builtins = vec![
-            "grep".to_string(),
-            "git".to_string(),
-            "get".to_string(),
-        ];
+        let builtins = vec!["grep".to_string(), "git".to_string(), "get".to_string()];
 
         let suggestions = corrector.suggest_command("gre", &builtins);
         assert!(!suggestions.is_empty());
@@ -607,8 +649,11 @@ mod tests {
 
         // If src exists, we should find it. Otherwise just verify we get some suggestions.
         if current_dir.join("src").exists() {
-            assert!(suggestions.iter().any(|s| s.text.contains("src")),
-                "Expected to find 'src' in suggestions: {:?}", suggestions);
+            assert!(
+                suggestions.iter().any(|s| s.text.contains("src")),
+                "Expected to find 'src' in suggestions: {:?}",
+                suggestions
+            );
         } else {
             // Just verify the function runs without error
             // Suggestions may or may not be empty depending on directory contents
@@ -625,7 +670,10 @@ mod tests {
         let suggestions = corrector.suggest_command_with_aliases("l", &builtins, &aliases);
         assert!(!suggestions.is_empty());
         // Should find at least one of the aliases
-        assert!(suggestions.iter().any(|s| s.kind == SuggestionKind::Alias || s.text == "ll" || s.text == "la" || s.text == "ls"));
+        assert!(suggestions.iter().any(|s| s.kind == SuggestionKind::Alias
+            || s.text == "ll"
+            || s.text == "la"
+            || s.text == "ls"));
     }
 
     #[test]
@@ -669,8 +717,16 @@ mod tests {
         // Test various echo typos
         for typo in &["ehco", "ecoh", "echoo", "ech", "eccho"] {
             let suggestions = corrector.suggest_command(typo, &builtins);
-            assert!(!suggestions.is_empty(), "Expected suggestions for '{}'", typo);
-            assert_eq!(suggestions[0].text, "echo", "Expected 'echo' as top suggestion for '{}'", typo);
+            assert!(
+                !suggestions.is_empty(),
+                "Expected suggestions for '{}'",
+                typo
+            );
+            assert_eq!(
+                suggestions[0].text, "echo",
+                "Expected 'echo' as top suggestion for '{}'",
+                typo
+            );
         }
     }
 
@@ -682,8 +738,16 @@ mod tests {
         // Test various grep typos
         for typo in &["gerp", "grpe", "gre", "grepp"] {
             let suggestions = corrector.suggest_command(typo, &builtins);
-            assert!(!suggestions.is_empty(), "Expected suggestions for '{}'", typo);
-            assert_eq!(suggestions[0].text, "grep", "Expected 'grep' as top suggestion for '{}'", typo);
+            assert!(
+                !suggestions.is_empty(),
+                "Expected suggestions for '{}'",
+                typo
+            );
+            assert_eq!(
+                suggestions[0].text, "grep",
+                "Expected 'grep' as top suggestion for '{}'",
+                typo
+            );
         }
     }
 
@@ -695,8 +759,16 @@ mod tests {
         // Test various cargo typos
         for typo in &["carg", "cargi", "cargoo", "crago"] {
             let suggestions = corrector.suggest_command(typo, &builtins);
-            assert!(!suggestions.is_empty(), "Expected suggestions for '{}'", typo);
-            assert_eq!(suggestions[0].text, "cargo", "Expected 'cargo' as top suggestion for '{}'", typo);
+            assert!(
+                !suggestions.is_empty(),
+                "Expected suggestions for '{}'",
+                typo
+            );
+            assert_eq!(
+                suggestions[0].text, "cargo",
+                "Expected 'cargo' as top suggestion for '{}'",
+                typo
+            );
         }
     }
 
@@ -730,7 +802,10 @@ mod tests {
 
         let builtins = vec!["echo".to_string()];
         let suggestions = corrector.suggest_command("ehco", &builtins);
-        assert!(suggestions.is_empty(), "Disabled corrector should return no suggestions");
+        assert!(
+            suggestions.is_empty(),
+            "Disabled corrector should return no suggestions"
+        );
     }
 
     #[test]
@@ -747,22 +822,22 @@ mod tests {
     fn test_config_from_env_threshold() {
         // Save original value
         let original = env::var("RUSH_SUGGEST_THRESHOLD").ok();
-        
+
         // Test with valid threshold
         env::set_var("RUSH_SUGGEST_THRESHOLD", "50");
         let config = SuggestionConfig::from_env();
         assert_eq!(config.min_threshold, 50);
-        
+
         // Test with clamping (too high)
         env::set_var("RUSH_SUGGEST_THRESHOLD", "200");
         let config = SuggestionConfig::from_env();
         assert_eq!(config.min_threshold, 100);
-        
+
         // Test with clamping (negative)
         env::set_var("RUSH_SUGGEST_THRESHOLD", "-10");
         let config = SuggestionConfig::from_env();
         assert_eq!(config.min_threshold, 0);
-        
+
         // Restore original
         match original {
             Some(val) => env::set_var("RUSH_SUGGEST_THRESHOLD", val),
@@ -773,25 +848,25 @@ mod tests {
     #[test]
     fn test_config_from_env_enabled() {
         let original = env::var("RUSH_SUGGEST_ENABLED").ok();
-        
+
         // Test disabling
         env::set_var("RUSH_SUGGEST_ENABLED", "0");
         let config = SuggestionConfig::from_env();
         assert!(!config.enabled);
-        
+
         env::set_var("RUSH_SUGGEST_ENABLED", "false");
         let config = SuggestionConfig::from_env();
         assert!(!config.enabled);
-        
+
         env::set_var("RUSH_SUGGEST_ENABLED", "no");
         let config = SuggestionConfig::from_env();
         assert!(!config.enabled);
-        
+
         // Test enabling
         env::set_var("RUSH_SUGGEST_ENABLED", "1");
         let config = SuggestionConfig::from_env();
         assert!(config.enabled);
-        
+
         // Restore
         match original {
             Some(val) => env::set_var("RUSH_SUGGEST_ENABLED", val),
@@ -802,16 +877,16 @@ mod tests {
     #[test]
     fn test_config_from_env_max_suggestions() {
         let original = env::var("RUSH_SUGGEST_MAX").ok();
-        
+
         env::set_var("RUSH_SUGGEST_MAX", "10");
         let config = SuggestionConfig::from_env();
         assert_eq!(config.max_suggestions, 10);
-        
+
         // Test minimum enforcement
         env::set_var("RUSH_SUGGEST_MAX", "0");
         let config = SuggestionConfig::from_env();
         assert_eq!(config.max_suggestions, 1);
-        
+
         // Restore
         match original {
             Some(val) => env::set_var("RUSH_SUGGEST_MAX", val),
@@ -823,21 +898,21 @@ mod tests {
     fn test_config_from_env_history_and_context() {
         let original_history = env::var("RUSH_SUGGEST_HISTORY").ok();
         let original_context = env::var("RUSH_SUGGEST_CONTEXT").ok();
-        
+
         // Disable both
         env::set_var("RUSH_SUGGEST_HISTORY", "off");
         env::set_var("RUSH_SUGGEST_CONTEXT", "false");
         let config = SuggestionConfig::from_env();
         assert!(!config.use_history);
         assert!(!config.use_context);
-        
+
         // Enable both
         env::set_var("RUSH_SUGGEST_HISTORY", "yes");
         env::set_var("RUSH_SUGGEST_CONTEXT", "1");
         let config = SuggestionConfig::from_env();
         assert!(config.use_history);
         assert!(config.use_context);
-        
+
         // Restore
         match original_history {
             Some(val) => env::set_var("RUSH_SUGGEST_HISTORY", val),
@@ -859,7 +934,7 @@ mod tests {
             "anothercommand".to_string(),
         ];
         let current_dir = std::env::current_dir().unwrap();
-        
+
         // Search for something similar to history command
         let suggestions = corrector.suggest_command_with_context(
             "mycustom",
@@ -868,10 +943,15 @@ mod tests {
             &history,
             &current_dir,
         );
-        
+
         // Should find the history command
-        assert!(suggestions.iter().any(|s| s.text == "mycustomcmd" && s.kind == SuggestionKind::History),
-            "Expected to find 'mycustomcmd' from history in suggestions: {:?}", suggestions);
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.text == "mycustomcmd" && s.kind == SuggestionKind::History),
+            "Expected to find 'mycustomcmd' from history in suggestions: {:?}",
+            suggestions
+        );
     }
 
     #[test]
@@ -879,12 +959,12 @@ mod tests {
         let mut config = SuggestionConfig::default();
         config.use_history = false;
         let corrector = Corrector::with_config(config);
-        
+
         let builtins = vec!["echo".to_string()];
         let aliases = vec![];
         let history = vec!["mycustomcmd".to_string()];
         let current_dir = std::env::current_dir().unwrap();
-        
+
         let suggestions = corrector.suggest_command_with_context(
             "mycustom",
             &builtins,
@@ -892,30 +972,32 @@ mod tests {
             &history,
             &current_dir,
         );
-        
+
         // Should NOT find history commands when history is disabled
-        assert!(!suggestions.iter().any(|s| s.kind == SuggestionKind::History),
-            "Should not have history suggestions when use_history is false");
+        assert!(
+            !suggestions
+                .iter()
+                .any(|s| s.kind == SuggestionKind::History),
+            "Should not have history suggestions when use_history is false"
+        );
     }
 
     #[test]
     fn test_suggest_contextual_commands_git_repo() {
         let corrector = Corrector::new();
         let current_dir = std::env::current_dir().unwrap();
-        
+
         // If we're in a git repo, should suggest git
         if current_dir.join(".git").exists() {
-            let suggestions = corrector.suggest_command_with_context(
-                "gi",
-                &[],
-                &[],
-                &[],
-                &current_dir,
-            );
-            
+            let suggestions =
+                corrector.suggest_command_with_context("gi", &[], &[], &[], &current_dir);
+
             // Should find git as contextual suggestion
-            assert!(suggestions.iter().any(|s| s.text == "git"),
-                "Expected 'git' in suggestions when in git repo: {:?}", suggestions);
+            assert!(
+                suggestions.iter().any(|s| s.text == "git"),
+                "Expected 'git' in suggestions when in git repo: {:?}",
+                suggestions
+            );
         }
     }
 
@@ -923,27 +1005,25 @@ mod tests {
     fn test_suggest_contextual_commands_cargo_project() {
         let corrector = Corrector::new();
         let current_dir = std::env::current_dir().unwrap();
-        
+
         // If we're in a Cargo project, should suggest cargo
         if current_dir.join("Cargo.toml").exists() {
-            let suggestions = corrector.suggest_command_with_context(
-                "carg",
-                &[],
-                &[],
-                &[],
-                &current_dir,
-            );
-            
+            let suggestions =
+                corrector.suggest_command_with_context("carg", &[], &[], &[], &current_dir);
+
             // Should find cargo as contextual suggestion
-            assert!(suggestions.iter().any(|s| s.text == "cargo"),
-                "Expected 'cargo' in suggestions when in Cargo project: {:?}", suggestions);
+            assert!(
+                suggestions.iter().any(|s| s.text == "cargo"),
+                "Expected 'cargo' in suggestions when in Cargo project: {:?}",
+                suggestions
+            );
         }
     }
 
     #[test]
     fn test_find_ancestor_with() {
         let current_dir = std::env::current_dir().unwrap();
-        
+
         // Should find .git if we're in a git repo
         let result = Corrector::find_ancestor_with(&current_dir, ".git");
         // Just verify the function works without panicking

@@ -61,9 +61,9 @@ pub fn builtin_unset(args: &[String], runtime: &mut Runtime) -> Result<Execution
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::Runtime;
     use crate::parser::ast::FunctionDef;
-    use crate::parser::ast::{Statement, Command, Argument};
+    use crate::parser::ast::{Argument, Command, Statement};
+    use crate::runtime::Runtime;
 
     #[test]
     fn test_unset_variable() {
@@ -196,7 +196,10 @@ mod tests {
         runtime.set_variable("LOCAL".to_string(), "local_value".to_string());
 
         // Local variable should exist
-        assert_eq!(runtime.get_variable("LOCAL"), Some("local_value".to_string()));
+        assert_eq!(
+            runtime.get_variable("LOCAL"),
+            Some("local_value".to_string())
+        );
 
         // Unset local variable
         let result = builtin_unset(&["LOCAL".to_string()], &mut runtime);
@@ -204,13 +207,19 @@ mod tests {
         assert_eq!(runtime.get_variable("LOCAL"), None);
 
         // Global variable should still exist
-        assert_eq!(runtime.get_variable("GLOBAL"), Some("global_value".to_string()));
+        assert_eq!(
+            runtime.get_variable("GLOBAL"),
+            Some("global_value".to_string())
+        );
 
         // Exit function scope
         runtime.pop_scope();
 
         // Global variable should still be accessible
-        assert_eq!(runtime.get_variable("GLOBAL"), Some("global_value".to_string()));
+        assert_eq!(
+            runtime.get_variable("GLOBAL"),
+            Some("global_value".to_string())
+        );
     }
 
     #[test]

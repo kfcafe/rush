@@ -150,7 +150,11 @@ fn execute_command_bypassing_lookup(
 }
 
 /// Execute a builtin command
-fn execute_builtin(name: &str, args: Vec<String>, runtime: &mut Runtime) -> Result<ExecutionResult> {
+fn execute_builtin(
+    name: &str,
+    args: Vec<String>,
+    runtime: &mut Runtime,
+) -> Result<ExecutionResult> {
     // Dispatch to the correct builtin
     match name {
         "cd" => super::builtin_cd(&args, runtime),
@@ -229,14 +233,47 @@ fn execute_external_command(
 fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "cd" | "pwd" | "echo" | "exit" | "export" | "source"
-            | "cat" | "find" | "ls" | "mkdir" | "git" | "grep"
-            | "undo" | "jobs" | "fg" | "bg" | "set"
-            | "alias" | "unalias" | "test" | "[" | "help" | "type"
-            | "shift" | "local" | "true" | "false" | "return" | "trap"
-            | "unset" | "printf" | "read" | "eval" | "exec" | "builtin"
-            | "kill" | "break" | "continue" | ":"
-            | "json_get" | "json_set" | "json_query"
+        "cd" | "pwd"
+            | "echo"
+            | "exit"
+            | "export"
+            | "source"
+            | "cat"
+            | "find"
+            | "ls"
+            | "mkdir"
+            | "git"
+            | "grep"
+            | "undo"
+            | "jobs"
+            | "fg"
+            | "bg"
+            | "set"
+            | "alias"
+            | "unalias"
+            | "test"
+            | "["
+            | "help"
+            | "type"
+            | "shift"
+            | "local"
+            | "true"
+            | "false"
+            | "return"
+            | "trap"
+            | "unset"
+            | "printf"
+            | "read"
+            | "eval"
+            | "exec"
+            | "builtin"
+            | "kill"
+            | "break"
+            | "continue"
+            | ":"
+            | "json_get"
+            | "json_set"
+            | "json_query"
     )
 }
 

@@ -39,7 +39,8 @@ impl GitContext {
 
     pub fn is_dirty(&self) -> bool {
         if let Some(repo) = &self.repo {
-            if let Ok(statuses) = repo.statuses(Some(StatusOptions::new().include_untracked(true))) {
+            if let Ok(statuses) = repo.statuses(Some(StatusOptions::new().include_untracked(true)))
+            {
                 return !statuses.is_empty();
             }
         }
@@ -52,7 +53,9 @@ impl GitContext {
         let local_oid = head.target()?;
 
         // Get upstream branch
-        let branch = repo.find_branch(head.shorthand()?, git2::BranchType::Local).ok()?;
+        let branch = repo
+            .find_branch(head.shorthand()?, git2::BranchType::Local)
+            .ok()?;
         let upstream = branch.upstream().ok()?;
         let upstream_oid = upstream.get().target()?;
 
@@ -79,7 +82,9 @@ impl GitContext {
 
     /// Get all file statuses in a single pass (optimized for git_status builtin)
     /// This is significantly faster than calling staged/unstaged/untracked separately
-    pub fn all_file_statuses(&self) -> (Vec<FileStatus>, Vec<FileStatus>, Vec<PathBuf>, Vec<PathBuf>) {
+    pub fn all_file_statuses(
+        &self,
+    ) -> (Vec<FileStatus>, Vec<FileStatus>, Vec<PathBuf>, Vec<PathBuf>) {
         let repo = match &self.repo {
             Some(r) => r,
             None => return (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
@@ -285,7 +290,9 @@ impl GitContext {
     pub fn tracking_branch(&self) -> Option<String> {
         let repo = self.repo.as_ref()?;
         let head = repo.head().ok()?;
-        let branch = repo.find_branch(head.shorthand()?, git2::BranchType::Local).ok()?;
+        let branch = repo
+            .find_branch(head.shorthand()?, git2::BranchType::Local)
+            .ok()?;
         let upstream = branch.upstream().ok()?;
         upstream.name().ok()?.map(|s| s.to_string())
     }

@@ -180,13 +180,7 @@ fn list_traps(runtime: &Runtime) -> Result<ExecutionResult> {
 
 /// List all available signals
 fn list_signals() -> Result<ExecutionResult> {
-    let signals = vec![
-        "INT (2)",
-        "TERM (15)",
-        "HUP (1)",
-        "EXIT (0)",
-        "ERR",
-    ];
+    let signals = vec!["INT (2)", "TERM (15)", "HUP (1)", "EXIT (0)", "ERR"];
 
     let mut output = String::new();
     for signal in signals {
@@ -242,7 +236,10 @@ mod tests {
 
         handlers.set(TrapSignal::Int, "echo interrupted".to_string());
         assert!(handlers.has_handler(TrapSignal::Int));
-        assert_eq!(handlers.get(TrapSignal::Int), Some(&"echo interrupted".to_string()));
+        assert_eq!(
+            handlers.get(TrapSignal::Int),
+            Some(&"echo interrupted".to_string())
+        );
 
         handlers.remove(TrapSignal::Int);
         assert!(!handlers.has_handler(TrapSignal::Int));
@@ -281,28 +278,40 @@ mod tests {
     fn test_trap_builtin_set_handler() {
         let mut runtime = Runtime::new();
 
-        let result = builtin_trap(&[
-            "echo cleanup".to_string(),
-            "EXIT".to_string()
-        ], &mut runtime);
+        let result = builtin_trap(
+            &["echo cleanup".to_string(), "EXIT".to_string()],
+            &mut runtime,
+        );
 
         assert!(result.is_ok());
-        assert_eq!(runtime.get_trap(TrapSignal::Exit), Some(&"echo cleanup".to_string()));
+        assert_eq!(
+            runtime.get_trap(TrapSignal::Exit),
+            Some(&"echo cleanup".to_string())
+        );
     }
 
     #[test]
     fn test_trap_builtin_set_multiple() {
         let mut runtime = Runtime::new();
 
-        let result = builtin_trap(&[
-            "echo interrupted".to_string(),
-            "INT".to_string(),
-            "TERM".to_string(),
-        ], &mut runtime);
+        let result = builtin_trap(
+            &[
+                "echo interrupted".to_string(),
+                "INT".to_string(),
+                "TERM".to_string(),
+            ],
+            &mut runtime,
+        );
 
         assert!(result.is_ok());
-        assert_eq!(runtime.get_trap(TrapSignal::Int), Some(&"echo interrupted".to_string()));
-        assert_eq!(runtime.get_trap(TrapSignal::Term), Some(&"echo interrupted".to_string()));
+        assert_eq!(
+            runtime.get_trap(TrapSignal::Int),
+            Some(&"echo interrupted".to_string())
+        );
+        assert_eq!(
+            runtime.get_trap(TrapSignal::Term),
+            Some(&"echo interrupted".to_string())
+        );
     }
 
     #[test]
@@ -310,10 +319,7 @@ mod tests {
         let mut runtime = Runtime::new();
         runtime.set_trap(TrapSignal::Int, "echo test".to_string());
 
-        let result = builtin_trap(&[
-            "-".to_string(),
-            "INT".to_string()
-        ], &mut runtime);
+        let result = builtin_trap(&["-".to_string(), "INT".to_string()], &mut runtime);
 
         assert!(result.is_ok());
         assert_eq!(runtime.get_trap(TrapSignal::Int), None);
@@ -336,10 +342,7 @@ mod tests {
     fn test_trap_builtin_ignore_signal() {
         let mut runtime = Runtime::new();
 
-        let result = builtin_trap(&[
-            "".to_string(),
-            "INT".to_string()
-        ], &mut runtime);
+        let result = builtin_trap(&["".to_string(), "INT".to_string()], &mut runtime);
 
         assert!(result.is_ok());
         assert_eq!(runtime.get_trap(TrapSignal::Int), Some(&String::new()));
@@ -349,10 +352,10 @@ mod tests {
     fn test_trap_builtin_invalid_signal() {
         let mut runtime = Runtime::new();
 
-        let result = builtin_trap(&[
-            "echo test".to_string(),
-            "INVALID".to_string()
-        ], &mut runtime);
+        let result = builtin_trap(
+            &["echo test".to_string(), "INVALID".to_string()],
+            &mut runtime,
+        );
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("invalid signal"));

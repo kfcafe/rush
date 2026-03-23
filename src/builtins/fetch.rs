@@ -68,8 +68,8 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
                 if i >= args.len() {
                     return Err(anyhow!("Missing method after {}", arg));
                 }
-                opts.method = Method::from_str(&args[i].to_uppercase())
-                    .context("Invalid HTTP method")?;
+                opts.method =
+                    Method::from_str(&args[i].to_uppercase()).context("Invalid HTTP method")?;
             }
             "-H" | "--header" => {
                 i += 1;
@@ -78,7 +78,8 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
                 }
                 let header = &args[i];
                 if let Some((key, value)) = header.split_once(':') {
-                    opts.headers.push((key.trim().to_string(), value.trim().to_string()));
+                    opts.headers
+                        .push((key.trim().to_string(), value.trim().to_string()));
                 } else {
                     return Err(anyhow!("Invalid header format. Use 'Key: Value'"));
                 }
@@ -139,8 +140,8 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
                 if i >= args.len() {
                     return Err(anyhow!("Missing method after --method"));
                 }
-                opts.method = Method::from_str(&args[i].to_uppercase())
-                    .context("Invalid HTTP method")?;
+                opts.method =
+                    Method::from_str(&args[i].to_uppercase()).context("Invalid HTTP method")?;
             }
             _ => {
                 if arg.starts_with('-') {
@@ -150,7 +151,11 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
                 if url.is_none() {
                     url = Some(arg.clone());
                 } else {
-                    return Err(anyhow!("Multiple URLs provided: {} and {}", url.unwrap(), arg));
+                    return Err(anyhow!(
+                        "Multiple URLs provided: {} and {}",
+                        url.unwrap(),
+                        arg
+                    ));
                 }
             }
         }
@@ -177,8 +182,8 @@ fn execute_request(url: &str, opts: &FetchOptions) -> Result<(Response, u64)> {
 
     // Add custom headers
     for (key, value) in &opts.headers {
-        let header_name = HeaderName::from_str(key)
-            .with_context(|| format!("Invalid header name: {}", key))?;
+        let header_name =
+            HeaderName::from_str(key).with_context(|| format!("Invalid header name: {}", key))?;
         let header_value = HeaderValue::from_str(value)
             .with_context(|| format!("Invalid header value: {}", value))?;
         request = request.header(header_name, header_value);
@@ -231,10 +236,7 @@ fn parse_response_body(response: Response) -> Result<Value> {
 }
 
 /// Format response as JSON structure
-fn format_json_response(
-    response: Response,
-    response_time_ms: u64,
-) -> Result<FetchResponse> {
+fn format_json_response(response: Response, response_time_ms: u64) -> Result<FetchResponse> {
     let status = response.status();
     let final_url = response.url().to_string();
 
@@ -269,8 +271,8 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
     let (url, opts) = parse_args(args)?;
 
     // Execute the request
-    let (response, response_time_ms) = execute_request(&url, &opts)
-        .context("HTTP request failed")?;
+    let (response, response_time_ms) =
+        execute_request(&url, &opts).context("HTTP request failed")?;
 
     let status = response.status();
 
@@ -281,7 +283,11 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
             .context("Failed to serialize JSON response")?;
 
         // Check for HTTP errors
-        let exit_code = if status.is_success() { 0 } else { status.as_u16() as i32 };
+        let exit_code = if status.is_success() {
+            0
+        } else {
+            status.as_u16() as i32
+        };
 
         Ok(ExecutionResult {
             output: Output::Text(json_output + "\n"),
@@ -295,7 +301,11 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
 
         // Include headers if requested
         if opts.include_headers || opts.verbose {
-            output.push_str(&format!("HTTP/1.1 {} {}\n", status.as_u16(), status.canonical_reason().unwrap_or("Unknown")));
+            output.push_str(&format!(
+                "HTTP/1.1 {} {}\n",
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown")
+            ));
             for (key, value) in response.headers() {
                 if let Ok(value_str) = value.to_str() {
                     output.push_str(&format!("{}: {}\n", key, value_str));
@@ -320,7 +330,11 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
         }
 
         // Check for HTTP errors
-        let exit_code = if status.is_success() { 0 } else { status.as_u16() as i32 };
+        let exit_code = if status.is_success() {
+            0
+        } else {
+            status.as_u16() as i32
+        };
 
         Ok(ExecutionResult {
             output: Output::Text(output),
@@ -376,8 +390,14 @@ mod tests {
         let (url, opts) = parse_args(&args).unwrap();
         assert_eq!(url, "https://api.example.com");
         assert_eq!(opts.headers.len(), 2);
-        assert_eq!(opts.headers[0], ("Content-Type".to_string(), "application/json".to_string()));
-        assert_eq!(opts.headers[1], ("Authorization".to_string(), "Bearer token123".to_string()));
+        assert_eq!(
+            opts.headers[0],
+            ("Content-Type".to_string(), "application/json".to_string())
+        );
+        assert_eq!(
+            opts.headers[1],
+            ("Authorization".to_string(), "Bearer token123".to_string())
+        );
     }
 
     #[test]
@@ -406,10 +426,7 @@ mod tests {
 
     #[test]
     fn test_parse_args_no_follow() {
-        let args = vec![
-            "--no-follow".to_string(),
-            "https://example.com".to_string(),
-        ];
+        let args = vec!["--no-follow".to_string(), "https://example.com".to_string()];
         let (url, opts) = parse_args(&args).unwrap();
         assert_eq!(url, "https://example.com");
         assert!(!opts.follow_redirects);
@@ -467,7 +484,10 @@ mod tests {
         ];
         let result = parse_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid header format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid header format"));
     }
 
     // Integration tests that hit a real HTTP endpoint
@@ -487,10 +507,7 @@ mod tests {
     #[ignore]
     fn test_fetch_json_output() {
         let mut runtime = Runtime::new();
-        let args = vec![
-            "--json".to_string(),
-            "https://httpbin.org/get".to_string(),
-        ];
+        let args = vec!["--json".to_string(), "https://httpbin.org/get".to_string()];
         let result = builtin_fetch(&args, &mut runtime).unwrap();
         assert_eq!(result.exit_code, 0);
 

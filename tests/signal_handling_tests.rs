@@ -1,8 +1,8 @@
 use rush::signal::SignalHandler;
-use std::process::{Command, Stdio};
 use std::io::Write;
-use std::time::Duration;
+use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Duration;
 use tempfile::NamedTempFile;
 
 #[test]

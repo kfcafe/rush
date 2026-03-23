@@ -21,8 +21,8 @@ mod builtin;
 mod command;
 pub mod continue_builtin; // Public so executor can access ContinueSignal
 mod eval;
-pub mod exit_builtin; // Public so executor/main can access ExitSignal
 mod exec;
+pub mod exit_builtin; // Public so executor/main can access ExitSignal
 mod fetch;
 mod grep;
 mod help;
@@ -36,14 +36,14 @@ mod printf;
 mod profile;
 mod read;
 mod readonly;
-mod rm;
 pub mod return_builtin; // Public so executor can access ReturnSignal
+mod rm;
 mod set;
 mod shift;
 mod test;
+pub mod time; // Public so executor can access timing functions
 pub mod trap; // Public so runtime and executor can access TrapSignal
 mod type_builtin;
-pub mod time; // Public so executor can access timing functions
 mod undo;
 mod unset;
 mod wait;
@@ -225,10 +225,44 @@ pub(crate) fn builtin_cd(args: &[String], runtime: &mut Runtime) -> Result<Execu
         }
     };
 
+    // Keep original argument for CDPATH check
+    let original_arg = args.first().map(|s| s.as_str()).unwrap_or("");
+
     let absolute = if target.is_absolute() {
         target
     } else {
         runtime.get_cwd().join(target)
+    };
+
+    // CDPATH: if the path doesn't exist and the argument is a bare name (not starting
+    // with /, ./, or ../), search CDPATH directories for a match.
+    let (absolute, used_cdpath) = if !absolute.exists()
+        && !args.is_empty()
+        && !original_arg.starts_with('/')
+        && !original_arg.starts_with("./")
+        && !original_arg.starts_with("../")
+        && original_arg != "-"
+        && !original_arg.starts_with('~')
+    {
+        let mut found = None;
+        if let Some(cdpath) = runtime.get_variable("CDPATH") {
+            for dir in cdpath.split(':') {
+                if dir.is_empty() {
+                    continue;
+                }
+                let candidate = PathBuf::from(dir).join(original_arg);
+                if candidate.is_dir() {
+                    found = Some(candidate);
+                    break;
+                }
+            }
+        }
+        match found {
+            Some(path) => (path, true),
+            None => (absolute, false),
+        }
+    } else {
+        (absolute, false)
     };
 
     if !absolute.exists() {
@@ -272,8 +306,8 @@ pub(crate) fn builtin_cd(args: &[String], runtime: &mut Runtime) -> Result<Execu
     let new_pwd = absolute.to_string_lossy().to_string();
     runtime.set_variable("PWD".to_string(), new_pwd.clone());
 
-    // If cd -, print the directory (POSIX requirement)
-    if !args.is_empty() && args[0] == "-" {
+    // Print the resolved path when cd - or CDPATH was used (POSIX requirement)
+    if (!args.is_empty() && args[0] == "-") || used_cdpath {
         return Ok(ExecutionResult::success(new_pwd + "\n"));
     }
 
@@ -335,7 +369,10 @@ pub(crate) fn builtin_git(args: &[String], runtime: &mut Runtime) -> Result<Exec
 }
 
 /// Fallback: always shell out to external git (used when git-builtins feature is disabled)
-pub(crate) fn builtin_git_external(args: &[String], runtime: &mut Runtime) -> Result<ExecutionResult> {
+pub(crate) fn builtin_git_external(
+    args: &[String],
+    runtime: &mut Runtime,
+) -> Result<ExecutionResult> {
     use std::process::Command;
 
     let output = Command::new("git")

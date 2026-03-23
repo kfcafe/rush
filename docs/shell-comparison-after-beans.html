@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rush — Before &amp; After All Beans Complete</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    background: linear-gradient(135deg, #161b22 0%, #0d1117 50%, #1a1e2e 100%);
+    border-bottom: 1px solid #21262d;
+  }
+
+  .hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #f97316, #fb923c, #fbbf24);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+
+  .hero p {
+    font-size: 1.15rem;
+    color: #8b949e;
+    max-width: 750px;
+    margin: 0 auto;
+  }
+
+  .hero .subtitle {
+    font-size: 0.9rem;
+    color: #484f58;
+    margin-top: 16px;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin-bottom: 28px;
+  }
+
+  .grid.full { grid-template-columns: 1fr; }
+
+  .card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 12px;
+    padding: 28px;
+  }
+
+  .card h2 {
+    font-size: 1.25rem;
+    color: #e6edf3;
+    margin-bottom: 4px;
+  }
+
+  .card .desc {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-bottom: 20px;
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    max-height: 420px;
+  }
+
+  .chart-wrap canvas { max-height: 420px; }
+  .chart-wrap.tall { max-height: 520px; }
+  .chart-wrap.tall canvas { max-height: 520px; }
+
+  .legend-note {
+    font-size: 0.78rem;
+    color: #484f58;
+    margin-top: 16px;
+    line-height: 1.5;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 28px;
+  }
+
+  .callout.impact {
+    background: linear-gradient(135deg, #1a1400, #1f1800);
+    border: 1px solid #3d3000;
+    border-left: 3px solid #f97316;
+  }
+
+  .callout.beans {
+    background: linear-gradient(135deg, #0d1a0d, #0f1f0f);
+    border: 1px solid #1a3a1a;
+    border-left: 3px solid #3fb950;
+  }
+
+  .callout h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+  }
+
+  .callout.impact h3 { color: #f97316; }
+  .callout.beans h3 { color: #3fb950; }
+
+  .callout p, .callout li {
+    color: #8b949e;
+    font-size: 0.9rem;
+  }
+
+  .callout ul {
+    padding-left: 20px;
+    margin-top: 6px;
+  }
+
+  .callout li { margin-bottom: 4px; }
+
+  .callout code {
+    background: #21262d;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.82rem;
+    color: #e6edf3;
+  }
+
+  .section-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #e6edf3;
+    margin: 48px 0 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #21262d;
+  }
+
+  .section-desc {
+    color: #8b949e;
+    font-size: 0.95rem;
+    margin-bottom: 24px;
+  }
+
+  .bean-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .bean-card {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 16px 20px;
+  }
+
+  .bean-card h4 {
+    font-size: 0.9rem;
+    color: #e6edf3;
+    margin-bottom: 4px;
+  }
+
+  .bean-card .ids {
+    font-size: 0.75rem;
+    color: #484f58;
+    margin-bottom: 8px;
+  }
+
+  .bean-card .impact-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .bean-card .impact-label.perf { color: #f97316; }
+  .bean-card .impact-label.posix { color: #58a6ff; }
+  .bean-card .impact-label.quality { color: #a371f7; }
+  .bean-card .impact-label.correctness { color: #3fb950; }
+
+  .bean-card p {
+    font-size: 0.82rem;
+    color: #8b949e;
+    line-height: 1.5;
+  }
+
+  .delta {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-left: 4px;
+  }
+
+  .delta.up { background: #1a3a2a; color: #3fb950; }
+  .delta.down { background: #1a2a3a; color: #58a6ff; }
+
+  /* Feature matrix */
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .matrix th, .matrix td {
+    padding: 10px 14px;
+    text-align: center;
+    border-bottom: 1px solid #21262d;
+  }
+
+  .matrix th {
+    background: #0d1117;
+    color: #8b949e;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+
+  .matrix th:first-child, .matrix td:first-child {
+    text-align: left;
+    color: #e6edf3;
+    font-weight: 500;
+  }
+
+  .matrix tr:hover { background: #1c2128; }
+
+  .rush-col { color: #f97316 !important; font-weight: 600 !important; }
+
+  .val { font-size: 0.82rem; }
+  .val.before { color: #484f58; text-decoration: line-through; }
+  .val.after { color: #3fb950; font-weight: 600; }
+  .val.same { color: #8b949e; }
+
+  .arrow { color: #484f58; margin: 0 4px; }
+
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: #484f58;
+    font-size: 0.8rem;
+    border-top: 1px solid #21262d;
+  }
+
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2rem; }
+    .bean-group { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Rush — Before &amp; After Beans</h1>
+  <p>What the comparison chart looks like once all 23 open beans are completed. Mapping each bean category to its impact on Rush's competitive position.</p>
+  <div class="subtitle">23 open beans across POSIX compliance, performance, code quality, correctness, and documentation</div>
+</div>
+
+<div class="container">
+
+  <!-- ═══════════ BEAN IMPACT SUMMARY ═══════════ -->
+  <div class="callout impact">
+    <h3>What Changes After All Beans</h3>
+    <ul>
+      <li><strong>POSIX Compliance:</strong> 90% → <strong>~97%</strong> — Bean 53 adds <code>[[ ]]</code>, <code>>&2</code>, <code><<<</code>, <code>&lt;()</code>, nested <code>$()</code>, and fixes <code>[ ]</code> test parsing</li>
+      <li><strong>Cold Startup:</strong> 4.9ms → <strong>~3.0ms</strong> — Beans 40/49/50/51 eliminate lazy-allocatable objects from <code>-c</code> path, reduce clones, use FxHashMap</li>
+      <li><strong>Memory:</strong> &lt;10MB → <strong>~6-7MB</strong> — Subshell clone reduction, lazy Corrector/SuggestionEngine allocation</li>
+      <li><strong>Compiler Warnings:</strong> 214 → <strong>0</strong> — Bean 3 fixes all warnings, clean build output</li>
+      <li><strong>Code Modularity:</strong> God modules split — executor (3713→4 files), parser (2393→submodules), runtime (1083→submodules)</li>
+      <li><strong>Correctness:</strong> Bracket glob/test bug fixed, unsafe blocks documented, executor audited</li>
+    </ul>
+  </div>
+
+  <!-- ═══════════ BEAN CATEGORIES ═══════════ -->
+  <h2 class="section-title">🫘 Bean Impact Map</h2>
+  <p class="section-desc">23 open beans grouped by what they change on the competitive chart.</p>
+
+  <div class="bean-group">
+    <div class="bean-card">
+      <h4>POSIX Compliance Fixes</h4>
+      <div class="ids">Beans #53, #53.1–53.7, #35</div>
+      <div class="impact-label posix">Chart Impact: POSIX score 9 → 10</div>
+      <p>Fixes <code>[ ]</code> test parsing, adds <code>>&2</code> fd duplication, <code>echo -e/-n</code>, here-strings <code>&lt;&lt;&lt;</code>, nested <code>$()</code>, <code>[[ ]]</code> extended test, and <code>&lt;()</code> process substitution. Makes Rush a genuine bash replacement.</p>
+    </div>
+
+    <div class="bean-card">
+      <h4>Performance Optimization</h4>
+      <div class="ids">Beans #40, #49, #50, #51</div>
+      <div class="impact-label perf">Chart Impact: Startup 4.9ms → ~3ms, Memory ~10MB → ~7MB</div>
+      <p>Eliminates unnecessary allocations in <code>-c</code> path (Corrector, SuggestionEngine), reduces hot-path clones in executor, uses FxHashMap, optimizes subshell runtime copying. Targets measurable wins only.</p>
+    </div>
+
+    <div class="bean-card">
+      <h4>Code Architecture</h4>
+      <div class="ids">Beans #32, #33, #34, #8, #9</div>
+      <div class="impact-label quality">Chart Impact: Extensibility 2 → 4</div>
+      <p>Splits executor (3713 lines → 4 modules), parser (2393 lines → submodules), and runtime (1083 lines → submodules). Extracts shared helpers. Makes the codebase plugin-ready and contributor-friendly.</p>
+    </div>
+
+    <div class="bean-card">
+      <h4>Code Quality &amp; Hygiene</h4>
+      <div class="ids">Beans #3, #4, #5, #6, #15, #46</div>
+      <div class="impact-label quality">Chart Impact: Indirect (developer velocity)</div>
+      <p>Fixes 214 compiler warnings, replaces deprecated <code>atty</code> crate, adds SAFETY comments to unsafe blocks, fixes thread-unsafe test code. Clean build output, zero warnings.</p>
+    </div>
+
+    <div class="bean-card">
+      <h4>Correctness Audits</h4>
+      <div class="ids">Beans #19, #20, #36, #45</div>
+      <div class="impact-label correctness">Chart Impact: Scripting Power 8 → 9</div>
+      <p>Audits executor for correctness — hanging tests, TODOs, edge cases in loop handling. Adds pipeline execution unit tests. Catches bugs before users do.</p>
+    </div>
+
+    <div class="bean-card">
+      <h4>Documentation</h4>
+      <div class="ids">Beans #17, #18</div>
+      <div class="impact-label quality">Chart Impact: Contributor onboarding</div>
+      <p>Adds module-level doc comments to all key modules (lexer, parser, executor, runtime, signal, jobs, completion). Makes <code>cargo doc</code> useful for new contributors.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════ RADAR: BEFORE vs AFTER ═══════════ -->
+  <h2 class="section-title">🧬 Capability Radar — Before vs After</h2>
+  <p class="section-desc">Rush's radar chart with the current state (dashed) overlaid against the post-beans state (solid). Other shells shown for reference.</p>
+
+  <div class="grid full">
+    <div class="card">
+      <h2>Rush Before &amp; After vs All Shells</h2>
+      <div class="desc">Dashed orange = Rush today. Solid orange = Rush after all 23 beans complete.</div>
+      <div class="chart-wrap tall">
+        <canvas id="radarChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Key gains: POSIX 9→10 (bash-level), Builtin Perf stays 10, Scripting Power 8→9 (correctness audit + POSIX fixes), Extensibility 2→4 (modular architecture). Interactive UX holds at 5 — that's a separate effort beyond current beans.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STARTUP TIME: BEFORE/AFTER ═══════════ -->
+  <h2 class="section-title">⚡ Performance — Before &amp; After</h2>
+  <p class="section-desc">How performance beans (#40, #49, #50, #51) shift Rush's numbers relative to competitors.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Cold Startup Time</h2>
+      <div class="desc">Before vs After beans — Rush's <code>-c</code> path drops unnecessary allocations</div>
+      <div class="chart-wrap">
+        <canvas id="startupChart"></canvas>
+      </div>
+      <div class="legend-note">
+        After beans: Rush cold startup drops from 4.9ms to ~3.0ms by not allocating Corrector, SuggestionEngine, or full history in <code>-c</code> mode. This puts Rush ahead of Zsh and within striking distance of Bash. Daemon stays at 0.4ms.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Memory Footprint</h2>
+      <div class="desc">Before vs After — lazy allocation and clone reduction</div>
+      <div class="chart-wrap">
+        <canvas id="memoryChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Subshell runtime clone optimization (Bean #50) avoids copying entire history + aliases. Lazy Corrector/SuggestionEngine saves ~2MB. FxHashMap reduces per-lookup overhead.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ AI AGENT WORKLOADS ═══════════ -->
+  <div class="grid full">
+    <div class="card">
+      <h2>AI Agent Workloads — After Performance Beans</h2>
+      <div class="desc">With reduced startup overhead and fewer clones, repeated-invocation workloads improve the most</div>
+      <div class="chart-wrap tall">
+        <canvas id="aiChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Git Status ×100 sees the biggest gain: each invocation saves ~1.9ms of unnecessary allocation, compounding to ~190ms savings over 100 calls. Rush's 8.4x average speedup over Bash increases to <strong>~10x</strong>.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ POSIX COMPLIANCE ═══════════ -->
+  <h2 class="section-title">📐 POSIX Compliance — Before &amp; After</h2>
+  <p class="section-desc">Bean #53 and its 7 children close the remaining POSIX gaps. Here's the feature-by-feature impact.</p>
+
+  <div class="grid full">
+    <div class="card" style="overflow-x: auto;">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>POSIX Feature</th>
+            <th class="rush-col">Rush Before</th>
+            <th class="rush-col">Rush After</th>
+            <th>Bash</th>
+            <th>Zsh</th>
+            <th>Fish</th>
+            <th>Nushell</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>[ ] </code> test builtin</td>
+            <td><span class="val before">❌ Broken</span></td>
+            <td><span class="val after">✅ Fixed</span> <span class="delta up">Bean 53.1</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">❌</span></td>
+          </tr>
+          <tr>
+            <td><code>>&2</code> fd duplication</td>
+            <td><span class="val before">❌ Broken</span></td>
+            <td><span class="val after">✅ Fixed</span> <span class="delta up">Bean 53.2</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">❌</span></td>
+            <td><span class="val same">❌</span></td>
+          </tr>
+          <tr>
+            <td><code>echo -e / -n</code></td>
+            <td><span class="val before">❌ Flags ignored</span></td>
+            <td><span class="val after">✅ Fixed</span> <span class="delta up">Bean 53.3</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅ (different)</span></td>
+            <td><span class="val same">✅</span></td>
+          </tr>
+          <tr>
+            <td><code>&lt;&lt;&lt;</code> here-strings</td>
+            <td><span class="val before">❌ Missing</span></td>
+            <td><span class="val after">✅ Added</span> <span class="delta up">Bean 53.4</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">❌</span></td>
+            <td><span class="val same">❌</span></td>
+          </tr>
+          <tr>
+            <td>Nested <code>$()</code> substitution</td>
+            <td><span class="val before">❌ Broken</span></td>
+            <td><span class="val after">✅ Fixed</span> <span class="delta up">Bean 53.5</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">❌ (different)</span></td>
+            <td><span class="val same">❌</span></td>
+          </tr>
+          <tr>
+            <td><code>[[ ]]</code> extended test</td>
+            <td><span class="val before">❌ Missing</span></td>
+            <td><span class="val after">✅ Added</span> <span class="delta up">Bean 53.6</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">❌</span></td>
+            <td><span class="val same">❌</span></td>
+          </tr>
+          <tr>
+            <td><code>&lt;()</code> process substitution</td>
+            <td><span class="val before">❌ Missing</span></td>
+            <td><span class="val after">✅ Added</span> <span class="delta up">Bean 53.7</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">❌ (psub)</span></td>
+            <td><span class="val same">❌</span></td>
+          </tr>
+          <tr>
+            <td>Bracket glob <code>[abc]</code></td>
+            <td><span class="val before">❌ Broken</span></td>
+            <td><span class="val after">✅ Fixed</span> <span class="delta up">Bean 35</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+            <td><span class="val same">✅</span></td>
+          </tr>
+          <tr style="background: #1c2128; font-weight: 600;">
+            <td>Overall POSIX Score</td>
+            <td><span class="val before">~90%</span> <span class="arrow">→</span> <span class="val after">~97%</span></td>
+            <td><span class="val after">~97%</span></td>
+            <td><span class="val same">99%</span></td>
+            <td><span class="val same">~85%</span></td>
+            <td><span class="val same">~10%</span></td>
+            <td><span class="val same">~5%</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ OVERALL SCORE SHIFT ═══════════ -->
+  <h2 class="section-title">🏆 Overall Score — Before &amp; After</h2>
+  <p class="section-desc">How Rush's competitive position shifts across all four use cases after completing all beans.</p>
+
+  <div class="grid full">
+    <div class="card">
+      <h2>Use Case Rankings — Rush Before vs After</h2>
+      <div class="desc">Stacked scores. Rush (Before) shown as outline, Rush (After) as solid fill.</div>
+      <div class="chart-wrap tall">
+        <canvas id="useCaseChart"></canvas>
+      </div>
+      <div class="legend-note">
+        Rush After jumps from <strong>29 → 35</strong> total points — closing the gap with Fish on interactive use (won't fully catch up without plugin/UX beans), but pulling decisively ahead in AI/Automation and Scripting. The only remaining soft spots: interactive UX (no plugin ecosystem) and cross-platform (no Windows).
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ POSITIONING MAP ═══════════ -->
+  <div class="grid full">
+    <div class="card">
+      <h2>Positioning Map — Rush Moves Up and Right</h2>
+      <div class="desc">Arrow shows Rush's shift after beans: deeper into the "POSIX + Programmatic" corner that no other shell occupies.</div>
+      <div class="chart-wrap tall">
+        <canvas id="scatterChart"></canvas>
+      </div>
+      <div class="legend-note">
+        After beans: POSIX compliance moves from 8→9.5 (near Bash level), programmatic optimization stays at 9. Rush cements its position as the <em>only</em> shell that is both fully POSIX-compatible and AI/automation-first.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ DELTA SUMMARY ═══════════ -->
+  <h2 class="section-title">📊 The Delta Summary</h2>
+  <p class="section-desc">Every dimension, before and after, with the bean(s) responsible.</p>
+
+  <div class="grid full">
+    <div class="card" style="overflow-x: auto;">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Before</th>
+            <th>After</th>
+            <th>Change</th>
+            <th>Beans Responsible</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cold Startup</td>
+            <td>4.9ms</td>
+            <td class="rush-col">~3.0ms</td>
+            <td><span class="delta down">-39%</span></td>
+            <td>#40, #49, #50, #51</td>
+          </tr>
+          <tr>
+            <td>Daemon Startup</td>
+            <td>0.4ms</td>
+            <td class="rush-col">0.4ms</td>
+            <td><span class="delta" style="background:#21262d;color:#8b949e;">—</span></td>
+            <td>(already optimal)</td>
+          </tr>
+          <tr>
+            <td>Memory (idle)</td>
+            <td>&lt;10MB</td>
+            <td class="rush-col">~6-7MB</td>
+            <td><span class="delta down">-30%</span></td>
+            <td>#49, #50 (clone reduction)</td>
+          </tr>
+          <tr>
+            <td>POSIX Compliance</td>
+            <td>~90%</td>
+            <td class="rush-col">~97%</td>
+            <td><span class="delta up">+7%</span></td>
+            <td>#53 (all children), #35</td>
+          </tr>
+          <tr>
+            <td>Compiler Warnings</td>
+            <td>214</td>
+            <td class="rush-col">0</td>
+            <td><span class="delta up">Clean</span></td>
+            <td>#3, #4, #5, #6</td>
+          </tr>
+          <tr>
+            <td>Largest Module</td>
+            <td>3,713 lines</td>
+            <td class="rush-col">~900 lines</td>
+            <td><span class="delta down">-76%</span></td>
+            <td>#32, #33, #34</td>
+          </tr>
+          <tr>
+            <td>Unsafe Blocks Documented</td>
+            <td>Partial</td>
+            <td class="rush-col">100%</td>
+            <td><span class="delta up">Complete</span></td>
+            <td>#15</td>
+          </tr>
+          <tr>
+            <td>Module Documentation</td>
+            <td>Sparse</td>
+            <td class="rush-col">All key modules</td>
+            <td><span class="delta up">Complete</span></td>
+            <td>#17, #18</td>
+          </tr>
+          <tr>
+            <td>AI Workload Speedup</td>
+            <td>8.4x vs Bash</td>
+            <td class="rush-col">~10x vs Bash</td>
+            <td><span class="delta up">+19%</span></td>
+            <td>#40, #49, #50, #51</td>
+          </tr>
+          <tr>
+            <td>Radar: Extensibility</td>
+            <td>2/10</td>
+            <td class="rush-col">4/10</td>
+            <td><span class="delta up">+2</span></td>
+            <td>#32, #33, #34 (modular arch)</td>
+          </tr>
+          <tr>
+            <td>Radar: Scripting Power</td>
+            <td>8/10</td>
+            <td class="rush-col">9/10</td>
+            <td><span class="delta up">+1</span></td>
+            <td>#53, #19, #20, #36</td>
+          </tr>
+          <tr>
+            <td>Radar: POSIX</td>
+            <td>9/10</td>
+            <td class="rush-col">10/10</td>
+            <td><span class="delta up">+1</span></td>
+            <td>#53 (all children)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ WHAT'S STILL MISSING ═══════════ -->
+  <div class="callout beans">
+    <h3>What Beans Don't Fix (Future Work)</h3>
+    <ul>
+      <li><strong>Interactive UX (5/10):</strong> No beans for advanced autosuggestions, syntax highlighting improvements, or a plugin system — Rush stays behind Fish and Zsh here</li>
+      <li><strong>Plugin Ecosystem (2→4):</strong> Modular architecture enables plugins but no plugin system is being built</li>
+      <li><strong>Cross-Platform (5/10):</strong> No Windows or BSD beans — stays macOS + Linux only</li>
+      <li><strong>Bash Arrays:</strong> Bean 53 explicitly defers this ("lowest priority")</li>
+      <li><strong>SIMD JSON / JIT queries:</strong> Listed in PERFORMANCE.md as future optimizations, no beans filed</li>
+    </ul>
+  </div>
+
+</div>
+
+<footer>
+  Rush Before &amp; After Beans &middot; March 2026 &middot; 23 open beans mapped to competitive impact
+</footer>
+
+<script>
+const COLORS = {
+  rush:       { bg: 'rgba(249,115,22,0.7)',  border: '#f97316' },
+  rushAfter:  { bg: 'rgba(249,115,22,1.0)',  border: '#fbbf24' },
+  rushBefore: { bg: 'rgba(249,115,22,0.25)', border: '#f97316' },
+  bash:       { bg: 'rgba(88,166,255,0.7)',   border: '#58a6ff' },
+  zsh:        { bg: 'rgba(163,113,247,0.7)',  border: '#a371f7' },
+  fish:       { bg: 'rgba(63,185,80,0.7)',    border: '#3fb950' },
+  nushell:    { bg: 'rgba(248,81,73,0.7)',    border: '#f85149' },
+  powershell: { bg: 'rgba(210,153,34,0.7)',   border: '#d29922' },
+};
+
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#21262d';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+
+// ══════════ RADAR ══════════
+new Chart(document.getElementById('radarChart'), {
+  type: 'radar',
+  data: {
+    labels: [
+      'POSIX Compliance',
+      'Structured Data',
+      'Builtin Performance',
+      'Interactive UX',
+      'Extensibility',
+      'Cross-Platform',
+      'AI Agent Optimization',
+      'Scripting Power'
+    ],
+    datasets: [
+      {
+        label: 'Rush (After Beans)',
+        data: [10, 8, 10, 5, 4, 5, 10, 9],
+        backgroundColor: 'rgba(249,115,22,0.2)',
+        borderColor: '#fbbf24',
+        borderWidth: 3,
+        pointBackgroundColor: '#fbbf24',
+        pointRadius: 5,
+      },
+      {
+        label: 'Rush (Before — Current)',
+        data: [9, 8, 10, 5, 2, 5, 10, 8],
+        backgroundColor: 'rgba(249,115,22,0.05)',
+        borderColor: '#f97316',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointBackgroundColor: '#f97316',
+        pointRadius: 3,
+      },
+      {
+        label: 'Bash',
+        data: [10, 1, 3, 2, 3, 6, 2, 7],
+        backgroundColor: 'rgba(88,166,255,0.06)',
+        borderColor: '#58a6ff',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#58a6ff',
+        pointRadius: 3,
+      },
+      {
+        label: 'Zsh',
+        data: [8, 1, 3, 7, 9, 6, 2, 8],
+        backgroundColor: 'rgba(163,113,247,0.06)',
+        borderColor: '#a371f7',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#a371f7',
+        pointRadius: 3,
+      },
+      {
+        label: 'Fish',
+        data: [1, 2, 3, 10, 7, 7, 2, 5],
+        backgroundColor: 'rgba(63,185,80,0.06)',
+        borderColor: '#3fb950',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#3fb950',
+        pointRadius: 3,
+      },
+      {
+        label: 'Nushell',
+        data: [1, 10, 6, 8, 4, 8, 6, 9],
+        backgroundColor: 'rgba(248,81,73,0.06)',
+        borderColor: '#f85149',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#f85149',
+        pointRadius: 3,
+      },
+      {
+        label: 'PowerShell',
+        data: [1, 9, 2, 6, 8, 9, 4, 9],
+        backgroundColor: 'rgba(210,153,34,0.06)',
+        borderColor: '#d29922',
+        borderWidth: 1.5,
+        pointBackgroundColor: '#d29922',
+        pointRadius: 3,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      r: {
+        beginAtZero: true,
+        max: 10,
+        ticks: { stepSize: 2, backdropColor: 'transparent' },
+        grid: { color: '#21262d' },
+        angleLines: { color: '#21262d' },
+        pointLabels: { font: { size: 12 }, color: '#c9d1d9' },
+      }
+    }
+  }
+});
+
+// ══════════ STARTUP ══════════
+const startupLabels = ['Rush\n(Before)', 'Rush\n(After)', 'Bash', 'Zsh', 'Fish', 'Nushell', 'PowerShell'];
+new Chart(document.getElementById('startupChart'), {
+  type: 'bar',
+  data: {
+    labels: startupLabels,
+    datasets: [{
+      label: 'Cold Startup (ms)',
+      data: [4.9, 3.0, 3.3, 5.0, 14.0, 32, 300],
+      backgroundColor: [
+        COLORS.rushBefore.bg, COLORS.rushAfter.bg,
+        COLORS.bash.bg, COLORS.zsh.bg, COLORS.fish.bg, COLORS.nushell.bg, COLORS.powershell.bg
+      ],
+      borderColor: [
+        COLORS.rushBefore.border, COLORS.rushAfter.border,
+        COLORS.bash.border, COLORS.zsh.border, COLORS.fish.border, COLORS.nushell.border, COLORS.powershell.border
+      ],
+      borderWidth: 2,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `${ctx.raw}ms` } }
+    },
+    scales: {
+      y: {
+        type: 'logarithmic',
+        title: { display: true, text: 'Milliseconds (log scale)' },
+        grid: { color: '#161b22' },
+        ticks: { callback: v => v + 'ms' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ MEMORY ══════════
+const memLabels = ['Rush\n(Before)', 'Rush\n(After)', 'Bash', 'Zsh', 'Fish', 'Nushell', 'PowerShell'];
+new Chart(document.getElementById('memoryChart'), {
+  type: 'bar',
+  data: {
+    labels: memLabels,
+    datasets: [{
+      label: 'Memory (MB)',
+      data: [9, 6.5, 3, 8, 18, 35, 80],
+      backgroundColor: [
+        COLORS.rushBefore.bg, COLORS.rushAfter.bg,
+        COLORS.bash.bg, COLORS.zsh.bg, COLORS.fish.bg, COLORS.nushell.bg, COLORS.powershell.bg
+      ],
+      borderColor: [
+        COLORS.rushBefore.border, COLORS.rushAfter.border,
+        COLORS.bash.border, COLORS.zsh.border, COLORS.fish.border, COLORS.nushell.border, COLORS.powershell.border
+      ],
+      borderWidth: 2,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `${ctx.raw} MB` } }
+    },
+    scales: {
+      y: {
+        title: { display: true, text: 'Megabytes' },
+        grid: { color: '#161b22' },
+        ticks: { callback: v => v + ' MB' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ AI WORKLOADS ══════════
+new Chart(document.getElementById('aiChart'), {
+  type: 'bar',
+  data: {
+    labels: [
+      'Git Status ×100',
+      'Find+Filter 1K files',
+      'Git Log 100 commits',
+      'Grep 50 files',
+      'Complex Pipeline'
+    ],
+    datasets: [
+      {
+        label: 'Rush (After)',
+        data: [195, 5, 28, 10, 55],
+        backgroundColor: 'rgba(251,191,36,0.8)',
+        borderColor: '#fbbf24',
+        borderWidth: 2, borderRadius: 4,
+      },
+      {
+        label: 'Rush (Before)',
+        data: [250, 6, 32, 12, 65],
+        backgroundColor: 'rgba(249,115,22,0.35)',
+        borderColor: '#f97316',
+        borderWidth: 2, borderRadius: 4,
+        borderDash: [4, 4],
+      },
+      {
+        label: 'Bash',
+        data: [2000, 95, 185, 45, 520],
+        backgroundColor: COLORS.bash.bg,
+        borderColor: COLORS.bash.border,
+        borderWidth: 1.5, borderRadius: 4,
+      },
+      {
+        label: 'Nushell',
+        data: [1200, 50, 120, 35, 350],
+        backgroundColor: COLORS.nushell.bg,
+        borderColor: COLORS.nushell.border,
+        borderWidth: 1.5, borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    indexAxis: 'y',
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      x: {
+        type: 'logarithmic',
+        title: { display: true, text: 'Milliseconds (log scale)' },
+        grid: { color: '#161b22' },
+        ticks: { callback: v => v + 'ms' }
+      },
+      y: { grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ USE CASE ══════════
+const SHELLS = ['Rush\n(Before)', 'Rush\n(After)', 'Bash', 'Zsh', 'Fish', 'Nushell', 'PowerShell'];
+new Chart(document.getElementById('useCaseChart'), {
+  type: 'bar',
+  data: {
+    labels: SHELLS,
+    datasets: [
+      {
+        label: 'AI / Automation',
+        data: [10, 10, 4, 4, 3, 7, 5],
+        backgroundColor: 'rgba(249,115,22,0.8)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Scripting',
+        data: [8, 9, 8, 8, 5, 9, 9],
+        backgroundColor: 'rgba(88,166,255,0.8)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Interactive Daily Use',
+        data: [5, 6, 3, 7, 10, 7, 5],
+        backgroundColor: 'rgba(63,185,80,0.8)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Server / DevOps',
+        data: [6, 8, 10, 8, 4, 5, 7],
+        backgroundColor: 'rgba(163,113,247,0.8)',
+        borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}/10` } }
+    },
+    scales: {
+      y: {
+        stacked: true,
+        title: { display: true, text: 'Combined Score' },
+        grid: { color: '#161b22' },
+        max: 40,
+      },
+      x: { stacked: true, grid: { display: false } }
+    }
+  }
+});
+
+// ══════════ SCATTER POSITIONING ══════════
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      {
+        label: 'Rush (After)',
+        data: [{ x: 9.5, y: 9.5 }],
+        backgroundColor: '#fbbf24',
+        pointRadius: 16,
+        pointHoverRadius: 20,
+        pointStyle: 'star',
+      },
+      {
+        label: 'Rush (Before)',
+        data: [{ x: 8, y: 9 }],
+        backgroundColor: 'rgba(249,115,22,0.4)',
+        borderColor: '#f97316',
+        pointRadius: 12,
+        pointHoverRadius: 16,
+        pointBorderWidth: 2,
+        pointStyle: 'circle',
+      },
+      { label: 'Bash',       data: [{ x: 9, y: 4 }],   backgroundColor: COLORS.bash.border,       pointRadius: 12, pointHoverRadius: 16 },
+      { label: 'Zsh',        data: [{ x: 7, y: 3 }],   backgroundColor: COLORS.zsh.border,        pointRadius: 12, pointHoverRadius: 16 },
+      { label: 'Fish',       data: [{ x: 2, y: 2 }],   backgroundColor: COLORS.fish.border,       pointRadius: 12, pointHoverRadius: 16 },
+      { label: 'Nushell',    data: [{ x: 1, y: 7 }],   backgroundColor: COLORS.nushell.border,    pointRadius: 12, pointHoverRadius: 16 },
+      { label: 'PowerShell', data: [{ x: 1, y: 8 }],   backgroundColor: COLORS.powershell.border, pointRadius: 12, pointHoverRadius: 16 },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label} (compat: ${ctx.raw.x}, programmatic: ${ctx.raw.y})`
+        }
+      },
+      annotation: {
+        annotations: {
+          arrow: {
+            type: 'line',
+            xMin: 8, yMin: 9,
+            xMax: 9.5, yMax: 9.5,
+            borderColor: 'rgba(251,191,36,0.5)',
+            borderWidth: 2,
+            borderDash: [6, 3],
+            arrowHeads: {
+              end: { display: true, fill: true, borderColor: '#fbbf24' }
+            }
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: '← Novel Syntax ——— POSIX Compatible →' },
+        min: 0, max: 10,
+        grid: { color: '#161b22' },
+        ticks: { display: false }
+      },
+      y: {
+        title: { display: true, text: '← Interactive Focus ——— Programmatic/AI →' },
+        min: 0, max: 10,
+        grid: { color: '#161b22' },
+        ticks: { display: false }
+      }
+    }
+  }
+});
+</script>
+
+</body>
+</html>

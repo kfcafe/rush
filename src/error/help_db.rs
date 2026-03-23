@@ -26,75 +26,80 @@ pub fn get_help(error_code: &str) -> Option<&'static HelpEntry> {
 }
 
 /// Help database mapping error codes to help entries
-static HELP_DATABASE: LazyLock<HashMap<&'static str, &'static HelpEntry>> =
-    LazyLock::new(|| {
-        let mut map = HashMap::new();
+static HELP_DATABASE: LazyLock<HashMap<&'static str, &'static HelpEntry>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
 
-        // File and path errors
-        map.insert("FILE_NOT_FOUND", &HELP_FILE_NOT_FOUND);
-        map.insert("NO_SUCH_FILE_OR_DIR", &HELP_FILE_NOT_FOUND);
-        map.insert("IS_A_DIRECTORY", &HELP_IS_A_DIRECTORY);
-        map.insert("PERMISSION_DENIED", &HELP_PERMISSION_DENIED);
-        map.insert("FILE_EXISTS", &HELP_FILE_EXISTS);
-        map.insert("NOT_A_DIRECTORY", &HELP_NOT_A_DIRECTORY);
+    // File and path errors
+    map.insert("FILE_NOT_FOUND", &HELP_FILE_NOT_FOUND);
+    map.insert("NO_SUCH_FILE_OR_DIR", &HELP_FILE_NOT_FOUND);
+    map.insert("IS_A_DIRECTORY", &HELP_IS_A_DIRECTORY);
+    map.insert("PERMISSION_DENIED", &HELP_PERMISSION_DENIED);
+    map.insert("FILE_EXISTS", &HELP_FILE_EXISTS);
+    map.insert("NOT_A_DIRECTORY", &HELP_NOT_A_DIRECTORY);
 
-        // Syntax and parsing errors
-        map.insert("SYNTAX_ERROR", &HELP_SYNTAX_ERROR);
-        map.insert("PARSE_ERROR", &HELP_PARSE_ERROR);
-        map.insert("UNEXPECTED_TOKEN", &HELP_UNEXPECTED_TOKEN);
-        map.insert("UNCLOSED_QUOTE", &HELP_UNCLOSED_QUOTE);
-        map.insert("UNCLOSED_BRACE", &HELP_UNCLOSED_BRACE);
-        map.insert("UNCLOSED_PAREN", &HELP_UNCLOSED_PAREN);
-        map.insert("UNMATCHED_OPERATOR", &HELP_UNMATCHED_OPERATOR);
+    // Syntax and parsing errors
+    map.insert("SYNTAX_ERROR", &HELP_SYNTAX_ERROR);
+    map.insert("PARSE_ERROR", &HELP_PARSE_ERROR);
+    map.insert("UNEXPECTED_TOKEN", &HELP_UNEXPECTED_TOKEN);
+    map.insert("UNCLOSED_QUOTE", &HELP_UNCLOSED_QUOTE);
+    map.insert("UNCLOSED_BRACE", &HELP_UNCLOSED_BRACE);
+    map.insert("UNCLOSED_PAREN", &HELP_UNCLOSED_PAREN);
+    map.insert("UNMATCHED_OPERATOR", &HELP_UNMATCHED_OPERATOR);
 
-        // Variable and expansion errors
-        map.insert("UNDEFINED_VARIABLE", &HELP_UNDEFINED_VARIABLE);
-        map.insert("VARIABLE_NOT_FOUND", &HELP_UNDEFINED_VARIABLE);
-        map.insert("INVALID_VARIABLE_NAME", &HELP_INVALID_VARIABLE_NAME);
-        map.insert("READONLY_VARIABLE", &HELP_READONLY_VARIABLE);
-        map.insert("EXPANSION_ERROR", &HELP_EXPANSION_ERROR);
+    // Variable and expansion errors
+    map.insert("UNDEFINED_VARIABLE", &HELP_UNDEFINED_VARIABLE);
+    map.insert("VARIABLE_NOT_FOUND", &HELP_UNDEFINED_VARIABLE);
+    map.insert("INVALID_VARIABLE_NAME", &HELP_INVALID_VARIABLE_NAME);
+    map.insert("READONLY_VARIABLE", &HELP_READONLY_VARIABLE);
+    map.insert("EXPANSION_ERROR", &HELP_EXPANSION_ERROR);
 
-        // Command errors
-        map.insert("COMMAND_NOT_FOUND", &HELP_COMMAND_NOT_FOUND);
-        map.insert("NOT_A_BUILTIN", &HELP_NOT_A_BUILTIN);
-        map.insert("EXECUTION_ERROR", &HELP_EXECUTION_ERROR);
-        map.insert("COMMAND_FAILED", &HELP_COMMAND_FAILED);
-        map.insert("AMBIGUOUS_REDIRECT", &HELP_AMBIGUOUS_REDIRECT);
+    // Command errors
+    map.insert("COMMAND_NOT_FOUND", &HELP_COMMAND_NOT_FOUND);
+    map.insert("NOT_A_BUILTIN", &HELP_NOT_A_BUILTIN);
+    map.insert("EXECUTION_ERROR", &HELP_EXECUTION_ERROR);
+    map.insert("COMMAND_FAILED", &HELP_COMMAND_FAILED);
+    map.insert("AMBIGUOUS_REDIRECT", &HELP_AMBIGUOUS_REDIRECT);
 
-        // Function and control flow errors
-        map.insert("INVALID_FUNCTION_NAME", &HELP_INVALID_FUNCTION_NAME);
-        map.insert("FUNCTION_NOT_FOUND", &HELP_FUNCTION_NOT_FOUND);
-        map.insert("INVALID_RETURN", &HELP_INVALID_RETURN);
-        map.insert("INVALID_BREAK", &HELP_INVALID_BREAK);
-        map.insert("INVALID_CONTINUE", &HELP_INVALID_CONTINUE);
-        map.insert("TOO_MANY_ARGUMENTS", &HELP_TOO_MANY_ARGUMENTS);
-        map.insert("TOO_FEW_ARGUMENTS", &HELP_TOO_FEW_ARGUMENTS);
+    // Function and control flow errors
+    map.insert("INVALID_FUNCTION_NAME", &HELP_INVALID_FUNCTION_NAME);
+    map.insert("FUNCTION_NOT_FOUND", &HELP_FUNCTION_NOT_FOUND);
+    map.insert("INVALID_RETURN", &HELP_INVALID_RETURN);
+    map.insert("INVALID_BREAK", &HELP_INVALID_BREAK);
+    map.insert("INVALID_CONTINUE", &HELP_INVALID_CONTINUE);
+    map.insert("TOO_MANY_ARGUMENTS", &HELP_TOO_MANY_ARGUMENTS);
+    map.insert("TOO_FEW_ARGUMENTS", &HELP_TOO_FEW_ARGUMENTS);
 
-        // Arithmetic and type errors
-        map.insert("ARITHMETIC_ERROR", &HELP_ARITHMETIC_ERROR);
-        map.insert("DIVISION_BY_ZERO", &HELP_DIVISION_BY_ZERO);
-        map.insert("NOT_A_NUMBER", &HELP_NOT_A_NUMBER);
-        map.insert("TYPE_ERROR", &HELP_TYPE_ERROR);
+    // Arithmetic and type errors
+    map.insert("ARITHMETIC_ERROR", &HELP_ARITHMETIC_ERROR);
+    map.insert("DIVISION_BY_ZERO", &HELP_DIVISION_BY_ZERO);
+    map.insert("NOT_A_NUMBER", &HELP_NOT_A_NUMBER);
+    map.insert("TYPE_ERROR", &HELP_TYPE_ERROR);
 
-        // Option and flag errors
-        map.insert("INVALID_OPTION", &HELP_INVALID_OPTION);
-        map.insert("OPTION_REQUIRES_ARGUMENT", &HELP_OPTION_REQUIRES_ARGUMENT);
-        map.insert("UNRECOGNIZED_OPTION", &HELP_UNRECOGNIZED_OPTION);
+    // Option and flag errors
+    map.insert("INVALID_OPTION", &HELP_INVALID_OPTION);
+    map.insert("OPTION_REQUIRES_ARGUMENT", &HELP_OPTION_REQUIRES_ARGUMENT);
+    map.insert("UNRECOGNIZED_OPTION", &HELP_UNRECOGNIZED_OPTION);
 
-        // Job control errors
-        map.insert("NO_SUCH_JOB", &HELP_NO_SUCH_JOB);
-        map.insert("NO_JOBS", &HELP_NO_JOBS);
+    // Job control errors
+    map.insert("NO_SUCH_JOB", &HELP_NO_SUCH_JOB);
+    map.insert("NO_JOBS", &HELP_NO_JOBS);
 
-        // I/O and redirection errors
-        map.insert("INVALID_FD", &HELP_INVALID_FD);
-        map.insert("REDIRECT_ERROR", &HELP_REDIRECT_ERROR);
+    // I/O and redirection errors
+    map.insert("INVALID_FD", &HELP_INVALID_FD);
+    map.insert("REDIRECT_ERROR", &HELP_REDIRECT_ERROR);
 
-        // Substitution errors
-        map.insert("COMMAND_SUBSTITUTION_ERROR", &HELP_COMMAND_SUBSTITUTION_ERROR);
-        map.insert("PROCESS_SUBSTITUTION_ERROR", &HELP_PROCESS_SUBSTITUTION_ERROR);
+    // Substitution errors
+    map.insert(
+        "COMMAND_SUBSTITUTION_ERROR",
+        &HELP_COMMAND_SUBSTITUTION_ERROR,
+    );
+    map.insert(
+        "PROCESS_SUBSTITUTION_ERROR",
+        &HELP_PROCESS_SUBSTITUTION_ERROR,
+    );
 
-        map
-    });
+    map
+});
 
 // FILE AND PATH ERRORS
 
@@ -777,7 +782,11 @@ mod tests {
     fn test_help_entries_have_content() {
         for (code, entry) in HELP_DATABASE.iter() {
             assert!(!entry.title.is_empty(), "Empty title for {}", code);
-            assert!(!entry.explanation.is_empty(), "Empty explanation for {}", code);
+            assert!(
+                !entry.explanation.is_empty(),
+                "Empty explanation for {}",
+                code
+            );
             assert!(!entry.fix.is_empty(), "Empty fix for {}", code);
             assert!(!entry.example.is_empty(), "Empty example for {}", code);
         }
@@ -786,8 +795,10 @@ mod tests {
     #[test]
     fn test_minimum_error_count() {
         // Should have at least 30 error codes
-        assert!(HELP_DATABASE.len() >= 30,
+        assert!(
+            HELP_DATABASE.len() >= 30,
             "Help database has {} entries but expected at least 30",
-            HELP_DATABASE.len());
+            HELP_DATABASE.len()
+        );
     }
 }

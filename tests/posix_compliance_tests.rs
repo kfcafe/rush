@@ -8,9 +8,9 @@
 // and located in tests/posix/shellspec/. This module provides
 // a bridge between cargo test and the shell-based test suite.
 
-use std::process::Command;
-use std::path::PathBuf;
 use std::env;
+use std::path::PathBuf;
+use std::process::Command;
 
 /// Get the project root directory
 fn project_root() -> PathBuf {
@@ -76,7 +76,10 @@ fn test_posix_compliance_suite_available() {
     assert!(run_script.exists(), "Test runner script should exist");
 
     let shellspec_dir = posix_dir.join("shellspec");
-    assert!(shellspec_dir.exists(), "ShellSpec test directory should exist");
+    assert!(
+        shellspec_dir.exists(),
+        "ShellSpec test directory should exist"
+    );
 
     // Check for expected test files
     let test_files = [
@@ -258,8 +261,8 @@ fn test_posix_full_suite() {
 
     eprintln!("\n=== Running Full POSIX Compliance Test Suite ===\n");
 
-    let output = run_shellspec(&["--format", "documentation"])
-        .expect("Failed to run ShellSpec tests");
+    let output =
+        run_shellspec(&["--format", "documentation"]).expect("Failed to run ShellSpec tests");
 
     // Always print output for comprehensive test
     println!("{}", String::from_utf8_lossy(&output.stdout));

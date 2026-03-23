@@ -297,7 +297,8 @@ impl JobManager {
         // Handle plain number (without %)
         if !spec.starts_with('%') {
             if let Ok(job_id) = spec.parse::<usize>() {
-                return self.get_job(job_id)
+                return self
+                    .get_job(job_id)
                     .ok_or_else(|| format!("No such job: {}", job_id));
             }
             return Err(format!("Invalid job specification: {}", spec));
@@ -327,7 +328,8 @@ impl JobManager {
 
                 // Try parsing as job ID
                 if let Ok(job_id) = spec.parse::<usize>() {
-                    return self.get_job(job_id)
+                    return self
+                        .get_job(job_id)
                         .ok_or_else(|| format!("No such job: {}", job_id));
                 }
 
@@ -340,7 +342,8 @@ impl JobManager {
     /// Find a job whose command starts with the given string
     fn find_job_starting_with(&self, prefix: &str) -> Result<Job, String> {
         let jobs = self.jobs.lock().unwrap();
-        let matching: Vec<_> = jobs.values()
+        let matching: Vec<_> = jobs
+            .values()
             .filter(|j| j.command.starts_with(prefix))
             .collect();
 
@@ -363,7 +366,8 @@ impl JobManager {
     /// Find a job whose command contains the given string
     fn find_job_containing(&self, substring: &str) -> Result<Job, String> {
         let jobs = self.jobs.lock().unwrap();
-        let matching: Vec<_> = jobs.values()
+        let matching: Vec<_> = jobs
+            .values()
             .filter(|j| j.command.contains(substring))
             .collect();
 

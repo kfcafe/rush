@@ -7,7 +7,9 @@ fn test_ifs_default_for_loop() {
     let mut executor = Executor::new();
 
     // for x in $var; do echo $x; done with default IFS (space, tab, newline)
-    executor.runtime_mut().set_variable("var".to_string(), "a b c".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "a b c".to_string());
 
     let tokens = Lexer::tokenize("for x in $var; do echo $x; done").unwrap();
     let mut parser = Parser::new(tokens);
@@ -25,8 +27,12 @@ fn test_ifs_custom_colon() {
     let mut executor = Executor::new();
 
     // Set IFS to colon
-    executor.runtime_mut().set_variable("IFS".to_string(), ":".to_string());
-    executor.runtime_mut().set_variable("var".to_string(), "a:b:c".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("IFS".to_string(), ":".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "a:b:c".to_string());
 
     let tokens = Lexer::tokenize("for x in $var; do echo $x; done").unwrap();
     let mut parser = Parser::new(tokens);
@@ -44,8 +50,12 @@ fn test_ifs_multiple_chars() {
     let mut executor = Executor::new();
 
     // Set IFS to multiple characters (colon and comma)
-    executor.runtime_mut().set_variable("IFS".to_string(), ":,".to_string());
-    executor.runtime_mut().set_variable("var".to_string(), "a:b,c".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("IFS".to_string(), ":,".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "a:b,c".to_string());
 
     let tokens = Lexer::tokenize("for x in $var; do echo $x; done").unwrap();
     let mut parser = Parser::new(tokens);
@@ -63,8 +73,12 @@ fn test_ifs_empty_no_splitting() {
     let mut executor = Executor::new();
 
     // Set IFS to empty string (no splitting)
-    executor.runtime_mut().set_variable("IFS".to_string(), "".to_string());
-    executor.runtime_mut().set_variable("var".to_string(), "a b c".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("IFS".to_string(), "".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "a b c".to_string());
 
     let tokens = Lexer::tokenize("for x in $var; do echo $x; done").unwrap();
     let mut parser = Parser::new(tokens);
@@ -82,7 +96,9 @@ fn test_ifs_variable_expansion_in_echo() {
     let mut executor = Executor::new();
 
     // Test that variable expansion with default IFS splits into separate arguments
-    executor.runtime_mut().set_variable("var".to_string(), "one two three".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "one two three".to_string());
 
     let tokens = Lexer::tokenize("echo $var").unwrap();
     let mut parser = Parser::new(tokens);
@@ -115,7 +131,9 @@ fn test_ifs_with_leading_trailing_whitespace() {
     let mut executor = Executor::new();
 
     // Variable with leading/trailing spaces
-    executor.runtime_mut().set_variable("var".to_string(), "  a b c  ".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "  a b c  ".to_string());
 
     let tokens = Lexer::tokenize("for x in $var; do echo $x; done").unwrap();
     let mut parser = Parser::new(tokens);
@@ -133,7 +151,9 @@ fn test_ifs_with_consecutive_separators() {
     let mut executor = Executor::new();
 
     // Multiple consecutive spaces should be treated as single separator
-    executor.runtime_mut().set_variable("var".to_string(), "a  b    c".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("var".to_string(), "a  b    c".to_string());
 
     let tokens = Lexer::tokenize("for x in $var; do echo $x; done").unwrap();
     let mut parser = Parser::new(tokens);

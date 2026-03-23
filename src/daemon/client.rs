@@ -3,7 +3,7 @@
 //! Thin client logic for connecting to the daemon and executing commands.
 
 use crate::daemon::protocol::{
-    Message, SessionInit, StatsRequest, StatsResponse, read_message, write_message,
+    read_message, write_message, Message, SessionInit, StatsRequest, StatsResponse,
 };
 use crate::daemon::server::DaemonServer;
 use anyhow::{anyhow, Result};
@@ -78,21 +78,21 @@ impl DaemonClient {
 
         // Send message to daemon
         let msg_id = self.next_message_id();
-        let stream = self.stream.as_mut()
+        let stream = self
+            .stream
+            .as_mut()
             .ok_or_else(|| anyhow!("Not connected"))?;
 
         write_message(stream, &message, msg_id)
             .map_err(|e| anyhow!("Failed to send message: {}", e))?;
 
         // Read response
-        let (response, _response_id) = read_message(stream)
-            .map_err(|e| anyhow!("Failed to read response: {}", e))?;
+        let (response, _response_id) =
+            read_message(stream).map_err(|e| anyhow!("Failed to read response: {}", e))?;
 
         // Extract exit code from response
         match response {
-            Message::ExecutionResult(result) => {
-                Ok(result.exit_code)
-            }
+            Message::ExecutionResult(result) => Ok(result.exit_code),
             _ => Err(anyhow!("Unexpected response type")),
         }
     }
@@ -105,7 +105,7 @@ impl DaemonClient {
     }
 
     /// Fetch system stats from the daemon
-    /// 
+    ///
     /// Returns stats data if daemon is running and responds, None otherwise.
     /// This is designed to be fast (<1ms) as it reads cached values.
     pub fn fetch_stats(&mut self, stats: Vec<String>) -> Result<StatsResponse> {
@@ -120,10 +120,12 @@ impl DaemonClient {
 
         // Get message ID first (before borrowing stream) to avoid borrow issues
         let msg_id = self.next_message_id();
-        
+
         {
             // Set a short timeout for stats fetch (should be very fast)
-            let stream = self.stream.as_mut()
+            let stream = self
+                .stream
+                .as_mut()
                 .ok_or_else(|| anyhow!("Not connected"))?;
             stream.set_read_timeout(Some(Duration::from_millis(100)))?;
 
@@ -157,7 +159,8 @@ impl DaemonClient {
 
         // Get the path to rushd binary
         let exe_path = env::current_exe()?;
-        let exe_dir = exe_path.parent()
+        let exe_dir = exe_path
+            .parent()
             .ok_or_else(|| anyhow!("Cannot determine executable directory"))?;
         let rushd_path = exe_dir.join("rushd");
 

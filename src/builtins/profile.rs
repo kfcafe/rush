@@ -41,22 +41,22 @@ pub fn builtin_profile(args: &[String], runtime: &mut Runtime) -> Result<Executi
     profile_data.start_total();
 
     // Parse and execute the command string
+    use crate::executor::Executor;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
-    use crate::executor::Executor;
 
     // Tokenize the command string
-    let tokens = Lexer::tokenize(&command_string)
-        .map_err(|e| anyhow!("profile: tokenize error: {}", e))?;
+    let tokens =
+        Lexer::tokenize(&command_string).map_err(|e| anyhow!("profile: tokenize error: {}", e))?;
 
     // Parse the tokens into statements
     let mut parser = Parser::new(tokens);
-    let statements = parser.parse()
+    let statements = parser
+        .parse()
         .map_err(|e| anyhow!("profile: parse error: {}", e))?;
 
     // Create a new executor with profiling enabled
-    let mut executor = Executor::new_embedded()
-        .with_profiling(true);
+    let mut executor = Executor::new_embedded().with_profiling(true);
 
     // Copy the current runtime state
     *executor.runtime_mut() = runtime.clone();
@@ -65,7 +65,8 @@ pub fn builtin_profile(args: &[String], runtime: &mut Runtime) -> Result<Executi
     let _execution_start = Instant::now();
 
     // Execute the parsed statements
-    let result = executor.execute(statements)
+    let result = executor
+        .execute(statements)
         .map_err(|e| anyhow!("profile: execution error: {}", e))?;
 
     // Get profile data from executor if available
@@ -107,18 +108,10 @@ pub fn builtin_profile(args: &[String], runtime: &mut Runtime) -> Result<Executi
     // Combine the original command output with profiling report
     let final_output = if json_output {
         // For JSON output, we'll put the profile info as the primary output
-        format!(
-            "{}\n{}",
-            result.stdout(),
-            profile_output
-        )
+        format!("{}\n{}", result.stdout(), profile_output)
     } else {
         // For human-readable, append profiling info to command output
-        format!(
-            "{}{}",
-            result.stdout(),
-            profile_output
-        )
+        format!("{}{}", result.stdout(), profile_output)
     };
 
     Ok(ExecutionResult {
@@ -159,7 +152,12 @@ mod tests {
     #[test]
     fn test_profile_with_pipe() {
         let mut runtime = Runtime::new();
-        let args = vec!["echo".to_string(), "hello".to_string(), "|".to_string(), "cat".to_string()];
+        let args = vec![
+            "echo".to_string(),
+            "hello".to_string(),
+            "|".to_string(),
+            "cat".to_string(),
+        ];
         let result = builtin_profile(&args, &mut runtime).unwrap();
 
         assert_eq!(result.exit_code, 0);

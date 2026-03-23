@@ -60,7 +60,8 @@ pub struct MigrationEngine;
 
 impl MigrationEngine {
     /// Get the migration database
-    fn migration_database() -> HashMap<&'static str, (String, String, MigrationComplexity, &'static str)> {
+    fn migration_database(
+    ) -> HashMap<&'static str, (String, String, MigrationComplexity, &'static str)> {
         let mut db = HashMap::new();
 
         // Process substitution: $(...) or `...`
@@ -272,7 +273,9 @@ impl MigrationEngine {
         for (_category, occurrences) in &analysis.features_by_category {
             for occurrence in occurrences {
                 // Check if this feature has a migration suggestion
-                if let Some((pattern, solution, complexity, explanation)) = db.get(occurrence.feature_id.as_str()) {
+                if let Some((pattern, solution, complexity, explanation)) =
+                    db.get(occurrence.feature_id.as_str())
+                {
                     // Some features are informational (no change needed)
                     if pattern == solution && *complexity == MigrationComplexity::Simple {
                         // Skip simple, already-supported features
@@ -298,7 +301,10 @@ impl MigrationEngine {
     }
 
     /// Generate a diff preview for suggested migrations
-    pub fn preview_diff(script_content: &str, suggestions: &[MigrationSuggestion]) -> Vec<DiffPreview> {
+    pub fn preview_diff(
+        script_content: &str,
+        suggestions: &[MigrationSuggestion],
+    ) -> Vec<DiffPreview> {
         let lines: Vec<&str> = script_content.lines().collect();
         let mut diffs = Vec::new();
 
@@ -451,9 +457,7 @@ impl MigrationEngine {
             for suggestion in simple {
                 output.push_str(&format!(
                     "  • Line {}: {} → {}\n",
-                    suggestion.line_number,
-                    suggestion.bash_pattern,
-                    suggestion.rush_solution
+                    suggestion.line_number, suggestion.bash_pattern, suggestion.rush_solution
                 ));
                 output.push_str(&format!("    {}\n", suggestion.explanation));
             }
@@ -469,9 +473,7 @@ impl MigrationEngine {
             for suggestion in moderate {
                 output.push_str(&format!(
                     "  • Line {}: {} → {}\n",
-                    suggestion.line_number,
-                    suggestion.bash_pattern,
-                    suggestion.rush_solution
+                    suggestion.line_number, suggestion.bash_pattern, suggestion.rush_solution
                 ));
                 output.push_str(&format!("    {}\n", suggestion.explanation));
             }
@@ -487,9 +489,7 @@ impl MigrationEngine {
             for suggestion in complex {
                 output.push_str(&format!(
                     "  • Line {}: {} → {}\n",
-                    suggestion.line_number,
-                    suggestion.bash_pattern,
-                    suggestion.rush_solution
+                    suggestion.line_number, suggestion.bash_pattern, suggestion.rush_solution
                 ));
                 output.push_str(&format!("    {}\n", suggestion.explanation));
             }
@@ -553,16 +553,14 @@ mod tests {
 
     #[test]
     fn test_format_suggestions_with_data() {
-        let suggestions = vec![
-            MigrationSuggestion {
-                feature_id: "command_subst_backtick".to_string(),
-                line_number: 1,
-                bash_pattern: "`cmd`".to_string(),
-                rush_solution: "$(cmd)".to_string(),
-                complexity: MigrationComplexity::Simple,
-                explanation: "Use modern syntax".to_string(),
-            },
-        ];
+        let suggestions = vec![MigrationSuggestion {
+            feature_id: "command_subst_backtick".to_string(),
+            line_number: 1,
+            bash_pattern: "`cmd`".to_string(),
+            rush_solution: "$(cmd)".to_string(),
+            complexity: MigrationComplexity::Simple,
+            explanation: "Use modern syntax".to_string(),
+        }];
 
         let formatted = MigrationEngine::format_suggestions(&suggestions);
         assert!(formatted.contains("SAFE TO AUTO-APPLY"));
@@ -572,16 +570,14 @@ mod tests {
     #[test]
     fn test_apply_fixes() {
         let script = "result=`echo hello`\necho $result";
-        let suggestions = vec![
-            MigrationSuggestion {
-                feature_id: "command_subst_backtick".to_string(),
-                line_number: 1,
-                bash_pattern: "`cmd`".to_string(),
-                rush_solution: "$(cmd)".to_string(),
-                complexity: MigrationComplexity::Simple,
-                explanation: "Test".to_string(),
-            },
-        ];
+        let suggestions = vec![MigrationSuggestion {
+            feature_id: "command_subst_backtick".to_string(),
+            line_number: 1,
+            bash_pattern: "`cmd`".to_string(),
+            rush_solution: "$(cmd)".to_string(),
+            complexity: MigrationComplexity::Simple,
+            explanation: "Test".to_string(),
+        }];
 
         let result = MigrationEngine::apply_fixes(script, &suggestions);
         assert!(result.contains("$(echo hello)"));

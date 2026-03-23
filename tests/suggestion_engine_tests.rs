@@ -19,7 +19,10 @@ fn test_suggests_command_typo_lss() {
 
     let suggestions = engine.suggest_command("lss", &builtins, &aliases, &history, cwd);
 
-    assert!(!suggestions.is_empty(), "Should suggest a command for 'lss'");
+    assert!(
+        !suggestions.is_empty(),
+        "Should suggest a command for 'lss'"
+    );
     assert_eq!(
         suggestions[0].text, "ls",
         "First suggestion should be 'ls' for typo 'lss'"
@@ -36,7 +39,10 @@ fn test_suggests_command_typo_eho() {
 
     let suggestions = engine.suggest_command("eho", &builtins, &aliases, &history, cwd);
 
-    assert!(!suggestions.is_empty(), "Should suggest a command for 'eho'");
+    assert!(
+        !suggestions.is_empty(),
+        "Should suggest a command for 'eho'"
+    );
     assert_eq!(
         suggestions[0].text, "echo",
         "First suggestion should be 'echo' for typo 'eho'"
@@ -50,7 +56,10 @@ fn test_suggests_flag_typo_hlep() {
 
     let suggestions = engine.suggest_flag("--hlep", valid_flags);
 
-    assert!(!suggestions.is_empty(), "Should suggest a flag for '--hlep'");
+    assert!(
+        !suggestions.is_empty(),
+        "Should suggest a flag for '--hlep'"
+    );
     assert_eq!(
         suggestions[0].text, "--help",
         "First suggestion should be '--help' for typo '--hlep'"
@@ -64,7 +73,10 @@ fn test_suggests_flag_typo_verbo() {
 
     let suggestions = engine.suggest_flag("--verbo", valid_flags);
 
-    assert!(!suggestions.is_empty(), "Should suggest a flag for '--verbo'");
+    assert!(
+        !suggestions.is_empty(),
+        "Should suggest a flag for '--verbo'"
+    );
     assert!(
         suggestions.iter().any(|s| s.text == "--verbose"),
         "Suggestions should include '--verbose' for typo '--verbo'"
@@ -93,9 +105,18 @@ fn test_format_suggestions_displays_all_parts() {
 
     let formatted = engine.format_suggestions(&suggestions);
 
-    assert!(formatted.contains("Did you mean?"), "Should contain 'Did you mean?'");
-    assert!(formatted.contains("ls"), "Should contain the suggestion 'ls'");
-    assert!(formatted.contains("builtin"), "Should show the suggestion kind");
+    assert!(
+        formatted.contains("Did you mean?"),
+        "Should contain 'Did you mean?'"
+    );
+    assert!(
+        formatted.contains("ls"),
+        "Should contain the suggestion 'ls'"
+    );
+    assert!(
+        formatted.contains("builtin"),
+        "Should show the suggestion kind"
+    );
 }
 
 #[test]

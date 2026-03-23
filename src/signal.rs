@@ -65,8 +65,7 @@ impl SignalHandler {
     /// Setup signal handlers for SIGINT, SIGTERM, SIGHUP, and SIGCHLD
     /// Note: SIGTTIN/SIGTTOU are ignored by the shell (set in main.rs) so we don't handle them here
     pub fn setup(&self) -> Result<()> {
-        let mut signals =
-            Signals::new([SIGINT, SIGTERM, SIGHUP, SIGCHLD, SIGTSTP])?;
+        let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGCHLD, SIGTSTP])?;
         let shutdown_flag = Arc::clone(&self.shutdown_flag);
         let sigchld_flag = Arc::clone(&self.sigchld_flag);
         let interactive_mode = Arc::clone(&self.interactive_mode);
@@ -201,10 +200,10 @@ impl SignalHandler {
     /// Get the exit code for the received signal
     pub fn exit_code(&self) -> i32 {
         match self.signal_number() {
-            SIGINT => 130,   // Standard exit code for SIGINT (128 + 2)
-            SIGTERM => 143,  // Standard exit code for SIGTERM (128 + 15)
-            SIGHUP => 129,   // Standard exit code for SIGHUP (128 + 1)
-            SIGTSTP => 148,  // Standard exit code for SIGTSTP (128 + 20)
+            SIGINT => 130,  // Standard exit code for SIGINT (128 + 2)
+            SIGTERM => 143, // Standard exit code for SIGTERM (128 + 15)
+            SIGHUP => 129,  // Standard exit code for SIGHUP (128 + 1)
+            SIGTSTP => 148, // Standard exit code for SIGTSTP (128 + 20)
             // Note: SIGTTIN/SIGTTOU are ignored by the shell, so they never reach here
             _ => 1,
         }

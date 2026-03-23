@@ -2,7 +2,7 @@ use crate::executor::ExecutionResult;
 use crate::git::GitContext;
 use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
-use git2::{Repository, Commit as Git2Commit, DiffOptions};
+use git2::{Commit as Git2Commit, DiffOptions, Repository};
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -12,7 +12,7 @@ struct Commit {
     short_hash: String,
     author: String,
     author_email: String,
-    date: String,  // ISO 8601
+    date: String, // ISO 8601
     timestamp: i64,
     message: String,
     files_changed: usize,
@@ -31,7 +31,7 @@ pub fn builtin_git_log(args: &[String], runtime: &mut Runtime) -> Result<Executi
     }
 
     // Parse arguments
-    let mut json_output = false;
+    let mut json_output = runtime.agent_mode();
     let mut limit: Option<usize> = None;
     let mut since: Option<String> = None;
     let mut until: Option<String> = None;
@@ -44,7 +44,11 @@ pub fn builtin_git_log(args: &[String], runtime: &mut Runtime) -> Result<Executi
             "--json" => json_output = true,
             "-n" => {
                 if i + 1 < args.len() {
-                    limit = Some(args[i + 1].parse().map_err(|_| anyhow!("Invalid number for -n"))?);
+                    limit = Some(
+                        args[i + 1]
+                            .parse()
+                            .map_err(|_| anyhow!("Invalid number for -n"))?,
+                    );
                     i += 1;
                 } else {
                     return Err(anyhow!("-n requires an argument"));
@@ -84,21 +88,24 @@ pub fn builtin_git_log(args: &[String], runtime: &mut Runtime) -> Result<Executi
     }
 
     // Open the repository
-    let repo = Repository::discover(cwd)
-        .map_err(|e| anyhow!("Failed to open repository: {}", e))?;
+    let repo =
+        Repository::discover(cwd).map_err(|e| anyhow!("Failed to open repository: {}", e))?;
 
     // Get HEAD commit
-    let head = repo.head()
+    let head = repo
+        .head()
         .map_err(|e| anyhow!("Failed to get HEAD: {}", e))?;
-    let head_oid = head.target()
-        .ok_or_else(|| anyhow!("HEAD has no target"))?;
+    let head_oid = head.target().ok_or_else(|| anyhow!("HEAD has no target"))?;
 
     // Walk the commits
-    let mut revwalk = repo.revwalk()
+    let mut revwalk = repo
+        .revwalk()
         .map_err(|e| anyhow!("Failed to create revwalk: {}", e))?;
-    revwalk.push(head_oid)
+    revwalk
+        .push(head_oid)
         .map_err(|e| anyhow!("Failed to push HEAD: {}", e))?;
-    revwalk.set_sorting(git2::Sort::TIME)
+    revwalk
+        .set_sorting(git2::Sort::TIME)
         .map_err(|e| anyhow!("Failed to set sorting: {}", e))?;
 
     let mut commits = Vec::new();
@@ -122,9 +129,9 @@ pub fn builtin_git_log(args: &[String], runtime: &mut Runtime) -> Result<Executi
             break;
         }
 
-        let oid = oid_result
-            .map_err(|e| anyhow!("Failed to get commit OID: {}", e))?;
-        let commit = repo.find_commit(oid)
+        let oid = oid_result.map_err(|e| anyhow!("Failed to get commit OID: {}", e))?;
+        let commit = repo
+            .find_commit(oid)
             .map_err(|e| anyhow!("Failed to find commit: {}", e))?;
 
         // Apply --since filter (commits must be newer than since_ts)
@@ -241,7 +248,8 @@ fn format_datetime(datetime: SystemTime) -> String {
 
 fn commit_affects_path(repo: &Repository, commit: &Git2Commit, path: &str) -> Result<bool> {
     // Get the tree for this commit
-    let commit_tree = commit.tree()
+    let commit_tree = commit
+        .tree()
         .map_err(|e| anyhow!("Failed to get commit tree: {}", e))?;
 
     // Get parent commit if it exists
@@ -250,23 +258,27 @@ fn commit_affects_path(repo: &Repository, commit: &Git2Commit, path: &str) -> Re
         return Ok(commit_tree.get_path(std::path::Path::new(path)).is_ok());
     }
 
-    let parent = commit.parent(0)
+    let parent = commit
+        .parent(0)
         .map_err(|e| anyhow!("Failed to get parent commit: {}", e))?;
-    let parent_tree = parent.tree()
+    let parent_tree = parent
+        .tree()
         .map_err(|e| anyhow!("Failed to get parent tree: {}", e))?;
 
     // Create diff between parent and current commit
     let mut diff_opts = DiffOptions::new();
     diff_opts.pathspec(path);
 
-    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), Some(&mut diff_opts))
+    let diff = repo
+        .diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), Some(&mut diff_opts))
         .map_err(|e| anyhow!("Failed to create diff: {}", e))?;
 
     Ok(diff.deltas().len() > 0)
 }
 
 fn compute_diff_stats(repo: &Repository, commit: &Git2Commit) -> Result<(usize, usize, usize)> {
-    let commit_tree = commit.tree()
+    let commit_tree = commit
+        .tree()
         .map_err(|e| anyhow!("Failed to get commit tree: {}", e))?;
 
     // For initial commit, count files in the tree
@@ -274,42 +286,44 @@ fn compute_diff_stats(repo: &Repository, commit: &Git2Commit) -> Result<(usize, 
         let mut file_count = 0;
         let mut insertions = 0;
 
-        commit_tree.walk(git2::TreeWalkMode::PreOrder, |_, entry| {
-            if entry.kind() == Some(git2::ObjectType::Blob) {
-                file_count += 1;
-                // Try to get blob size as insertion count
-                if let Ok(object) = entry.to_object(repo) {
-                    if let Some(blob) = object.as_blob() {
-                        // Count lines in the blob
-                        let content = blob.content();
-                        let lines = content.iter().filter(|&&b| b == b'\n').count();
-                        insertions += lines;
+        commit_tree
+            .walk(git2::TreeWalkMode::PreOrder, |_, entry| {
+                if entry.kind() == Some(git2::ObjectType::Blob) {
+                    file_count += 1;
+                    // Try to get blob size as insertion count
+                    if let Ok(object) = entry.to_object(repo) {
+                        if let Some(blob) = object.as_blob() {
+                            // Count lines in the blob
+                            let content = blob.content();
+                            let lines = content.iter().filter(|&&b| b == b'\n').count();
+                            insertions += lines;
+                        }
                     }
                 }
-            }
-            git2::TreeWalkResult::Ok
-        }).ok();
+                git2::TreeWalkResult::Ok
+            })
+            .ok();
 
         return Ok((file_count, insertions, 0));
     }
 
     // Get parent and compute diff
-    let parent = commit.parent(0)
+    let parent = commit
+        .parent(0)
         .map_err(|e| anyhow!("Failed to get parent commit: {}", e))?;
-    let parent_tree = parent.tree()
+    let parent_tree = parent
+        .tree()
         .map_err(|e| anyhow!("Failed to get parent tree: {}", e))?;
 
-    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), None)
+    let diff = repo
+        .diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), None)
         .map_err(|e| anyhow!("Failed to create diff: {}", e))?;
 
-    let stats = diff.stats()
+    let stats = diff
+        .stats()
         .map_err(|e| anyhow!("Failed to get diff stats: {}", e))?;
 
-    Ok((
-        stats.files_changed(),
-        stats.insertions(),
-        stats.deletions(),
-    ))
+    Ok((stats.files_changed(), stats.insertions(), stats.deletions()))
 }
 
 #[cfg(test)]

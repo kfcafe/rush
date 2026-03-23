@@ -15,6 +15,7 @@ mod executor;
 #[cfg(feature = "git-builtins")]
 mod git;
 mod glob_expansion;
+mod highlight;
 mod history;
 mod intent;
 mod jobs;
@@ -22,6 +23,7 @@ mod lexer;
 mod output;
 mod parser;
 mod progress;
+mod run_api;
 mod runtime;
 mod signal;
 mod stats;
@@ -32,6 +34,8 @@ use anyhow::Result;
 use completion::Completer;
 use executor::Executor;
 use lexer::Lexer;
+use libc;
+use nix::unistd::{getpid, setpgid};
 use parser::Parser;
 use reedline::{Prompt, PromptHistorySearch, PromptHistorySearchStatus, Reedline, Signal};
 use signal::SignalHandler;
@@ -40,8 +44,6 @@ use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::sync::{Arc, RwLock};
-use nix::unistd::{setpgid, getpid};
-use libc;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -51,6 +53,7 @@ fn main() -> Result<()> {
     // init_environment_variables, and whoami calls — saving ~5-8ms.
     let mut enable_profile = false;
     let mut profile_json = false;
+    let mut max_output_str: Option<String> = None;
     {
         let mut i = 1;
         while i < args.len() {
@@ -63,8 +66,17 @@ fn main() -> Result<()> {
                     profile_json = true;
                     i += 1;
                 }
+                "--max-output" if i + 1 < args.len() => {
+                    max_output_str = Some(args[i + 1].clone());
+                    i += 2;
+                }
                 "-c" if i + 1 < args.len() => {
-                    fast_execute_c(&args[i + 1], enable_profile, profile_json);
+                    fast_execute_c(
+                        &args[i + 1],
+                        enable_profile,
+                        profile_json,
+                        max_output_str.as_deref(),
+                    );
                     // fast_execute_c never returns (calls process::exit)
                 }
                 "--check" if i + 1 < args.len() => {
@@ -97,7 +109,10 @@ fn main() -> Result<()> {
                         "full" => benchmark::BenchmarkMode::Full,
                         "compare" => benchmark::BenchmarkMode::Compare,
                         _ => {
-                            eprintln!("Invalid benchmark mode: {}. Use 'quick', 'full', or 'compare'", args[i + 1]);
+                            eprintln!(
+                                "Invalid benchmark mode: {}. Use 'quick', 'full', or 'compare'",
+                                args[i + 1]
+                            );
                             std::process::exit(1);
                         }
                     };
@@ -113,7 +128,7 @@ fn main() -> Result<()> {
                     let mut stat_name: Option<String> = None;
                     let mut json_output = false;
                     let mut j = i + 1;
-                    
+
                     while j < args.len() {
                         match args[j].as_str() {
                             "--json" => {
@@ -128,12 +143,16 @@ fn main() -> Result<()> {
                             _ => break,
                         }
                     }
-                    
+
                     run_info_command(stat_name, json_output);
                     // run_info_command calls process::exit
                 }
-                "--login" | "-l" | "--no-rc" | "--norc" | "--no-config" => { i += 1; }
-                _ => { i += 1; }
+                "--login" | "-l" | "--no-rc" | "--norc" | "--no-config" => {
+                    i += 1;
+                }
+                _ => {
+                    i += 1;
+                }
             }
         }
     }
@@ -155,7 +174,7 @@ fn main() -> Result<()> {
             // doing terminal control operations. Keep these ignored permanently.
             libc::signal(libc::SIGTTIN, libc::SIG_IGN);
             libc::signal(libc::SIGTTOU, libc::SIG_IGN);
-            
+
             // Take control of the terminal
             let stdin_fd = libc::STDIN_FILENO;
             let our_pgid = libc::getpgrp();
@@ -227,7 +246,7 @@ fn run_script(
 ) -> Result<()> {
     // Initialize environment variables
     init_environment_variables()?;
-    
+
     // Read the script file
     let script_content = fs::read_to_string(script_path)
         .map_err(|e| anyhow::anyhow!("Failed to read script '{}': {}", script_path, e))?;
@@ -238,7 +257,9 @@ fn run_script(
     init_runtime_variables(executor.runtime_mut());
 
     // Set up positional parameters ($1, $2, etc.) and $#, $@, $*
-    executor.runtime_mut().set_positional_params(script_args.clone());
+    executor
+        .runtime_mut()
+        .set_positional_params(script_args.clone());
 
     // Set $0 to script name
     executor
@@ -350,35 +371,49 @@ fn run_command(command: &str, signal_handler: SignalHandler) -> Result<()> {
     }
 }
 
-/// Custom prompt that displays current directory with home directory shortening
-struct RushPrompt;
+/// Interactive prompt showing cwd, git branch, and last exit code.
+struct RushPrompt {
+    last_exit_code: std::sync::atomic::AtomicI32,
+}
 
 impl RushPrompt {
     fn new() -> Self {
-        Self
+        Self {
+            last_exit_code: std::sync::atomic::AtomicI32::new(0),
+        }
+    }
+
+    fn set_exit_code(&self, code: i32) {
+        self.last_exit_code
+            .store(code, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn get_prompt_indicator(&self) -> String {
-        let cwd = if let Ok(cwd) = env::current_dir() {
-            // Shorten home directory to ~
-            if let Some(home) = dirs::home_dir() {
-                if let Ok(suffix) = cwd.strip_prefix(&home) {
-                    if suffix.as_os_str().is_empty() {
-                        "~".to_string()
-                    } else {
-                        format!("~/{}", suffix.display())
-                    }
-                } else {
-                    cwd.display().to_string()
-                }
-            } else {
-                cwd.display().to_string()
-            }
-        } else {
-            "?".to_string()
-        };
+        let cwd_path = env::current_dir().ok();
+        let cwd = cwd_path
+            .as_deref()
+            .map(terminal::shorten_home)
+            .unwrap_or_else(|| "?".to_string());
 
-        format!("{}> ", cwd)
+        let mut prompt = cwd;
+
+        // Git branch (fast — reads .git/HEAD, no subprocess)
+        if let Some(ref path) = cwd_path {
+            if let Some(branch) = terminal::git_branch_fast(path) {
+                prompt.push_str(&format!(" \x1b[33m({})\x1b[0m", branch));
+            }
+        }
+
+        // Non-zero exit code
+        let code = self
+            .last_exit_code
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if code != 0 {
+            prompt.push_str(&format!(" \x1b[31m[{}]\x1b[0m", code));
+        }
+
+        prompt.push_str("\x1b[36m>\x1b[0m ");
+        prompt
     }
 }
 
@@ -412,14 +447,6 @@ impl Prompt for RushPrompt {
             "({}reverse-search: {}) ",
             prefix, history_search.term
         ))
-    }
-}
-
-fn run_interactive(signal_handler: SignalHandler) -> Result<()> {
-    if atty::is(atty::Stream::Stdin) {
-        run_interactive_with_reedline(signal_handler)
-    } else {
-        run_non_interactive(signal_handler)
     }
 }
 
@@ -458,11 +485,12 @@ fn run_interactive_with_init(
         }
     }
 
-    // Now run interactive mode
+    // Now run interactive mode, passing the executor so .rushrc
+    // settings (aliases, functions, variables) are preserved.
     if atty::is(atty::Stream::Stdin) {
-        run_interactive_with_reedline(signal_handler)
+        run_interactive_with_reedline(signal_handler, executor)
     } else {
-        run_non_interactive(signal_handler)
+        run_non_interactive(signal_handler, executor)
     }
 }
 
@@ -547,22 +575,22 @@ fn init_runtime_variables(runtime: &mut runtime::Runtime) {
 /// Returns None if daemon not running or stats fetch fails (graceful degradation)
 fn fetch_banner_stats(requested_stats: &[String]) -> Option<banner::StatsData> {
     use daemon::client::DaemonClient;
-    
+
     // Try to create client and check if daemon is running
     let mut client = match DaemonClient::new() {
         Ok(c) => c,
         Err(_) => return None,
     };
-    
+
     if !client.is_daemon_running() {
         return None;
     }
-    
+
     // Connect and fetch stats
     if client.connect().is_err() {
         return None;
     }
-    
+
     match client.try_fetch_stats(requested_stats.to_vec()) {
         Some(response) => Some(banner::StatsData {
             builtin: response.builtin,
@@ -572,32 +600,47 @@ fn fetch_banner_stats(requested_stats: &[String]) -> Option<banner::StatsData> {
     }
 }
 
-fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
+fn run_interactive_with_reedline(
+    signal_handler: SignalHandler,
+    mut executor: Executor,
+) -> Result<()> {
+    // Report CWD immediately so Ghostty/iTerm2 can open new tabs here
+    terminal::emit_osc7_cwd();
+
     // Load banner configuration from environment (set by .rushrc)
     let banner_config = banner::BannerConfig::from_env();
-    
+
     // Increment RUSH_LEVEL for nested shell detection
     banner::increment_rush_level();
-    
+
     // Fetch stats from daemon if configured and daemon is running
     let stats_data = if !banner_config.stats.is_empty() {
         fetch_banner_stats(&banner_config.stats)
     } else {
         None
     };
-    
+
     // Display the banner with optional stats
     banner::display_banner(&banner_config, stats_data.as_ref());
-
-    let mut executor = Executor::new_with_signal_handler(signal_handler.clone());
 
     // Create completer with shared builtins and runtime
     let builtins = Arc::new(builtins::Builtins::new());
     let runtime = Arc::new(RwLock::new(runtime::Runtime::new()));
     let completer = Box::new(Completer::new(builtins.clone(), runtime.clone()));
+    let highlighter = Box::new(highlight::RushHighlighter::new(builtins.clone()));
 
-    let mut line_editor = Reedline::create().with_completer(completer);
+    let mut line_editor = Reedline::create()
+        .with_completer(completer)
+        .with_highlighter(highlighter);
     let prompt = RushPrompt::new();
+
+    // Bell threshold for long-running commands (default 10s, 0 = disabled)
+    let bell_threshold = std::time::Duration::from_secs(
+        env::var("RUSH_BELL_THRESHOLD")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10),
+    );
 
     // Track last command and exit code for intent context
     let mut last_command: Option<String> = None;
@@ -634,6 +677,14 @@ fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
         // Cleanup completed/terminated jobs
         executor.runtime_mut().job_manager().cleanup_jobs();
 
+        // Sync stored cwd with OS (handles external renames while a child process was running)
+        executor.runtime_mut().refresh_cwd();
+
+        // Terminal integration: prompt marking, tab title, working directory
+        terminal::mark_prompt_start();
+        terminal::emit_osc7_cwd();
+        terminal::set_terminal_title_to_cwd();
+
         let sig = line_editor.read_line(&prompt);
 
         match sig {
@@ -647,7 +698,7 @@ fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
                 // Check for intent query (? prefix)
                 if intent::is_intent_query(line) {
                     let intent_text = intent::extract_intent(line);
-                    
+
                     if intent_text.is_empty() {
                         eprintln!("Usage: ? <natural language intent>");
                         eprintln!("Example: ? find all rust files modified today");
@@ -705,9 +756,16 @@ fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
                     continue;
                 }
 
-                // Normal command execution
+                // Terminal: mark command start, show running command in tab title
+                terminal::mark_command_start();
+                terminal::mark_output_start();
+                terminal::set_terminal_title(line);
+
+                // Normal command execution (timed for bell notification)
+                let cmd_start = std::time::Instant::now();
                 match execute_line(line, &mut executor) {
                     Ok(result) => {
+                        let elapsed = cmd_start.elapsed();
                         let stdout_text = result.stdout();
                         if !stdout_text.is_empty() {
                             print!("{}", stdout_text);
@@ -715,7 +773,9 @@ fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
                         if !result.stderr.is_empty() {
                             eprintln!("{}", result.stderr);
                         }
-                        // Update history
+                        terminal::mark_command_finished(result.exit_code);
+                        terminal::bell_if_long(elapsed, bell_threshold);
+                        prompt.set_exit_code(result.exit_code);
                         last_command = Some(line.to_string());
                         last_exit_code = Some(result.exit_code);
                         command_history.push(line.to_string());
@@ -724,7 +784,11 @@ fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
                         }
                     }
                     Err(e) => {
+                        let elapsed = cmd_start.elapsed();
                         eprintln!("Error: {}", e);
+                        terminal::mark_command_finished(1);
+                        terminal::bell_if_long(elapsed, bell_threshold);
+                        prompt.set_exit_code(1);
                         last_exit_code = Some(1);
                     }
                 }
@@ -753,8 +817,7 @@ fn run_interactive_with_reedline(signal_handler: SignalHandler) -> Result<()> {
     Ok(())
 }
 
-fn run_non_interactive(signal_handler: SignalHandler) -> Result<()> {
-    let mut executor = Executor::new_with_signal_handler(signal_handler.clone());
+fn run_non_interactive(signal_handler: SignalHandler, mut executor: Executor) -> Result<()> {
     let stdin = std::io::stdin();
     let reader = BufReader::new(stdin.lock());
 
@@ -805,7 +868,10 @@ fn run_non_interactive(signal_handler: SignalHandler) -> Result<()> {
 }
 
 fn print_help() {
-    println!("Rush v{} - A Modern Shell in Rust", env!("CARGO_PKG_VERSION"));
+    println!(
+        "Rush v{} - A Modern Shell in Rust",
+        env!("CARGO_PKG_VERSION")
+    );
     println!();
     println!("Usage:");
     println!("  rush                Start interactive shell");
@@ -872,11 +938,25 @@ fn execute_line(line: &str, executor: &mut Executor) -> Result<executor::Executi
 /// - NO init_environment_variables (saves 0.3-0.5ms from whoami, current_exe)
 ///
 /// This function never returns — it always calls std::process::exit.
-fn fast_execute_c(cmd: &str, enable_profile: bool, profile_json: bool) -> ! {
+fn fast_execute_c(
+    cmd: &str,
+    enable_profile: bool,
+    profile_json: bool,
+    max_output: Option<&str>,
+) -> ! {
     // Reset SIGPIPE to default so piped commands work correctly.
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
+
+    // Resolve max output bytes: --max-output flag takes priority, then RUSH_MAX_OUTPUT env var.
+    let max_output_bytes: Option<usize> = max_output
+        .and_then(|s| run_api::parse_max_output(s))
+        .or_else(|| {
+            env::var("RUSH_MAX_OUTPUT")
+                .ok()
+                .and_then(|v| run_api::parse_max_output(&v))
+        });
 
     let tokens = match Lexer::tokenize(cmd) {
         Ok(t) => t,
@@ -899,7 +979,9 @@ fn fast_execute_c(cmd: &str, enable_profile: bool, profile_json: bool) -> ! {
 
     // Minimal runtime init: just PATH and PWD so commands can be found
     if let Ok(path) = env::var("PATH") {
-        executor.runtime_mut().set_variable("PATH".to_string(), path);
+        executor
+            .runtime_mut()
+            .set_variable("PATH".to_string(), path);
     }
     if let Ok(pwd) = env::current_dir() {
         executor
@@ -914,12 +996,34 @@ fn fast_execute_c(cmd: &str, enable_profile: bool, profile_json: bool) -> ! {
 
     match executor.execute(statements) {
         Ok(result) => {
-            let stdout_text = result.stdout();
-            if !stdout_text.is_empty() {
-                print!("{}", stdout_text);
-            }
+            let mut stdout_text = result.stdout();
             if !result.stderr.is_empty() {
                 eprint!("{}", result.stderr);
+            }
+
+            // Apply output budget if set.
+            if let Some(max_bytes) = max_output_bytes {
+                if stdout_text.len() > max_bytes {
+                    let bytes_written = stdout_text.len();
+                    // Truncate at a UTF-8 char boundary.
+                    let safe_end = {
+                        let bytes = stdout_text.as_bytes();
+                        let mut i = max_bytes;
+                        while i > 0 && (bytes[i] & 0b1100_0000) == 0b1000_0000 {
+                            i -= 1;
+                        }
+                        i
+                    };
+                    stdout_text.truncate(safe_end);
+                    stdout_text.push_str(&format!(
+                        "\n[Output truncated: {} bytes, limit {} bytes]",
+                        bytes_written, max_bytes
+                    ));
+                }
+            }
+
+            if !stdout_text.is_empty() {
+                print!("{}", stdout_text);
             }
 
             // Print profiling output if enabled
@@ -961,7 +1065,7 @@ fn execute_line_with_context(
 
 /// Run compatibility check on a bash script
 fn run_compatibility_check(script_path: &str, show_migrate: bool, apply_fix: bool) -> ! {
-    use compat::{ScriptAnalyzer, CompatibilityReport, MigrationEngine};
+    use compat::{CompatibilityReport, MigrationEngine, ScriptAnalyzer};
 
     // Read the script file
     let script_content = match fs::read_to_string(script_path) {
@@ -984,7 +1088,8 @@ fn run_compatibility_check(script_path: &str, show_migrate: bool, apply_fix: boo
     if show_migrate && !report.migration_suggestions.is_empty() {
         if apply_fix {
             // Apply safe transformations and write to file
-            let fixed_content = MigrationEngine::apply_fixes(&script_content, &report.migration_suggestions);
+            let fixed_content =
+                MigrationEngine::apply_fixes(&script_content, &report.migration_suggestions);
             let output_path = format!("{}.migrated", script_path);
 
             match fs::write(&output_path, fixed_content) {
@@ -1012,14 +1117,14 @@ fn run_compatibility_check(script_path: &str, show_migrate: bool, apply_fix: boo
 fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
     use stats::StatsCollector;
     use std::collections::HashMap;
-    
+
     // Type aliases for clarity
     type BuiltinStats = HashMap<String, String>;
     type CustomStats = HashMap<String, String>;
     type DaemonInfo = Option<serde_json::Value>;
-    
+
     // Try to get stats from daemon first (instant)
-    let (builtin_stats, custom_stats, daemon_info): (BuiltinStats, CustomStats, DaemonInfo) = 
+    let (builtin_stats, custom_stats, daemon_info): (BuiltinStats, CustomStats, DaemonInfo) =
         if let Ok(mut client) = rush::daemon::DaemonClient::new() {
             if client.is_daemon_running() {
                 // Try to fetch from daemon cache
@@ -1038,7 +1143,7 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
             // Can't create client - collect on-demand
             (StatsCollector::collect_builtins(), HashMap::new(), None)
         };
-    
+
     // Single stat mode
     if let Some(name) = stat_name {
         if let Some(value) = builtin_stats.get(&name) {
@@ -1057,11 +1162,14 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
             std::process::exit(0);
         } else {
             eprintln!("Unknown stat: {}", name);
-            eprintln!("Available built-in stats: {}", StatsCollector::builtin_names().join(", "));
+            eprintln!(
+                "Available built-in stats: {}",
+                StatsCollector::builtin_names().join(", ")
+            );
             std::process::exit(1);
         }
     }
-    
+
     // Full output mode
     if json_output {
         // JSON output
@@ -1069,17 +1177,17 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
             "version": env!("CARGO_PKG_VERSION"),
             "builtin": builtin_stats,
         });
-        
+
         if !custom_stats.is_empty() {
             output["custom"] = serde_json::json!(custom_stats);
         }
-        
+
         if let Some(daemon) = daemon_info {
             output["daemon"] = daemon;
         } else {
             output["daemon"] = serde_json::json!({ "running": false });
         }
-        
+
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
         // Human-readable output with pretty 2-column table
@@ -1087,11 +1195,11 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
         let bold = "\x1b[1m";
         let dim = "\x1b[2m";
         let reset = "\x1b[0m";
-        
+
         // Column width (content only, not including border and padding)
         const COL_W: usize = 28; // Width of each column
         const FULL_W: usize = 57; // Full width = COL_W * 2 + 1 (for middle border)
-        
+
         // Helper to format a stat, returns None if empty/N/A
         let fmt_stat = |name: &str| -> Option<String> {
             builtin_stats.get(name).and_then(|v| {
@@ -1102,7 +1210,7 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
                 }
             })
         };
-        
+
         // Helper to make a cell with name and value, padded to exact width
         let make_cell = |name: &str, val: &str| -> String {
             let content = format!("{:<8} {}", name, val);
@@ -1113,10 +1221,10 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
                 format!("{:<w$}", content, w = COL_W)
             }
         };
-        
+
         // Helper for empty cell
         let empty_cell = || " ".repeat(COL_W);
-        
+
         // Parse load into separate values
         let (load1, load5, load15) = if let Some(load) = builtin_stats.get("load") {
             let parts: Vec<&str> = load.split_whitespace().collect();
@@ -1128,22 +1236,34 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
         } else {
             (None, None, None)
         };
-        
+
         // Header - manually pad to account for invisible ANSI codes
         let version = env!("CARGO_PKG_VERSION");
         let left_hdr = format!("{}rush{} v{}", bold, reset, version);
         let left_visible = format!("rush v{}", version);
         let left_pad = COL_W.saturating_sub(left_visible.len());
-        
+
         let right_hdr = format!("{}Resources{}", bold, reset);
         let right_pad = COL_W.saturating_sub(9);
-        
+
         println!("{}╭{:─<w$}┬{:─<w$}╮{}", cyan, "", "", reset, w = COL_W);
-        println!("{}│{}{}{:pad_l$}{}│{}{}{:pad_r$}{}│{}", 
-            cyan, reset, left_hdr, "", cyan, reset, right_hdr, "", cyan, reset,
-            pad_l = left_pad, pad_r = right_pad);
+        println!(
+            "{}│{}{}{:pad_l$}{}│{}{}{:pad_r$}{}│{}",
+            cyan,
+            reset,
+            left_hdr,
+            "",
+            cyan,
+            reset,
+            right_hdr,
+            "",
+            cyan,
+            reset,
+            pad_l = left_pad,
+            pad_r = right_pad
+        );
         println!("{}├{:─<w$}┼{:─<w$}┤{}", cyan, "", "", reset, w = COL_W);
-        
+
         // Build rows for left column (System) and right column (Resources)
         let left_stats: Vec<(&str, Option<String>)> = vec![
             ("host", fmt_stat("host")),
@@ -1154,7 +1274,7 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
             ("cores", fmt_stat("cores")),
             ("uptime", fmt_stat("uptime")),
         ];
-        
+
         let right_stats: Vec<(&str, Option<String>)> = vec![
             ("memory", fmt_stat("memory")),
             ("swap", fmt_stat("swap")),
@@ -1164,67 +1284,95 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
             ("load 15m", load15),
             ("procs", fmt_stat("procs")),
         ];
-        
+
         // Print paired rows
         let max_rows = left_stats.len().max(right_stats.len());
         for i in 0..max_rows {
-            let left_cell = left_stats.get(i)
+            let left_cell = left_stats
+                .get(i)
                 .and_then(|(n, v)| v.as_ref().map(|val| make_cell(n, val)))
                 .unwrap_or_else(empty_cell);
-            let right_cell = right_stats.get(i)
+            let right_cell = right_stats
+                .get(i)
                 .and_then(|(n, v)| v.as_ref().map(|val| make_cell(n, val)))
                 .unwrap_or_else(empty_cell);
-            
-            println!("{}│{}{}{}│{}{}{}│{}", cyan, reset, left_cell, cyan, reset, right_cell, cyan, reset);
+
+            println!(
+                "{}│{}{}{}│{}{}{}│{}",
+                cyan, reset, left_cell, cyan, reset, right_cell, cyan, reset
+            );
         }
-        
+
         // Network & Time section
         let net_hdr = format!("{}Network{}", bold, reset);
         let net_pad = COL_W.saturating_sub(7);
         let time_hdr = format!("{}Time{}", bold, reset);
         let time_pad = COL_W.saturating_sub(4);
-        
+
         println!("{}├{:─<w$}┼{:─<w$}┤{}", cyan, "", "", reset, w = COL_W);
-        println!("{}│{}{}{:pn$}{}│{}{}{:pt$}{}│{}", 
-            cyan, reset, net_hdr, "", cyan, reset, time_hdr, "", cyan, reset,
-            pn = net_pad, pt = time_pad);
+        println!(
+            "{}│{}{}{:pn$}{}│{}{}{:pt$}{}│{}",
+            cyan,
+            reset,
+            net_hdr,
+            "",
+            cyan,
+            reset,
+            time_hdr,
+            "",
+            cyan,
+            reset,
+            pn = net_pad,
+            pt = time_pad
+        );
         println!("{}├{:─<w$}┼{:─<w$}┤{}", cyan, "", "", reset, w = COL_W);
-        
+
         let net_stats: Vec<(&str, Option<String>)> = vec![
             ("ip", fmt_stat("ip")),
             ("wifi", fmt_stat("wifi")),
             ("power", fmt_stat("power")),
             ("battery", fmt_stat("battery")),
         ];
-        
-        let time_stats: Vec<(&str, Option<String>)> = vec![
-            ("time", fmt_stat("time")),
-            ("date", fmt_stat("date")),
-        ];
-        
+
+        let time_stats: Vec<(&str, Option<String>)> =
+            vec![("time", fmt_stat("time")), ("date", fmt_stat("date"))];
+
         let net_filtered: Vec<_> = net_stats.iter().filter(|(_, v)| v.is_some()).collect();
         let time_filtered: Vec<_> = time_stats.iter().filter(|(_, v)| v.is_some()).collect();
         let max_rows2 = net_filtered.len().max(time_filtered.len());
-        
+
         for i in 0..max_rows2 {
-            let left_cell = net_filtered.get(i)
+            let left_cell = net_filtered
+                .get(i)
                 .map(|(n, v)| make_cell(n, v.as_ref().unwrap()))
                 .unwrap_or_else(empty_cell);
-            let right_cell = time_filtered.get(i)
+            let right_cell = time_filtered
+                .get(i)
                 .map(|(n, v)| make_cell(n, v.as_ref().unwrap()))
                 .unwrap_or_else(empty_cell);
-            
-            println!("{}│{}{}{}│{}{}{}│{}", cyan, reset, left_cell, cyan, reset, right_cell, cyan, reset);
+
+            println!(
+                "{}│{}{}{}│{}{}{}│{}",
+                cyan, reset, left_cell, cyan, reset, right_cell, cyan, reset
+            );
         }
-        
+
         // Custom stats (if any)
         if !custom_stats.is_empty() {
             let custom_hdr = format!("{}Custom{}", bold, reset);
             let custom_pad = FULL_W.saturating_sub(6);
-            
+
             println!("{}├{:─<w$}┤{}", cyan, "", reset, w = FULL_W);
-            println!("{}│{}{}{:p$}{}│{}", 
-                cyan, reset, custom_hdr, "", cyan, reset, p = custom_pad);
+            println!(
+                "{}│{}{}{:p$}{}│{}",
+                cyan,
+                reset,
+                custom_hdr,
+                "",
+                cyan,
+                reset,
+                p = custom_pad
+            );
             println!("{}├{:─<w$}┤{}", cyan, "", reset, w = FULL_W);
             for (name, value) in &custom_stats {
                 let content = format!("{:<8} {}", name, value);
@@ -1236,11 +1384,15 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
                 println!("{}│{}{}{}│{}", cyan, reset, content, cyan, reset);
             }
         }
-        
+
         // Daemon status
         println!("{}├{:─<w$}┤{}", cyan, "", reset, w = FULL_W);
         let daemon_status = if let Some(daemon) = daemon_info {
-            daemon.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").to_string()
+            daemon
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string()
         } else {
             "not running".to_string()
         };
@@ -1251,10 +1403,10 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
             format!("{:<w$}", daemon_content, w = FULL_W)
         };
         println!("{}│{}{}{}│{}", cyan, reset, daemon_content, cyan, reset);
-        
+
         println!("{}╰{:─<w$}╯{}", cyan, "", reset, w = FULL_W);
     }
-    
+
     std::process::exit(0);
 }
 
@@ -1262,10 +1414,14 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
 fn fetch_stats_from_daemon(
     client: &mut rush::daemon::DaemonClient,
     _stat_name: Option<&str>,
-) -> Result<(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, serde_json::Value)> {
+) -> Result<(
+    std::collections::HashMap<String, String>,
+    std::collections::HashMap<String, String>,
+    serde_json::Value,
+)> {
     // Connect to daemon
     client.connect()?;
-    
+
     // For now, return an error to trigger fallback to on-demand collection
     // TODO: Implement full daemon stats fetching when daemon StatsCache is ready (bean 5.3)
     Err(anyhow::anyhow!("Daemon stats not yet implemented"))

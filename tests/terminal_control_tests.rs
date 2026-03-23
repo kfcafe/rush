@@ -1,9 +1,9 @@
+use nix::unistd::{getpgrp, Pid};
 use rush::executor::Executor;
-use rush::parser::Parser;
 use rush::lexer::Lexer;
+use rush::parser::Parser;
 use rush::runtime::Runtime;
 use rush::terminal::TerminalControl;
-use nix::unistd::{getpgrp, Pid};
 
 #[test]
 fn test_terminal_control_creation() {

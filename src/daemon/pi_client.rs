@@ -68,12 +68,11 @@ impl PiClient {
     /// Returns `PiClientError::ConnectionFailed` if a socket exists but connection fails.
     pub fn connect() -> Result<Self, PiClientError> {
         let socket_path = Self::find_socket()?;
-        let stream = UnixStream::connect(&socket_path).map_err(|e| {
-            PiClientError::ConnectionFailed {
+        let stream =
+            UnixStream::connect(&socket_path).map_err(|e| PiClientError::ConnectionFailed {
                 path: socket_path,
                 source: e,
-            }
-        })?;
+            })?;
 
         // Clone the stream for the reader (UnixStream implements Clone via dup())
         let reader_stream = stream.try_clone()?;
@@ -88,12 +87,11 @@ impl PiClient {
     ///
     /// Returns `PiClientError::ConnectionFailed` if connection fails.
     pub fn connect_to(socket_path: PathBuf) -> Result<Self, PiClientError> {
-        let stream = UnixStream::connect(&socket_path).map_err(|e| {
-            PiClientError::ConnectionFailed {
+        let stream =
+            UnixStream::connect(&socket_path).map_err(|e| PiClientError::ConnectionFailed {
                 path: socket_path,
                 source: e,
-            }
-        })?;
+            })?;
 
         let reader_stream = stream.try_clone()?;
         let reader = BufReader::new(reader_stream);
@@ -136,7 +134,8 @@ impl PiClient {
 
     /// Send a message to the Pi daemon
     fn send(&mut self, message: &RushToPi) -> Result<(), PiClientError> {
-        let line = encode_jsonl(message).map_err(|e| PiClientError::ProtocolError(e.to_string()))?;
+        let line =
+            encode_jsonl(message).map_err(|e| PiClientError::ProtocolError(e.to_string()))?;
         self.stream.write_all(line.as_bytes())?;
         self.stream.flush()?;
         Ok(())
@@ -269,10 +268,7 @@ impl PiClient {
     ) -> Result<(), PiClientError> {
         let (output, exit_code) = match tool {
             "bash" => {
-                let command = args
-                    .get("command")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
 
                 match std::process::Command::new("sh")
                     .arg("-c")

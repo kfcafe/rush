@@ -5,7 +5,9 @@ use rush::parser::Parser;
 #[test]
 fn test_basic_until_loop() {
     let mut executor = Executor::new();
-    executor.runtime_mut().set_variable("i".to_string(), "0".to_string());
+    executor
+        .runtime_mut()
+        .set_variable("i".to_string(), "0".to_string());
 
     let input = r#"
         i=0
