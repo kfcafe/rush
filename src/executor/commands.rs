@@ -242,8 +242,9 @@ impl Executor {
         for redirect in redirects {
             match &redirect.kind {
                 RedirectKind::Stdout => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         file.write_all(result.stdout().as_bytes())
@@ -252,8 +253,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::StdoutAppend => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = OpenOptions::new()
                             .create(true)
                             .append(true)
@@ -269,8 +271,9 @@ impl Executor {
                     // This would need to be handled before execution
                 }
                 RedirectKind::Stderr => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         file.write_all(result.stderr.as_bytes())
@@ -284,8 +287,9 @@ impl Executor {
                     result.stderr.clear();
                 }
                 RedirectKind::Both => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         // Clone file descriptor for both stdout and stderr
@@ -430,8 +434,9 @@ impl Executor {
         for redirect in &command.redirects {
             match &redirect.kind {
                 RedirectKind::Stdout => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         cmd.stdout(Stdio::from(file));
@@ -439,8 +444,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::StdoutAppend => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = OpenOptions::new()
                             .create(true)
                             .append(true)
@@ -451,8 +457,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::Stdin => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::open(&resolved)
                             .map_err(|e| anyhow!("Failed to open '{}': {}", target, e))?;
                         cmd.stdin(Stdio::from(file));
@@ -460,8 +467,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::Stderr => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         cmd.stderr(Stdio::from(file));
@@ -473,8 +481,9 @@ impl Executor {
                     stderr_to_stdout = true;
                 }
                 RedirectKind::Both => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         // Clone file descriptor for both stdout and stderr

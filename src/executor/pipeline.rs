@@ -477,8 +477,9 @@ fn apply_redirects_to_result(
     for redirect in redirects {
         match &redirect.kind {
             crate::parser::ast::RedirectKind::Stdout => {
-                if let Some(target) = &redirect.target {
-                    let resolved = resolve_path(target);
+                if let Some(raw_target) = &redirect.target {
+                    let target = super::expand_redirect_target(raw_target, runtime);
+                    let resolved = resolve_path(&target);
                     let mut file = File::create(&resolved)
                         .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                     file.write_all(result.stdout().as_bytes())
@@ -487,8 +488,9 @@ fn apply_redirects_to_result(
                 }
             }
             crate::parser::ast::RedirectKind::StdoutAppend => {
-                if let Some(target) = &redirect.target {
-                    let resolved = resolve_path(target);
+                if let Some(raw_target) = &redirect.target {
+                    let target = super::expand_redirect_target(raw_target, runtime);
+                    let resolved = resolve_path(&target);
                     let mut file = OpenOptions::new()
                         .create(true)
                         .append(true)
@@ -503,8 +505,9 @@ fn apply_redirects_to_result(
                 // Stdin redirect doesn't apply to already-executed commands in a pipeline
             }
             crate::parser::ast::RedirectKind::Stderr => {
-                if let Some(target) = &redirect.target {
-                    let resolved = resolve_path(target);
+                if let Some(raw_target) = &redirect.target {
+                    let target = super::expand_redirect_target(raw_target, runtime);
+                    let resolved = resolve_path(&target);
                     let mut file = File::create(&resolved)
                         .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                     file.write_all(result.stderr.as_bytes())
@@ -518,8 +521,9 @@ fn apply_redirects_to_result(
                 result.stderr.clear();
             }
             crate::parser::ast::RedirectKind::Both => {
-                if let Some(target) = &redirect.target {
-                    let resolved = resolve_path(target);
+                if let Some(raw_target) = &redirect.target {
+                    let target = super::expand_redirect_target(raw_target, runtime);
+                    let resolved = resolve_path(&target);
                     let mut file = File::create(&resolved)
                         .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                     file.write_all(result.stdout().as_bytes())

@@ -775,8 +775,9 @@ impl Executor {
         for redirect in redirects {
             match &redirect.kind {
                 RedirectKind::Stdout => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         file.write_all(result.stdout().as_bytes())
@@ -785,8 +786,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::StdoutAppend => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = OpenOptions::new()
                             .create(true)
                             .append(true)
@@ -802,8 +804,9 @@ impl Executor {
                     // This would need to be handled before execution
                 }
                 RedirectKind::Stderr => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         file.write_all(result.stderr.as_bytes())
@@ -817,8 +820,9 @@ impl Executor {
                     result.stderr.clear();
                 }
                 RedirectKind::Both => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let mut file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         // Clone file descriptor for both stdout and stderr
@@ -955,8 +959,9 @@ impl Executor {
         for redirect in &command.redirects {
             match &redirect.kind {
                 RedirectKind::Stdout => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         cmd.stdout(Stdio::from(file));
@@ -964,8 +969,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::StdoutAppend => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = OpenOptions::new()
                             .create(true)
                             .append(true)
@@ -976,8 +982,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::Stdin => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::open(&resolved)
                             .map_err(|e| anyhow!("Failed to open '{}': {}", target, e))?;
                         cmd.stdin(Stdio::from(file));
@@ -985,8 +992,9 @@ impl Executor {
                     }
                 }
                 RedirectKind::Stderr => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         cmd.stderr(Stdio::from(file));
@@ -998,8 +1006,9 @@ impl Executor {
                     stderr_to_stdout = true;
                 }
                 RedirectKind::Both => {
-                    if let Some(target) = &redirect.target {
-                        let resolved = resolve_path(target);
+                    if let Some(raw_target) = &redirect.target {
+                        let target = expand_redirect_target(raw_target, &self.runtime);
+                        let resolved = resolve_path(&target);
                         let file = File::create(&resolved)
                             .map_err(|e| anyhow!("Failed to create '{}': {}", target, e))?;
                         // Clone file descriptor for both stdout and stderr
@@ -3718,6 +3727,147 @@ fn pattern_matches_helper(pattern: &[char], text: &[char]) -> bool {
             }
         }
     }
+}
+
+/// Expand variables and command substitutions in a redirect target path.
+///
+/// Handles `$VAR`, `${VAR}`, and `$(...)` within strings like
+/// `/tmp/log-$name.txt`. Takes an immutable runtime reference so it can be
+/// called from both `&self` and free-function contexts without borrowing issues.
+pub(crate) fn expand_redirect_target(input: &str, runtime: &Runtime) -> String {
+    // Fast path: no expansion needed
+    if !input.contains('$') && !input.contains('`') {
+        return input.to_string();
+    }
+
+    let mut result = String::with_capacity(input.len() * 2);
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        match chars[i] {
+            '$' if i + 1 < chars.len() => {
+                match chars[i + 1] {
+                    '(' => {
+                        // Command substitution $(...) — depth-track to find matching ')'
+                        let start = i + 2;
+                        let mut depth = 1i32;
+                        let mut j = start;
+                        while j < chars.len() {
+                            match chars[j] {
+                                '(' => depth += 1,
+                                ')' => {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        break;
+                                    }
+                                }
+                                _ => {}
+                            }
+                            j += 1;
+                        }
+                        if depth == 0 && j < chars.len() {
+                            let cmd_str: String = chars[start..j].iter().collect();
+                            // Check for arithmetic $((expr))
+                            if cmd_str.starts_with('(') && cmd_str.ends_with(')') {
+                                let expr = &cmd_str[1..cmd_str.len() - 1];
+                                if let Ok(val) = crate::arithmetic::evaluate(expr, runtime) {
+                                    result.push_str(&val.to_string());
+                                    i = j + 1;
+                                    continue;
+                                }
+                            }
+                            // Execute command substitution via a cloned sub-executor
+                            if let Ok(tokens) = crate::lexer::Lexer::tokenize(&cmd_str) {
+                                let mut parser = crate::parser::Parser::new(tokens);
+                                if let Ok(statements) = parser.parse() {
+                                    let mut sub_executor = Executor {
+                                        runtime: runtime.clone(),
+                                        builtins: Builtins::new(),
+                                        corrector: Corrector::new(),
+                                        suggestion_engine: SuggestionEngine::new(),
+                                        signal_handler: None,
+                                        terminal_control: TerminalControl::new(),
+                                        show_progress: false,
+                                        call_stack: CallStack::new(),
+                                        profile_data: None,
+                                        enable_profiling: false,
+                                    };
+                                    if let Ok(exec_result) = sub_executor.execute(statements) {
+                                        let out = exec_result.stdout();
+                                        result.push_str(out.trim_end());
+                                        i = j + 1;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        result.push('$');
+                        i += 1;
+                    }
+                    '{' => {
+                        // Braced variable ${VAR}
+                        let start = i + 2;
+                        let mut depth = 1i32;
+                        let mut j = start;
+                        while j < chars.len() {
+                            match chars[j] {
+                                '{' => depth += 1,
+                                '}' => {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        break;
+                                    }
+                                }
+                                _ => {}
+                            }
+                            j += 1;
+                        }
+                        if depth == 0 && j < chars.len() {
+                            let var_name: String = chars[start..j].iter().collect();
+                            let value = runtime.get_variable(&var_name).unwrap_or_default();
+                            result.push_str(&value);
+                            i = j + 1;
+                        } else {
+                            result.push('$');
+                            i += 1;
+                        }
+                    }
+                    c if c.is_ascii_digit() || c.is_ascii_alphabetic() || c == '_' => {
+                        // Simple variable $VAR
+                        let mut j = i + 1;
+                        while j < chars.len()
+                            && (chars[j].is_ascii_alphanumeric() || chars[j] == '_')
+                        {
+                            j += 1;
+                        }
+                        let var_name: String = chars[i + 1..j].iter().collect();
+                        let value = runtime.get_variable(&var_name).unwrap_or_default();
+                        result.push_str(&value);
+                        i = j;
+                    }
+                    '?' => {
+                        result.push_str(&runtime.get_last_exit_code().to_string());
+                        i += 2;
+                    }
+                    '$' => {
+                        result.push_str(&std::process::id().to_string());
+                        i += 2;
+                    }
+                    _ => {
+                        result.push('$');
+                        i += 1;
+                    }
+                }
+            }
+            c => {
+                result.push(c);
+                i += 1;
+            }
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]

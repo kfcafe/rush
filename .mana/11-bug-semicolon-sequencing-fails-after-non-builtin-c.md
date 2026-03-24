@@ -2,15 +2,51 @@
 id: '11'
 title: 'bug: semicolon sequencing fails after non-builtin commands'
 slug: bug-semicolon-sequencing-fails-after-non-builtin-c
-status: open
+status: in_progress
 priority: 0
 created_at: '2026-03-24T02:43:58.753579Z'
-updated_at: '2026-03-24T02:43:58.753579Z'
+updated_at: '2026-03-24T16:36:05.070308Z'
+notes: |2
+
+  ## Attempt 1 — 2026-03-24T16:35:07Z
+  Exit code: 1
+
+  ```
+
+  ```
+
+  ## Attempt 2 — 2026-03-24T16:35:30Z
+  Exit code: 1
+
+  ```
+
+  ```
 labels:
 - bug
 - parser
 - critical
 verify: ~/bin/rush -c 'sleep 0; echo done' 2>&1 | grep -v "Expected command name" | grep done
+attempts: 2
+claimed_by: pi-agent
+claimed_at: '2026-03-24T16:36:05.070308Z'
+history:
+- attempt: 1
+  started_at: '2026-03-24T16:35:07.098377Z'
+  finished_at: '2026-03-24T16:35:07.149618Z'
+  duration_secs: 0.051
+  result: fail
+  exit_code: 1
+- attempt: 2
+  started_at: '2026-03-24T16:35:30.107726Z'
+  finished_at: '2026-03-24T16:35:30.165044Z'
+  duration_secs: 0.057
+  result: fail
+  exit_code: 1
+attempt_log:
+- num: 1
+  outcome: abandoned
+  agent: pi-agent
+  started_at: '2026-03-24T16:36:05.070308Z'
 ---
 
 ## Bug

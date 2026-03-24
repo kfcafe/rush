@@ -9,7 +9,7 @@ use ignore::WalkBuilder;
 use serde::Serialize;
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize)]
@@ -31,6 +31,16 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
     let mut config = parse_args(args)?;
     if runtime.agent_mode() {
         config.json_output = true;
+    }
+
+    // When no explicit paths were given, read from the process's actual stdin.
+    // This handles the common pattern: echo "data" | rush -c 'grep pattern'
+    if !config.explicit_paths {
+        let mut stdin_data = Vec::new();
+        std::io::stdin()
+            .read_to_end(&mut stdin_data)
+            .map_err(|e| anyhow!("grep: failed to read stdin: {}", e))?;
+        return builtin_grep_with_stdin(args, runtime, &stdin_data);
     }
 
     let mut stdout = Vec::new();
@@ -250,6 +260,10 @@ fn search_stdin(
         UTF8(|lnum, line| {
             found.set(true);
 
+            if config.quiet {
+                return Ok(false); // Stop after first match — we only need to know it matched
+            }
+
             if config.show_line_numbers {
                 write!(stdout, "{}:", lnum)?;
             }
@@ -299,6 +313,10 @@ fn search_file(
         path,
         UTF8(|lnum, line| {
             found.set(true);
+
+            if config.quiet {
+                return Ok(false); // Stop after first match — we only need to know it matched
+            }
 
             if config.show_line_numbers {
                 write!(stdout, "{}:", lnum)?;
@@ -524,6 +542,9 @@ fn write_colored_line(
 struct GrepConfig {
     pattern: String,
     paths: Vec<PathBuf>,
+    // Whether the user explicitly provided paths on the command line.
+    // When false, grep reads from stdin instead of searching the filesystem.
+    explicit_paths: bool,
     ignore_case: bool,
     show_line_numbers: bool,
     recursive: bool,
@@ -533,6 +554,7 @@ struct GrepConfig {
     show_filename: bool,
     color: bool,
     json_output: bool,
+    quiet: bool,
     context_before: usize,
     context_after: usize,
 }
@@ -542,6 +564,7 @@ impl Default for GrepConfig {
         Self {
             pattern: String::new(),
             paths: vec![PathBuf::from(".")],
+            explicit_paths: false,
             ignore_case: false,
             show_line_numbers: true,
             recursive: false,
@@ -551,6 +574,7 @@ impl Default for GrepConfig {
             show_filename: false,
             color: true,
             json_output: false,
+            quiet: false,
             context_before: 0,
             context_after: 0,
         }
@@ -605,6 +629,9 @@ fn parse_args(args: &[String]) -> Result<GrepConfig> {
             }
             "--json" => {
                 config.json_output = true;
+            }
+            "-q" | "--quiet" | "--silent" => {
+                config.quiet = true;
             }
             "-C" => {
                 i += 1;
@@ -676,6 +703,7 @@ fn parse_args(args: &[String]) -> Result<GrepConfig> {
     // Get paths (default to current directory)
     if i < args.len() {
         config.paths = args[i..].iter().map(PathBuf::from).collect();
+        config.explicit_paths = true;
 
         // Auto-enable filename display for multiple files
         if config.paths.len() > 1 {

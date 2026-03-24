@@ -107,10 +107,10 @@ pub enum Token {
     #[token("}")]
     RightBrace,
 
-    #[token("[")]
+    #[token("[", priority = 10)]
     LeftBracket,
 
-    #[token("]")]
+    #[token("]", priority = 10)]
     RightBracket,
 
     #[token(";;")]
@@ -156,8 +156,8 @@ pub enum Token {
     // Patterns with * or ? (e.g., *.rs, file?.txt, src/**/*.rs)
     #[regex(r"[a-zA-Z0-9_.\-/]*[*?][a-zA-Z0-9_.*?\-/\[\]]*", |lex| lex.slice().to_string())]
     // Bracket glob patterns (e.g., [abc].txt, file[0-9].txt)
-    // Must have content after ] to distinguish from test builtin [ ]
-    #[regex(r"[a-zA-Z0-9_.\-/]*\[[^\]]+\][a-zA-Z0-9_.*?\-/]+", |lex| lex.slice().to_string())]
+    // Requires at least 1 char before [ OR after ] to distinguish from test builtin [ ]
+    #[regex(r"[a-zA-Z0-9_.\-/]+\[[^\]]+\][a-zA-Z0-9_.*?\-/]*", |lex| lex.slice().to_string())]
     GlobPattern(String),
 
     // Flags — defined before Identifier so flag tokens win on same-length ties
@@ -997,5 +997,12 @@ mod tests {
         assert!(matches!(tokens[1], Token::Identifier(ref s) if s == "diff"));
         assert_eq!(tokens[2], Token::PipeAsk);
         assert!(matches!(tokens[3], Token::String(_)));
+    }
+
+    #[test]
+    fn test_test_bracket_command() {
+        let tokens = Lexer::tokenize("[ 1 -eq 1 ]").unwrap();
+        println!("tokens: {:?}", tokens);
+        assert_eq!(tokens[0], Token::LeftBracket);
     }
 }

@@ -5,12 +5,41 @@ slug: bug-grep-doesnt-support-combined-short-flags-rn-ri
 status: open
 priority: 1
 created_at: '2026-03-24T03:27:55.196254Z'
-updated_at: '2026-03-24T03:27:55.196254Z'
+updated_at: '2026-03-24T16:35:30.465263Z'
+notes: |2
+
+  ## Attempt 1 — 2026-03-24T16:35:07Z
+  Exit code: 1
+
+  ```
+
+  ```
+
+  ## Attempt 2 — 2026-03-24T16:35:30Z
+  Exit code: 1
+
+  ```
+
+  ```
 labels:
 - bug
 - grep
 - flags
 verify: echo "hello" > /tmp/rush-grep-combined-test.txt && ~/bin/rush -c 'grep -in HELLO /tmp/rush-grep-combined-test.txt' 2>&1 | grep hello
+attempts: 2
+history:
+- attempt: 1
+  started_at: '2026-03-24T16:35:07.395210Z'
+  finished_at: '2026-03-24T16:35:07.446525Z'
+  duration_secs: 0.051
+  result: fail
+  exit_code: 1
+- attempt: 2
+  started_at: '2026-03-24T16:35:30.411369Z'
+  finished_at: '2026-03-24T16:35:30.465254Z'
+  duration_secs: 0.053
+  result: fail
+  exit_code: 1
 ---
 
 ## Bug

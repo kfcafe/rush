@@ -793,13 +793,6 @@ impl Parser {
             && !self.match_token(&Token::Or)
             && !self.match_token(&Token::Ampersand)
             && !self.match_token(&Token::RightParen)
-            && !self.match_token(&Token::Then)
-            && !self.match_token(&Token::Fi)
-            && !self.match_token(&Token::Elif)
-            && !self.match_token(&Token::Else)
-            && !self.match_token(&Token::Do)
-            && !self.match_token(&Token::Done)
-            && !self.match_token(&Token::Esac)
             && !self.match_token(&Token::DoubleSemicolon)
             && !self.match_token(&Token::RightBrace)
         {
@@ -938,6 +931,23 @@ impl Parser {
             Some(Token::Dash) => Ok(Argument::Literal("-".to_string())),
             Some(Token::DoubleDash) => Ok(Argument::Literal("--".to_string())),
             Some(Token::Float(f)) => Ok(Argument::Literal(f.to_string())),
+            // Shell keywords used as arguments (e.g., `echo done`, `echo if`) are valid words.
+            // Keywords only have special meaning when they start a command or follow specific
+            // constructs (e.g., `then`, `do`). In argument position they are plain strings.
+            Some(Token::Done) => Ok(Argument::Literal("done".to_string())),
+            Some(Token::Do) => Ok(Argument::Literal("do".to_string())),
+            Some(Token::Then) => Ok(Argument::Literal("then".to_string())),
+            Some(Token::Fi) => Ok(Argument::Literal("fi".to_string())),
+            Some(Token::Elif) => Ok(Argument::Literal("elif".to_string())),
+            Some(Token::Else) => Ok(Argument::Literal("else".to_string())),
+            Some(Token::Esac) => Ok(Argument::Literal("esac".to_string())),
+            Some(Token::If) => Ok(Argument::Literal("if".to_string())),
+            Some(Token::For) => Ok(Argument::Literal("for".to_string())),
+            Some(Token::While) => Ok(Argument::Literal("while".to_string())),
+            Some(Token::Until) => Ok(Argument::Literal("until".to_string())),
+            Some(Token::In) => Ok(Argument::Literal("in".to_string())),
+            Some(Token::Case) => Ok(Argument::Literal("case".to_string())),
+            Some(Token::Function) => Ok(Argument::Literal("function".to_string())),
             _ => Err(anyhow!("Expected argument")),
         }
     }

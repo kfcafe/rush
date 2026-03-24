@@ -1,4 +1,613 @@
 units:
+- id: '1'
+  title: 'Rush ↔ Pi Daemon IPC: The `|?` Operator'
+  status: closed
+  priority: 1
+  updated_at: '2026-02-03T09:27:31.388005Z'
+  has_verify: false
+  created_at: '2026-02-03T08:37:32.547499Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.1'
+  title: IPC Protocol Types
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T08:40:24.623714Z'
+  produces:
+  - protocol
+  has_verify: true
+  verify: grep -q "pub enum RushToPi" src/daemon/protocol.rs && grep -q "pub enum PiToRush" src/daemon/protocol.rs && cargo check 2>&1 | grep -v "^warning"
+  created_at: '2026-02-03T08:38:26.072383Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.2'
+  title: 'Lexer: Add `|?` (PipeAsk) token'
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T08:39:26.763860Z'
+  produces:
+  - lexer_pipe_ask
+  has_verify: true
+  verify: cargo test --lib lexer -- --test-threads=1 2>&1 | grep -E "(test.*ok|PASSED|passed)"
+  created_at: '2026-02-03T08:38:26.124740Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.3'
+  title: 'Parser: Add `|?` AST node and parsing'
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T09:08:49.865290Z'
+  produces:
+  - parser_pipe_ask
+  requires:
+  - lexer_pipe_ask
+  has_verify: true
+  verify: cargo test --lib parser -- pipe_ask --test-threads=1 2>&1 | grep -E "(test.*ok|PASSED|passed)"
+  created_at: '2026-02-03T08:38:26.176694Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.4'
+  title: 'Pi Client: Unix socket connection'
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T08:43:20.497080Z'
+  produces:
+  - pi_client
+  requires:
+  - protocol
+  has_verify: true
+  verify: grep -q "pub struct PiClient" src/daemon/pi_client.rs && grep -q "pub fn connect" src/daemon/pi_client.rs && cargo check 2>&1 | grep -v "^warning"
+  created_at: '2026-02-03T08:38:26.228360Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.5.1'
+  title: Basic PipeAsk wiring in executor
+  status: closed
+  priority: 1
+  parent: '1.5'
+  updated_at: '2026-02-03T09:10:21.768081Z'
+  has_verify: true
+  verify: grep -q "Statement::PipeAsk" src/executor/mod.rs && grep -q "fn execute_pipe_ask" src/executor/mod.rs && cargo check 2>&1 | grep -v "^warning"
+  created_at: '2026-02-03T09:06:45.585664Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.5.2'
+  title: Pi client integration for PipeAsk
+  status: closed
+  priority: 1
+  parent: '1.5'
+  updated_at: '2026-02-03T09:12:12.227748Z'
+  has_verify: true
+  verify: grep -q "PiClient::connect" src/executor/mod.rs && grep -q "ShellContext" src/executor/mod.rs && cargo check 2>&1 | grep -v "^warning"
+  created_at: '2026-02-03T09:07:01.092497Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.5.3'
+  title: Fallback when Pi daemon unavailable
+  status: closed
+  priority: 1
+  parent: '1.5'
+  updated_at: '2026-02-03T09:11:44.920706Z'
+  has_verify: true
+  verify: grep -q "not running\|NotRunning\|Pi daemon" src/executor/mod.rs && cargo check 2>&1 | grep -v "^warning"
+  created_at: '2026-02-03T09:07:12.460030Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.6'
+  title: 'Pi-side: Daemon socket listener for Rush'
+  status: closed
+  priority: 2
+  parent: '1'
+  updated_at: '2026-02-03T08:47:25.244038Z'
+  has_verify: false
+  created_at: '2026-02-03T08:38:26.334068Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.7'
+  title: 'E2E Test: `|?` with mock Pi daemon'
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T08:48:28.552553Z'
+  requires:
+  - executor_pipe_ask
+  has_verify: true
+  verify: cargo test --test pipe_ask_tests 2>&1 | grep -E "(test.*ok|passed|PASSED)"
+  created_at: '2026-02-03T08:38:48.155521Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '1.8'
+  title: 'Feature: `?` prefix for intent-to-command'
+  status: closed
+  priority: 3
+  parent: '1'
+  updated_at: '2026-02-03T09:27:31.382490Z'
+  has_verify: false
+  created_at: '2026-02-03T08:38:48.199848Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.9'
+  title: Pi RPC Subprocess Manager
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T08:54:04.045459Z'
+  produces:
+  - pi_rpc_manager
+  has_verify: true
+  verify: grep -q "pub struct PiRpcManager" src/daemon/pi_rpc.rs && grep -q "ensure_running" src/daemon/pi_rpc.rs && cargo check 2>&1 | grep -v "^warning"
+  created_at: '2026-02-03T08:47:47.411122Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '1.10'
+  title: 'E2E Test: `|?` with mock pi RPC'
+  status: closed
+  priority: 1
+  parent: '1'
+  updated_at: '2026-02-03T09:27:27.804203Z'
+  requires:
+  - executor_pipe_ask
+  - pi_rpc_manager
+  has_verify: true
+  verify: cargo test --test pipe_ask_tests 2>&1 | grep -E "(test.*ok|passed|PASSED)"
+  created_at: '2026-02-03T08:48:19.362415Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2'
+  title: '8B Augmentation Tools for Pi Agents'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-03T08:52:13.990754Z'
+  has_verify: true
+  verify: test -f ~/.pi/agent/extensions/8b-tools/extension.js && node -c ~/.pi/agent/extensions/8b-tools/extension.js
+  created_at: '2026-02-03T08:50:05.721352Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.1'
+  title: 'Core: Cerebras client and base infrastructure'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T08:52:45.212058Z'
+  produces:
+  - CerebrasClient
+  - chatParallel
+  has_verify: true
+  verify: test -f ~/.pi/agent/extensions/8b-tools/cerebras.ts && node -e "require('fs').readFileSync(process.env.HOME + '/.pi/agent/extensions/8b-tools/cerebras.ts', 'utf8').includes('chatParallel') || process.exit(1)"
+  created_at: '2026-02-03T08:50:30.867712Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.2'
+  title: 'Tool: 8b_scout - File scouting and context compression'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T08:53:59.969113Z'
+  produces:
+  - '8b_scout_tool'
+  requires:
+  - CerebrasClient
+  has_verify: true
+  verify: node -e "const ext = require(process.env.HOME + '/.pi/agent/extensions/8b-tools/index.ts'); ext.toString().includes('8b_scout') || process.exit(1)" 2>/dev/null || grep -q "8b_scout" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:50:57.645417Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.3'
+  title: 'Tool: 8b_draft - Parallel candidate generation'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T08:54:50.038195Z'
+  produces:
+  - '8b_draft_tool'
+  requires:
+  - CerebrasClient
+  - chatParallel
+  has_verify: true
+  verify: grep -q "8b_draft" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:50:57.660053Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.4'
+  title: 'Tool: 8b_compress - Output summarization'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T08:54:00.077545Z'
+  produces:
+  - '8b_compress_tool'
+  requires:
+  - CerebrasClient
+  has_verify: true
+  verify: grep -q "8b_compress" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:50:57.674923Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.5'
+  title: 'Tool: 8b_lint_bean - Bean validation before spawn'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T09:07:02.481992Z'
+  produces:
+  - '8b_lint_bean_tool'
+  requires:
+  - CerebrasClient
+  has_verify: true
+  verify: grep -q "8b_lint_bean" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:51:25.382350Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.6'
+  title: 'Tool: 8b_infer_deps - Auto-detect produces/requires'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T09:06:53.213693Z'
+  produces:
+  - '8b_infer_deps_tool'
+  requires:
+  - CerebrasClient
+  has_verify: true
+  verify: grep -q "8b_infer_deps" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:51:25.397499Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.7'
+  title: 'Tool: 8b_verify_predict - Predict if verify will pass'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T09:06:21.986436Z'
+  produces:
+  - '8b_verify_predict_tool'
+  requires:
+  - CerebrasClient
+  has_verify: true
+  verify: grep -q "8b_verify_predict" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:51:25.411678Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '2.8'
+  title: 'Event: Auto-compress verbose tool results'
+  status: closed
+  priority: 2
+  parent: '2'
+  updated_at: '2026-02-03T09:05:19.595570Z'
+  produces:
+  - auto_compress_event
+  requires:
+  - CerebrasClient
+  - '8b_compress_tool'
+  has_verify: true
+  verify: grep -q "tool_result" ~/.pi/agent/extensions/8b-tools/index.ts
+  created_at: '2026-02-03T08:51:36.411933Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '3'
+  title: 'Wire up daily driver UX: history, highlighting, hinter, improved prompt'
+  status: closed
+  priority: 0
+  updated_at: '2026-03-03T09:25:34.712219Z'
+  has_verify: true
+  verify: 'grep -rq ''FileBackedHistory\|with_history'' src/main.rs && grep -rq ''with_highlighter'' src/main.rs && grep -rq ''with_hinter'' src/main.rs && grep -rq ''git.*branch\|exit.*code\|exit_code'' src/main.rs && timeout 60 cargo test --lib -- --skip executor::tests 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T09:21:14.380199Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '3'
+  title: 'chore: Fix all compiler warnings (214 warnings from cargo build)'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:35:15.895771Z'
+  has_verify: true
+  verify: test $(cd /Users/asher/rush && cargo build 2>&1 | grep -c 'warning:') -lt 10
+  created_at: '2026-02-19T08:23:42.877232Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '4'
+  title: 'Fix login shell support: executor state loss + environment setup'
+  status: closed
+  priority: 0
+  updated_at: '2026-03-03T09:36:29.242187Z'
+  has_verify: true
+  verify: 'grep -q ''fn run_interactive_with_reedline.*executor'' src/main.rs && grep -q ''SHELL'' src/main.rs && grep -rq ''/etc/profile\|\.profile'' src/main.rs && timeout 60 cargo test --lib -- --skip executor::tests 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T09:33:50.299670Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '4'
+  title: 'chore: Fix compiler warnings — unused imports and dead code'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:42.806847Z'
+  has_verify: true
+  verify: test $(cd /Users/asher/rush && cargo build 2>&1 | grep -c 'warning:') -lt 10
+  created_at: '2026-02-19T08:23:57.438688Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5'
+  title: 'Interactive QoL: terminal integration and prompt improvements'
+  status: closed
+  priority: 2
+  labels:
+  - feature
+  - interactive
+  updated_at: '2026-03-12T07:45:47.549795Z'
+  has_verify: true
+  verify: 'cargo test terminal:: && cargo build 2>&1 | head -5'
+  created_at: '2026-03-12T07:24:10.961813Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5'
+  title: 'chore: Replace deprecated atty crate with std::io::IsTerminal'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:30:56.541116Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && ! grep -q 'atty' Cargo.toml && cargo build 2>&1 | tail -1 | grep -q 'Finished'
+  created_at: '2026-02-19T08:24:33.545532Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5.1'
+  title: Wire up syntax highlighting in the REPL
+  status: closed
+  priority: 2
+  parent: '5'
+  updated_at: '2026-03-12T07:42:56.484353Z'
+  has_verify: true
+  verify: grep -q 'with_highlighter' src/main.rs && cargo build 2>&1 | tail -1 | grep -q 'Finished'
+  created_at: '2026-03-12T07:24:28.601592Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5.2'
+  title: Emit OSC 0/2 to set terminal tab/window title
+  status: closed
+  priority: 2
+  parent: '5'
+  updated_at: '2026-03-12T07:45:37.563656Z'
+  has_verify: true
+  verify: 'grep -q ''set_terminal_title'' src/terminal.rs && grep -q ''set_terminal_title'' src/main.rs && cargo test terminal:: 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-12T07:24:53.360722Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5.3'
+  title: Add OSC 133 semantic prompt marking
+  status: closed
+  priority: 2
+  parent: '5'
+  updated_at: '2026-03-12T07:45:47.072461Z'
+  has_verify: true
+  verify: 'grep -q ''mark_prompt_start'' src/terminal.rs && grep -q ''mark_command_finished'' src/main.rs && cargo test terminal:: 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-12T07:25:17.346571Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5.4'
+  title: Add CDPATH support to the cd builtin
+  status: closed
+  priority: 2
+  parent: '5'
+  updated_at: '2026-03-12T07:41:57.927271Z'
+  has_verify: true
+  verify: grep -q 'CDPATH' src/builtins/mod.rs && cargo build 2>&1 | tail -1 | grep -q 'Finished'
+  created_at: '2026-03-12T07:27:56.270658Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5.5'
+  title: Ring bell after long-running commands
+  status: closed
+  priority: 2
+  parent: '5'
+  updated_at: '2026-03-12T07:45:43.014303Z'
+  has_verify: true
+  verify: grep -q 'RUSH_BELL_THRESHOLD\|bell_if_long' src/main.rs && grep -q 'bell_if_long\|fn.*bell' src/terminal.rs && cargo build 2>&1 | tail -1 | grep -q 'Finished'
+  created_at: '2026-03-12T07:28:16.402803Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '5.6'
+  title: Add git branch and exit code to prompt
+  status: closed
+  priority: 2
+  parent: '5'
+  updated_at: '2026-03-12T07:43:59.566026Z'
+  has_verify: true
+  verify: grep -q 'git/HEAD\|git_branch\|\.git.*HEAD' src/main.rs && grep -q 'last_exit_code\|exit_code.*prompt' src/main.rs
+  created_at: '2026-03-12T07:29:03.348785Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '6'
+  title: Replace deprecated atty crate with std::io::IsTerminal
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:43.335126Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && ! grep -q '^atty' Cargo.toml && cargo build 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T08:24:55.322450Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '6.1'
+  title: 'tier-1: Double-quote expansion'
+  status: closed
+  priority: 0
+  updated_at: '2026-03-17T06:37:48.274178Z'
+  has_verify: false
+  created_at: '2026-03-17T05:56:10.929353Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '6.1.1'
+  title: 'AST: Add DoubleQuoted and SingleQuoted argument types'
+  status: closed
+  priority: 0
+  parent: '6.1'
+  labels:
+  - ast
+  - types
+  updated_at: '2026-03-17T06:37:47.969645Z'
+  produces:
+  - ArgumentPart
+  - Argument::DoubleQuoted
+  - Argument::SingleQuoted
+  has_verify: true
+  verify: grep -q "DoubleQuoted" src/parser/ast.rs && grep -q "ArgumentPart" src/parser/ast.rs && grep -q "SingleQuoted" src/parser/ast.rs && cargo build 2>&1 | grep -qv "^error"
+  created_at: '2026-03-17T05:56:54.650933Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '6.1.2'
+  title: 'Parser+Executor: Distinguish SingleQuoted from Literal'
+  status: closed
+  priority: 0
+  parent: '6.1'
+  dependencies:
+  - '6.1.1'
+  labels:
+  - parser
+  - executor
+  updated_at: '2026-03-17T06:37:47.969645Z'
+  requires:
+  - Argument::SingleQuoted
+  has_verify: true
+  verify: cargo test --test quoting_tests test_single_quotes_preserve_literal_dollar test_single_quotes_preserve_backticks test_command_substitution_blocked_in_single_quotes 2>&1 | grep -q "3 passed; 0 failed"
+  created_at: '2026-03-17T05:59:13.287612Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '6.1.3'
+  title: Fix escape sequences in double-quoted strings
+  status: closed
+  priority: 0
+  parent: '6.1'
+  dependencies:
+  - '6.1.1'
+  labels:
+  - parser
+  - executor
+  updated_at: '2026-03-17T06:37:47.969645Z'
+  requires:
+  - ArgumentPart
+  - Argument::DoubleQuoted
+  has_verify: true
+  verify: cargo test --test quoting_tests test_double_quotes_escape_dollar test_double_quotes_escape_backtick test_quote_escaping_with_variable 2>&1 | grep -q "3 passed; 0 failed"
+  created_at: '2026-03-17T05:59:32.993972Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '6.1.4'
+  title: Fix nested command substitution in double quotes
+  status: closed
+  priority: 1
+  parent: '6.1'
+  dependencies:
+  - '6.1.3'
+  labels:
+  - executor
+  updated_at: '2026-03-17T06:37:47.969645Z'
+  has_verify: true
+  verify: cargo test --test quoting_tests test_nested_command_substitution_with_quotes 2>&1 | grep -q "1 passed; 0 failed"
+  created_at: '2026-03-17T05:59:45.987005Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '6.1.5'
+  title: Adjacent quoted string concatenation
+  status: closed
+  priority: 1
+  parent: '6.1'
+  dependencies:
+  - '6.1.1'
+  labels:
+  - parser
+  updated_at: '2026-03-17T06:37:47.969645Z'
+  has_verify: true
+  verify: cargo test --test quoting_tests test_adjacent_quoted_strings 2>&1 | grep -q "1 passed; 0 failed"
+  created_at: '2026-03-17T06:00:00.830699Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '6.2'
+  title: 'tier-2: Job control'
+  status: closed
+  priority: 1
+  parent: '6'
+  dependencies:
+  - '6.1'
+  labels:
+  - executor
+  - jobs
+  updated_at: '2026-03-24T16:35:05.828340Z'
+  has_verify: true
+  verify: grep -rq "fn builtin_fg" src/builtins/jobs.rs && grep -rq "fn builtin_bg" src/builtins/jobs.rs && cargo test --lib jobs 2>&1 | grep -q "0 failed"
+  created_at: '2026-03-17T05:56:19.651553Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '6.5.1'
+  title: 'AST: Add DoubleQuoted, SingleQuoted, and ArgumentPart types'
+  status: closed
+  priority: 0
+  parent: '6.5'
+  updated_at: '2026-03-24T16:35:29.447989Z'
+  produces:
+  - ArgumentPart
+  - DoubleQuoted
+  - SingleQuoted
+  has_verify: true
+  verify: grep -q "DoubleQuoted" src/parser/ast.rs && grep -q "ArgumentPart" src/parser/ast.rs && grep -q "SingleQuoted" src/parser/ast.rs && cargo build 2>&1 | grep -qv "^error"
+  created_at: '2026-03-17T06:38:23.765743Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
 - id: '7'
   title: 'goal: Rush programmatic/agent API'
   status: closed
@@ -11,6 +620,17 @@ units:
   has_verify: true
   verify: 'cd /Users/asher/rush && cargo test -p rush run_api agent_mode output_budget 2>&1 | grep -q "test result: ok"'
   created_at: '2026-03-22T21:56:35.212428Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '7'
+  title: Replace deprecated atty crate with std::io::IsTerminal
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T08:27:07.923702Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && ! grep -q '^atty' Cargo.toml && cargo build 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T08:25:46.264303Z'
   attempts: 0
   feature: false
   has_decisions: false
@@ -95,6 +715,134 @@ units:
   attempts: 0
   feature: false
   has_decisions: false
+- id: '8'
+  title: 'refactor: Extract loop break/continue signal handling into a shared helper'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:53:28.178921Z'
+  has_verify: false
+  created_at: '2026-02-19T08:27:24.828727Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '9'
+  title: 'refactor: Extract duplicated loop break/continue handling into shared helper'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:46.624993Z'
+  has_verify: false
+  created_at: '2026-02-19T08:32:32.639669Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '10'
+  title: 'refactor: DRY up loop body execution in executor'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T08:41:00.700338Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && grep -q 'fn execute_loop_body\|fn handle_loop_signal\|enum LoopControl' src/executor/mod.rs && cargo build 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T08:33:14.008308Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '11'
+  title: 'refactor: Extract duplicated special variable handling into a shared method'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T08:48:31.708996Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && grep -q 'fn resolve_special_variable' src/executor/mod.rs && cargo build 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T08:41:16.099331Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '12'
+  title: 'bug: variable expansion fails in redirect targets'
+  status: closed
+  priority: 0
+  labels:
+  - bug
+  - parser
+  - redirect
+  updated_at: '2026-03-24T17:04:47.878401Z'
+  has_verify: true
+  verify: ~/bin/rush -c 'for i in 1 2; do echo "$i" > /tmp/rush-redir-$i.txt; done' && cat /tmp/rush-redir-1.txt | grep 1 && cat /tmp/rush-redir-2.txt | grep 2
+  created_at: '2026-03-24T03:11:08.558795Z'
+  claimed_by: pi-agent
+  attempts: 2
+  feature: false
+  has_decisions: false
+- id: '13'
+  title: 'chore: Fix unused import and dead code warnings across the codebase'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T09:02:41.685368Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && test $(cargo build 2>&1 | grep -c 'warning:') -lt 20
+  created_at: '2026-02-19T08:51:12.753123Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '14'
+  title: 'chore: Fix clippy warnings across the codebase'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T10:09:57.072586Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && test $(cargo clippy 2>&1 | grep -c 'warning:') -lt 10
+  created_at: '2026-02-19T09:03:33.769069Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '15'
+  title: 'bug: Add SAFETY comments to all unsafe blocks'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:28:24.032554Z'
+  has_verify: false
+  created_at: '2026-02-19T10:10:22.319293Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16'
+  title: AI-native shell with structured pipelines
+  status: closed
+  priority: 2
+  labels:
+  - feature
+  updated_at: '2026-03-24T16:35:07.664237Z'
+  has_verify: true
+  verify: echo feature
+  created_at: '2026-03-24T05:23:03.575247Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16'
+  title: 'security: Add SAFETY comments to unsafe blocks missing them'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T10:20:42.145347Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && cargo build 2>&1 | tail -1 | grep -q Finished && grep -rn 'unsafe' src/ --include='*.rs' | grep -v test | grep -v SAFETY | wc -l | xargs test 5 -ge
+  created_at: '2026-02-19T10:15:33.407346Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.1'
+  title: 'Phase 1: Structured Pipeline Core'
+  status: closed
+  priority: 2
+  parent: '16'
+  labels:
+  - phase
+  updated_at: '2026-03-24T16:35:49.741946Z'
+  has_verify: true
+  verify: 'cargo test pipeline_structured 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-24T05:23:09.296124Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
 - id: '16.1.1'
   title: Builtins emit Output::Structured by default
   status: closed
@@ -124,6 +872,23 @@ units:
   verify: grep -rq "fn render_output" src/executor/ && grep -rq "TableRenderer" src/executor/ && cargo check 2>&1 | grep -q "Finished"
   created_at: '2026-03-24T05:23:53.475156Z'
   claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.1.3'
+  title: 'Pipeline operators: where, sort, select, count, first, last'
+  status: closed
+  priority: 2
+  parent: '16.1'
+  dependencies:
+  - '16.1.1'
+  - '16.1.2'
+  labels:
+  - core
+  updated_at: '2026-03-24T16:35:50.300906Z'
+  has_verify: true
+  verify: 'grep -rq "fn execute_where" src/executor/ && grep -rq "fn execute_select" src/executor/ && cargo test structured_pipeline 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-24T05:24:12.242575Z'
   attempts: 0
   feature: false
   has_decisions: false
@@ -209,6 +974,20 @@ units:
   attempts: 0
   feature: false
   has_decisions: false
+- id: '16.3'
+  title: 'Phase 3: Lua Extension System'
+  status: closed
+  priority: 2
+  parent: '16'
+  labels:
+  - phase
+  updated_at: '2026-03-24T16:35:50.579981Z'
+  has_verify: true
+  verify: 'cargo test lua_extensions 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-24T05:23:18.601665Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
 - id: '16.3.1'
   title: Embed Lua runtime with mlua
   status: closed
@@ -221,6 +1000,39 @@ units:
   verify: grep -rq "mlua" Cargo.toml && grep -rq "pub fn init_lua" src/lua/ && cargo check 2>&1 | grep -q "Finished"
   created_at: '2026-03-24T05:25:49.371879Z'
   claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.3.2'
+  title: Lua builtin registration and structured data
+  status: closed
+  priority: 2
+  parent: '16.3'
+  dependencies:
+  - '16.3.1'
+  - '16.1.1'
+  labels:
+  - core
+  updated_at: '2026-03-24T16:35:50.852081Z'
+  has_verify: true
+  verify: 'grep -rq "register_builtin" src/lua/ && grep -rq "LuaBuiltin" src/builtins/ && cargo test lua_builtin 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-24T05:25:59.467306Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.3.3'
+  title: Lua prompt themes and completion extensions
+  status: closed
+  priority: 2
+  parent: '16.3'
+  dependencies:
+  - '16.3.1'
+  labels:
+  - feature
+  updated_at: '2026-03-24T16:35:51.125261Z'
+  has_verify: true
+  verify: grep -rq "register_prompt" src/lua/ && grep -rq "register_completion" src/lua/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:26:09.828788Z'
   attempts: 0
   feature: false
   has_decisions: false
@@ -284,6 +1096,1686 @@ units:
   verify: grep -q "AI-native" README.md && grep -q "structured" README.md && grep -q "Lua" README.md && grep -q "ollama\|Ollama" README.md
   created_at: '2026-03-24T05:26:37.044706Z'
   claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '17'
+  title: 'docs: Add module-level documentation to all public modules'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:31:35.270727Z'
+  has_verify: false
+  created_at: '2026-02-19T10:21:22.705373Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '18'
+  title: 'docs: Add module-level doc comments to key modules'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:43.601582Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && for f in src/lexer/mod.rs src/parser/mod.rs src/runtime/mod.rs src/signal.rs src/jobs/mod.rs; do head -1 $f | grep -q '//!' || exit 1; done && cargo build 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T10:21:31.811212Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '19'
+  title: 'review: Correctness audit — executor and loop handling'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:35:16.074614Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:29:54.783425Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '20'
+  title: 'review: Correctness audit of the executor module'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:43.783439Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:30:56.020488Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '21'
+  title: 'review: Correctness audit of the parser and lexer'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.710705Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:30:56.057598Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '22'
+  title: 'review: Correctness audit of builtin commands'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.748831Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:31:20.300272Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '23'
+  title: 'review: Security audit of unsafe code, input handling, and process control'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.784415Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:31:50.324314Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '24'
+  title: 'review: Performance audit of hot paths'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:33:48.765393Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:32:20.326570Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '25'
+  title: 'review: Architecture audit — god modules and separation of concerns'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:33:48.776156Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:32:20.377913Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '26'
+  title: 'review: Test coverage and test quality audit'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.818464Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:32:20.410254Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '27'
+  title: 'review: Dependency audit — heavy, deprecated, or unnecessary deps'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.854287Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:32:50.415279Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '28'
+  title: 'review: Performance audit of hot paths'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:34:08.201024Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:34:02.000411Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '29'
+  title: 'review: Architecture audit — god modules and separation of concerns'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:34:08.210920Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:34:02.029618Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '30'
+  title: 'review: Performance audit of hot paths'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.894561Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:34:18.286991Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '31'
+  title: 'review: Architecture audit — god modules and separation of concerns'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:48:21.927937Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:36:18.293191Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '32'
+  title: 'refactor: Split executor/mod.rs god module (3713 lines) into submodules'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:49:52.958778Z'
+  has_verify: true
+  verify: test -f src/executor/expansion.rs && test -f src/executor/control_flow.rs && test -f src/executor/commands.rs && cargo build
+  created_at: '2026-02-19T18:37:54.089105Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '33'
+  title: 'refactor: Split parser/mod.rs (2393 lines) into submodules'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:28:58.461312Z'
+  has_verify: true
+  verify: test -f src/parser/expressions.rs && cargo build
+  created_at: '2026-02-19T18:38:04.325332Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '34'
+  title: 'refactor: Split runtime/mod.rs (1083 lines) into submodules by responsibility'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:29:20.524523Z'
+  has_verify: true
+  verify: test -f src/runtime/variables.rs && cargo build
+  created_at: '2026-02-19T18:38:16.820768Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '35'
+  title: 'bug: Bracket glob regex prevents lexing [ test builtin and standalone [abc] patterns'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:34:31.958008Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && target/debug/rush -c "[ 1 -eq 1 ] && echo pass" 2>&1 | grep -q "pass"
+  created_at: '2026-02-19T18:44:02.145191Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '36'
+  title: 'review: Correctness audit of the executor — hanging tests and TODOs'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:43.860623Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:48:46.581955Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '37'
+  title: 'review: Find and fix hanging executor tests'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T18:56:22.368704Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:48:54.658177Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '38'
+  title: 'review: Correctness audit of builtin commands (test, read, printf, cd, trap)'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T19:36:46.246088Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T18:56:41.239747Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '39'
+  title: 'review: Security audit — env::set_var unsoundness, input validation, daemon'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T23:36:58.390785Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T19:42:45.578437Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '40'
+  title: 'review: Performance audit — allocations, clones, startup time'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:35:16.091970Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T19:43:08.082222Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '41'
+  title: 'review: Test quality — find hanging and broken tests'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T21:38:07.700191Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T19:43:14.367091Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '42'
+  title: 'review: Dependency audit — reqwest bloat, duplicate crates, removable deps'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T22:07:47.613239Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T20:17:55.316885Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '43'
+  title: 'chore: Make reqwest an optional feature to cut ~185 transitive deps'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T21:38:07.381546Z'
+  has_verify: true
+  verify: cargo build --no-default-features 2>&1 | tail -1 | grep -q Finished && cargo build --features fetch 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T20:34:22.694224Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '44'
+  title: 'bug: ls nonexistent path test checks stdout instead of stderr'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T20:50:38.965642Z'
+  has_verify: true
+  verify: 'cargo test --lib builtins::ls::tests::test_ls_nonexistent_path 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-02-19T20:34:26.583572Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '45'
+  title: 'test: Add pipeline execution unit tests for src/executor/pipeline.rs'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:34:20.759578Z'
+  has_verify: true
+  verify: test "$(cargo test --lib executor::pipeline 2>&1 | grep -o '[0-9]* passed' | grep -o '[0-9]*')" -ge 5
+  created_at: '2026-02-19T21:06:18.623640Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '46'
+  title: 'bug: Tests in correction/mod.rs use env::set_var unsafely (not thread-safe)'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:30:05.998359Z'
+  has_verify: true
+  verify: '! grep -n ''env::set_var'' src/correction/mod.rs | grep -v ''// SAFETY'''
+  created_at: '2026-02-19T21:06:26.574324Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '47'
+  title: 'chore: Replace num_cpus with std::thread::available_parallelism'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T21:54:08.793559Z'
+  has_verify: true
+  verify: cargo build 2>&1 | tail -1 | grep -q Finished && ! grep -q 'num_cpus' Cargo.toml
+  created_at: '2026-02-19T21:38:14.278306Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '48'
+  title: 'chore: Remove unused walkdir direct dependency'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T22:07:13.178718Z'
+  has_verify: true
+  verify: '! grep -q ''^walkdir'' Cargo.toml && cargo build 2>&1 | tail -1 | grep -q Finished'
+  created_at: '2026-02-19T21:54:15.267341Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '49'
+  title: 'review: Performance — clones, startup time, allocation hot spots'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:43.938864Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T22:41:49.603346Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '50'
+  title: 'review: Performance of command startup and execution hot paths'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:44.018054Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T22:57:10.915753Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '51'
+  title: 'review: Rush shell performance profiling'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T02:26:44.098607Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T22:57:18.998613Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '52'
+  title: 'review: Profile Rush performance and find optimization opportunities'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T23:36:45.454449Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-19T22:57:27.343092Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53'
+  title: 'POSIX Compliance: Fix all gaps preventing rush from replacing bash as pi''s shell'
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:20:11.934328Z'
+  has_verify: true
+  verify: cd ~/rush && cargo test
+  created_at: '2026-02-23T08:32:55.774573Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53.1'
+  title: Fix [ ] POSIX test command parsing
+  status: closed
+  priority: 2
+  parent: '53'
+  updated_at: '2026-03-02T03:04:05.787344Z'
+  produces:
+  - test-bracket-command
+  has_verify: true
+  verify: cd ~/rush && cargo build 2>&1 && ./target/debug/rush -c '[ -f /etc/hosts ] && echo yes' | grep -q yes
+  created_at: '2026-02-23T08:33:15.242805Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53.2'
+  title: 'Add fd duplication redirects: >&2, 1>&2, >&N'
+  status: closed
+  priority: 2
+  parent: '53'
+  updated_at: '2026-03-02T02:43:55.349406Z'
+  produces:
+  - fd-duplication-redirects
+  has_verify: true
+  verify: cd ~/rush && cargo build 2>&1 && ./target/debug/rush -c 'echo test_marker >&2' 2>&1 1>/dev/null | grep -q test_marker
+  created_at: '2026-02-23T08:33:36.422855Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53.3'
+  title: 'Fix echo builtin: support -e and -n flags'
+  status: closed
+  priority: 2
+  parent: '53'
+  updated_at: '2026-03-02T02:42:14.724461Z'
+  produces:
+  - echo-flags
+  has_verify: true
+  verify: cd ~/rush && cargo build 2>&1 && test "$(./target/debug/rush -c 'echo -e "a\nb"' | wc -l | tr -d " ")" = "2"
+  created_at: '2026-02-23T08:33:58.049540Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '53.4'
+  title: Add here-string support (<<<)
+  status: closed
+  priority: 2
+  parent: '53'
+  updated_at: '2026-03-02T03:04:15.356412Z'
+  produces:
+  - here-strings
+  has_verify: true
+  verify: cd ~/rush && cargo build 2>&1 && ./target/debug/rush -c 'cat <<< "hello"' | grep -q hello
+  created_at: '2026-02-23T08:34:12.321145Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53.5'
+  title: Fix nested command substitution in double-quoted strings
+  status: closed
+  priority: 2
+  parent: '53'
+  updated_at: '2026-03-02T03:11:45.561119Z'
+  produces:
+  - nested-quoted-substitution
+  has_verify: true
+  verify: cd ~/rush && cargo build 2>&1 && test "$(./target/debug/rush -c 'echo "$(echo "$(echo deep)")"')" = "deep"
+  created_at: '2026-02-23T08:34:52.823577Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53.6'
+  title: Add [[ ]] extended test command
+  status: closed
+  priority: 2
+  parent: '53'
+  updated_at: '2026-03-02T03:20:11.027326Z'
+  produces:
+  - double-bracket-test
+  requires:
+  - test-bracket-command
+  has_verify: true
+  verify: cd ~/rush && cargo build 2>&1 && ./target/debug/rush -c '[[ -f /etc/hosts ]] && echo yes' | grep -q yes
+  created_at: '2026-02-23T08:35:10.783736Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '53.7'
+  title: Add process substitution <() and >()
+  status: closed
+  priority: 2
+  updated_at: '2026-03-02T03:07:11.982336Z'
+  has_verify: false
+  created_at: '2026-02-23T08:35:26.270985Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '54'
+  title: 'P0: Quick Wins — umask, touch, history'
+  status: closed
+  priority: 0
+  labels:
+  - builtins
+  - posix
+  - quick-wins
+  updated_at: '2026-03-03T07:43:31.644502Z'
+  has_verify: true
+  verify: grep -q '"umask"' src/builtins/mod.rs && grep -q '"touch"' src/builtins/mod.rs && grep -q '"history"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:20:10.922692Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '54.1'
+  title: Implement `umask` builtin
+  status: closed
+  priority: 0
+  parent: '54'
+  updated_at: '2026-03-03T07:42:51.118411Z'
+  has_verify: true
+  verify: 'grep -q ''"umask"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/umask.rs && cargo test builtin_umask --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:21:32.752517Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '54.2'
+  title: Implement `touch` builtin
+  status: closed
+  priority: 0
+  parent: '54'
+  updated_at: '2026-03-03T07:43:31.339355Z'
+  has_verify: true
+  verify: 'grep -q ''"touch"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/touch.rs && cargo test builtin_touch --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:21:42.944865Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '54.3'
+  title: Wire up existing `history` builtin
+  status: closed
+  priority: 0
+  parent: '54'
+  updated_at: '2026-03-03T07:41:08.843551Z'
+  has_verify: true
+  verify: 'grep -q ''"history"'' src/builtins/mod.rs && grep -q ''mod history'' src/builtins/mod.rs && cargo test builtin_history --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:21:51.055067Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '55'
+  title: 'P1: POSIX Compliance — ulimit, git diff, pushd/popd'
+  status: closed
+  priority: 1
+  labels:
+  - builtins
+  - posix
+  - p1
+  updated_at: '2026-03-03T07:47:55.622891Z'
+  has_verify: true
+  verify: grep -q '"ulimit"' src/builtins/mod.rs && grep -q '"pushd"' src/builtins/mod.rs && grep 'git_diff' src/builtins/mod.rs | grep -vq '//'
+  created_at: '2026-03-03T07:20:16.461377Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '55.1'
+  title: Implement `ulimit` builtin
+  status: closed
+  priority: 1
+  parent: '55'
+  updated_at: '2026-03-03T07:47:38.390885Z'
+  has_verify: true
+  verify: 'grep -q ''"ulimit"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/ulimit.rs && cargo test builtin_ulimit --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:00.406494Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '55.2'
+  title: Fix and re-enable `git diff` builtin
+  status: closed
+  priority: 1
+  parent: '55'
+  updated_at: '2026-03-03T07:47:33.252335Z'
+  has_verify: true
+  verify: 'grep ''mod git_diff'' src/builtins/mod.rs | grep -vq ''//'' && cargo test builtin_git_diff --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:09.543830Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '55.3'
+  title: Implement `pushd`/`popd`/`dirs` builtins
+  status: closed
+  priority: 1
+  parent: '55'
+  updated_at: '2026-03-03T07:47:55.376868Z'
+  has_verify: true
+  verify: 'grep -q ''"pushd"'' src/builtins/mod.rs && grep -q ''"popd"'' src/builtins/mod.rs && grep -q ''"dirs"'' src/builtins/mod.rs && cargo test builtin_pushd --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:19.880742Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '56'
+  title: 'P1: Fast Coreutils — cp, mv, head, tail, wc'
+  status: closed
+  priority: 1
+  labels:
+  - builtins
+  - coreutils
+  - performance
+  - p1
+  updated_at: '2026-03-03T07:53:13.479630Z'
+  has_verify: true
+  verify: grep -q '"cp"' src/builtins/mod.rs && grep -q '"mv"' src/builtins/mod.rs && grep -q '"head"' src/builtins/mod.rs && grep -q '"tail"' src/builtins/mod.rs && grep -q '"wc"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:20:23.094258Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '56.1'
+  title: Implement `cp` builtin
+  status: closed
+  priority: 1
+  parent: '56'
+  updated_at: '2026-03-03T07:53:13.236323Z'
+  has_verify: true
+  verify: 'grep -q ''"cp"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/cp.rs && cargo test builtin_cp --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:29.070531Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '56.2'
+  title: Implement `mv` builtin
+  status: closed
+  priority: 1
+  parent: '56'
+  updated_at: '2026-03-03T07:51:38.380423Z'
+  has_verify: true
+  verify: 'grep -q ''"mv"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/mv.rs && cargo test builtin_mv --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:36.102177Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '56.3'
+  title: Implement `head` and `tail` builtins
+  status: closed
+  priority: 1
+  parent: '56'
+  updated_at: '2026-03-03T07:51:53.085195Z'
+  has_verify: true
+  verify: 'grep -q ''"head"'' src/builtins/mod.rs && grep -q ''"tail"'' src/builtins/mod.rs && cargo test builtin_head --lib 2>&1 | grep -q ''test result: ok'' && cargo test builtin_tail --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:46.619654Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '56.4'
+  title: Implement `wc` builtin
+  status: closed
+  priority: 1
+  parent: '56'
+  updated_at: '2026-03-03T07:51:18.273364Z'
+  has_verify: true
+  verify: 'grep -q ''"wc"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/wc.rs && cargo test builtin_wc --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:22:53.961645Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '57'
+  title: 'P1: String Builtin (fish-style)'
+  status: closed
+  priority: 1
+  labels:
+  - builtins
+  - modern-shell
+  - fish-parity
+  - p1
+  updated_at: '2026-03-03T08:03:03.858660Z'
+  has_verify: true
+  verify: 'grep -q ''"string"'' src/builtins/mod.rs && cargo test string_builtin --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:20:30.351915Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '57.1'
+  title: '`string` builtin: framework + split/join subcommands'
+  status: closed
+  priority: 1
+  parent: '57'
+  updated_at: '2026-03-03T07:56:33.789662Z'
+  produces:
+  - string-builtin-framework
+  has_verify: true
+  verify: 'grep -q ''"string"'' src/builtins/mod.rs && cargo test string_split --lib 2>&1 | grep -q ''test result: ok'' && cargo test string_join --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:23:04.981855Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '57.2'
+  title: '`string` builtin: match + replace subcommands'
+  status: closed
+  priority: 1
+  parent: '57'
+  updated_at: '2026-03-03T08:00:36.317630Z'
+  requires:
+  - string-builtin-framework
+  has_verify: true
+  verify: 'test -f src/builtins/string_cmd/match_cmd.rs && test -f src/builtins/string_cmd/replace.rs && grep -rq "fn test.*match" src/builtins/string_cmd/ && grep -rq "fn test.*replace" src/builtins/string_cmd/ && cargo test string_cmd --lib 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-03T07:23:14.869126Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '57.3'
+  title: '`string` builtin: trim, pad, repeat, escape subcommands'
+  status: closed
+  priority: 1
+  parent: '57'
+  updated_at: '2026-03-03T08:03:03.585387Z'
+  requires:
+  - string-builtin-framework
+  has_verify: true
+  verify: 'test -f src/builtins/string_cmd/trim.rs && test -f src/builtins/string_cmd/pad.rs && grep -rq "fn test.*trim" src/builtins/string_cmd/ && grep -rq "fn test.*pad" src/builtins/string_cmd/ && cargo test string_cmd --lib 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-03T07:23:24.158369Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '57.4'
+  title: '`string` builtin: upper, lower, length, sub subcommands'
+  status: closed
+  priority: 1
+  parent: '57'
+  updated_at: '2026-03-03T08:00:34.736341Z'
+  requires:
+  - string-builtin-framework
+  has_verify: true
+  verify: 'test -f src/builtins/string_cmd/case.rs && test -f src/builtins/string_cmd/length.rs && test -f src/builtins/string_cmd/sub.rs && grep -rq "fn test.*upper\|fn test.*lower" src/builtins/string_cmd/ && grep -rq "fn test.*length" src/builtins/string_cmd/ && cargo test string_cmd --lib 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-03T07:23:32.664467Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '58'
+  title: 'P1: Interactive UX — Autosuggestions + Syntax Highlighting'
+  status: closed
+  priority: 1
+  labels:
+  - interactive
+  - ux
+  - fish-parity
+  - p1
+  updated_at: '2026-03-03T08:06:28.031956Z'
+  has_verify: true
+  verify: grep -rq 'autosuggestion\|auto_suggest\|ghost_text' src/ && grep -rq 'syntax_highlight\|SyntaxHighlight\|highlight_line' src/
+  created_at: '2026-03-03T07:20:37.551323Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '58.1'
+  title: Autosuggestions — ghost text from history
+  status: closed
+  priority: 1
+  parent: '58'
+  updated_at: '2026-03-03T07:59:31.687724Z'
+  has_verify: true
+  verify: grep -rq 'DefaultHinter\|HistoryHinter\|Hinter\|autosuggestion' src/main.rs src/terminal.rs
+  created_at: '2026-03-03T07:23:45.452411Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '58.2'
+  title: Syntax highlighting — live command validation
+  status: closed
+  priority: 1
+  parent: '58'
+  updated_at: '2026-03-03T08:06:27.909001Z'
+  has_verify: true
+  verify: test -f src/highlight.rs && grep -rq 'impl.*Highlighter' src/highlight.rs && grep -rq 'with_highlighter' src/main.rs
+  created_at: '2026-03-03T07:23:58.432273Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '59'
+  title: 'P2: Modern Builtins — path, math, status, contains, count'
+  status: closed
+  priority: 2
+  labels:
+  - builtins
+  - modern-shell
+  - p2
+  updated_at: '2026-03-03T08:08:02.724375Z'
+  has_verify: true
+  verify: grep -q '"path"' src/builtins/mod.rs && grep -q '"math"' src/builtins/mod.rs && grep -q '"status"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:20:42.496273Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '59.1'
+  title: Implement `path` builtin (fish-style)
+  status: closed
+  priority: 2
+  parent: '59'
+  updated_at: '2026-03-03T08:08:02.466586Z'
+  has_verify: true
+  verify: 'grep -q ''"path"'' src/builtins/mod.rs && cargo test builtin_path --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:24:08.320581Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '59.2'
+  title: Implement `math` builtin + $RANDOM
+  status: closed
+  priority: 2
+  parent: '59'
+  updated_at: '2026-03-03T08:07:53.032953Z'
+  has_verify: true
+  verify: 'grep -q ''"math"'' src/builtins/mod.rs && cargo test builtin_math --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:24:18.273440Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '59.3'
+  title: Implement `status`, `contains`, `count` builtins
+  status: closed
+  priority: 2
+  parent: '59'
+  updated_at: '2026-03-03T08:06:42.216314Z'
+  has_verify: true
+  verify: grep -q '"status"' src/builtins/mod.rs && grep -q '"contains"' src/builtins/mod.rs && grep -q '"count"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:24:28.027317Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '60'
+  title: 'P2: Interactive Polish — Right prompt, hooks, autoload, abbr'
+  status: closed
+  priority: 2
+  labels:
+  - interactive
+  - ux
+  - p2
+  updated_at: '2026-03-03T08:17:56.733250Z'
+  has_verify: true
+  verify: grep -rq 'right_prompt\|RPROMPT\|RightPrompt' src/ && grep -rq 'precmd\|preexec\|hook' src/
+  created_at: '2026-03-03T07:20:48.917403Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '60.1'
+  title: Right prompt support
+  status: closed
+  priority: 2
+  parent: '60'
+  updated_at: '2026-03-03T08:06:55.472356Z'
+  has_verify: true
+  verify: grep -rq 'right_prompt\|RightPrompt\|RPROMPT' src/
+  created_at: '2026-03-03T07:24:36.754489Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '60.2'
+  title: precmd/preexec hooks
+  status: closed
+  priority: 2
+  parent: '60'
+  updated_at: '2026-03-03T08:12:58.719962Z'
+  has_verify: true
+  verify: grep -rq 'precmd\|preexec\|ShellHook\|HookManager' src/
+  created_at: '2026-03-03T07:24:45.829332Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '60.3'
+  title: Function autoloading from config directory
+  status: closed
+  priority: 2
+  parent: '60'
+  updated_at: '2026-03-03T08:13:21.046423Z'
+  has_verify: true
+  verify: grep -rq 'autoload\|function_path\|lazy_load.*function' src/
+  created_at: '2026-03-03T07:24:54.622470Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '60.4'
+  title: Abbreviations (`abbr` builtin)
+  status: closed
+  priority: 2
+  parent: '60'
+  updated_at: '2026-03-03T08:17:56.545711Z'
+  has_verify: true
+  verify: 'grep -q ''"abbr"'' src/builtins/mod.rs && cargo test builtin_abbr --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:25:02.170900Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '61'
+  title: 'P2: Structured Data — Table display, format converters'
+  status: closed
+  priority: 2
+  labels:
+  - builtins
+  - structured-data
+  - p2
+  updated_at: '2026-03-03T08:21:16.646851Z'
+  has_verify: true
+  verify: grep -rq 'table_display\|render_table\|TableRenderer' src/ && grep -q '"from"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:20:55.382926Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '61.1'
+  title: Table display for JSON arrays
+  status: closed
+  priority: 2
+  parent: '61'
+  updated_at: '2026-03-03T08:21:16.538655Z'
+  has_verify: true
+  verify: test -f src/output/table.rs && grep -rq 'fn render_json_table\|fn json_to_table\|fn display_table' src/output/table.rs && grep -rq '#\[test\]' src/output/table.rs
+  created_at: '2026-03-03T07:25:12.276131Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '61.2'
+  title: '`from` builtin — CSV, YAML, TOML to JSON converters'
+  status: closed
+  priority: 2
+  parent: '61'
+  updated_at: '2026-03-03T08:17:13.772463Z'
+  has_verify: true
+  verify: 'grep -q ''"from"'' src/builtins/mod.rs && cargo test builtin_from --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:25:21.201758Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '62'
+  title: 'P2: Script Compatibility — declare, disown, complete, shopt, mapfile'
+  status: closed
+  priority: 2
+  labels:
+  - builtins
+  - bash-compat
+  - p2
+  updated_at: '2026-03-03T08:25:38.570480Z'
+  has_verify: true
+  verify: grep -q '"declare"' src/builtins/mod.rs && grep -q '"disown"' src/builtins/mod.rs && grep -q '"complete"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:21:01.415404Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '62.1'
+  title: Implement `declare`/`typeset` builtin
+  status: closed
+  priority: 2
+  parent: '62'
+  updated_at: '2026-03-03T08:24:08.800043Z'
+  has_verify: true
+  verify: 'grep -q ''"declare"'' src/builtins/mod.rs && grep -q ''"typeset"'' src/builtins/mod.rs && cargo test builtin_declare --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:25:29.257511Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '62.2'
+  title: Implement `disown` builtin
+  status: closed
+  priority: 2
+  parent: '62'
+  updated_at: '2026-03-03T08:19:38.352929Z'
+  has_verify: true
+  verify: 'grep -q ''"disown"'' src/builtins/mod.rs && cargo test builtin_disown --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:25:37.785634Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '62.3'
+  title: Implement `complete`/`compgen` — programmable completion API
+  status: closed
+  priority: 2
+  parent: '62'
+  updated_at: '2026-03-03T08:24:46.248136Z'
+  has_verify: true
+  verify: grep -q '"complete"' src/builtins/mod.rs && grep -q '"compgen"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:25:46.706706Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '62.4'
+  title: Implement `shopt` and `mapfile`/`readarray` builtins
+  status: closed
+  priority: 2
+  parent: '62'
+  updated_at: '2026-03-03T08:25:38.476970Z'
+  has_verify: true
+  verify: grep -q '"shopt"' src/builtins/mod.rs && grep -q '"mapfile"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:25:55.982174Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '63'
+  title: 'P2: More Coreutils — sort, uniq, tee, cut, tr, chmod, date, sleep'
+  status: closed
+  priority: 2
+  labels:
+  - builtins
+  - coreutils
+  - p2
+  updated_at: '2026-03-03T08:17:52.679306Z'
+  has_verify: true
+  verify: grep -q '"sort"' src/builtins/mod.rs && grep -q '"tee"' src/builtins/mod.rs && grep -q '"chmod"' src/builtins/mod.rs && grep -q '"date"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:21:06.907917Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '63.1'
+  title: Implement `sort` and `uniq` builtins
+  status: closed
+  priority: 2
+  parent: '63'
+  updated_at: '2026-03-03T08:17:52.421680Z'
+  has_verify: true
+  verify: 'grep -q ''"sort"'' src/builtins/mod.rs && grep -q ''"uniq"'' src/builtins/mod.rs && cargo test builtin_sort --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:26:03.666084Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '63.2'
+  title: Implement `tee`, `cut`, `tr` builtins
+  status: closed
+  priority: 2
+  parent: '63'
+  updated_at: '2026-03-03T08:13:47.480112Z'
+  has_verify: true
+  verify: grep -q '"tee"' src/builtins/mod.rs && grep -q '"cut"' src/builtins/mod.rs && grep -q '"tr"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:26:12.040616Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '63.3'
+  title: Implement `chmod` and `chown` builtins
+  status: closed
+  priority: 2
+  parent: '63'
+  updated_at: '2026-03-03T08:12:59.530145Z'
+  has_verify: true
+  verify: grep -q '"chmod"' src/builtins/mod.rs && grep -q '"chown"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:26:20.252722Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '63.4'
+  title: Implement `date` and `sleep` builtins
+  status: closed
+  priority: 2
+  parent: '63'
+  updated_at: '2026-03-03T08:15:56.911718Z'
+  has_verify: true
+  verify: grep -q '"date"' src/builtins/mod.rs && grep -q '"sleep"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:26:28.075026Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '64'
+  title: 'P2: Git Builtins — git add, commit, branch'
+  status: closed
+  priority: 2
+  labels:
+  - builtins
+  - git
+  - p2
+  updated_at: '2026-03-03T08:24:44.086267Z'
+  has_verify: true
+  verify: grep -rq 'git_add\|"add"' src/builtins/git_*.rs && grep -rq 'git_commit\|"commit"' src/builtins/git_*.rs
+  created_at: '2026-03-03T07:21:12.581233Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '64.1'
+  title: Implement native `git add` builtin
+  status: closed
+  priority: 2
+  parent: '64'
+  updated_at: '2026-03-03T08:24:25.329762Z'
+  has_verify: true
+  verify: 'grep -rq ''builtin_git_add\|"add".*git_add'' src/builtins/ && cargo test git_add --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:26:36.540357Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '64.2'
+  title: Implement native `git commit` and `git branch` builtins
+  status: closed
+  priority: 2
+  parent: '64'
+  updated_at: '2026-03-03T08:24:43.988159Z'
+  has_verify: true
+  verify: grep -rq 'builtin_git_commit\|git_commit' src/builtins/ && grep -rq 'builtin_git_branch\|git_branch' src/builtins/
+  created_at: '2026-03-03T07:26:44.233018Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '65'
+  title: 'P3: Low Priority — POSIX niche, rare coreutils, future features'
+  status: closed
+  priority: 4
+  labels:
+  - builtins
+  - p3
+  - future
+  updated_at: '2026-03-03T08:35:49.582648Z'
+  has_verify: true
+  verify: grep -q '"hash"' src/builtins/mod.rs && grep -q '"ln"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:21:20.323198Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '65.1'
+  title: 'P3 POSIX: `hash`, `fc`, `times` builtins'
+  status: closed
+  priority: 4
+  parent: '65'
+  updated_at: '2026-03-03T08:31:56.118186Z'
+  has_verify: true
+  verify: grep -q '"hash"' src/builtins/mod.rs && grep -q '"fc"' src/builtins/mod.rs && grep -q '"times"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:26:51.876701Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '65.2'
+  title: 'P3 Coreutils: `ln`, `stat`, `readlink`, `mktemp`, `du`, `env`'
+  status: closed
+  priority: 4
+  parent: '65'
+  updated_at: '2026-03-03T08:35:49.470145Z'
+  has_verify: true
+  verify: grep -q '"ln"' src/builtins/mod.rs && grep -q '"stat"' src/builtins/mod.rs && grep -q '"env"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:26:57.756240Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '65.3'
+  title: 'P3 Niche bash: `let`, `bind`, `suspend`, `enable`, `select`, `coproc`, `newgrp`, `logout`'
+  status: closed
+  priority: 4
+  parent: '65'
+  updated_at: '2026-03-03T08:30:30.040895Z'
+  has_verify: true
+  verify: grep -q '"let"' src/builtins/mod.rs && grep -q '"enable"' src/builtins/mod.rs
+  created_at: '2026-03-03T07:27:04.510641Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '65.4'
+  title: 'P3 Future: Universal variables, event system, funced/funcsave'
+  status: closed
+  priority: 4
+  parent: '65'
+  updated_at: '2026-03-03T08:33:02.066375Z'
+  has_verify: true
+  verify: grep -rq 'universal_var\|UniversalVar' src/ && grep -rq 'emit.*event\|EventSystem' src/
+  created_at: '2026-03-03T07:27:11.426582Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '66'
+  title: Implement `wc` builtin
+  status: closed
+  priority: 1
+  updated_at: '2026-03-03T07:55:11.725651Z'
+  has_verify: true
+  verify: 'grep -q ''"wc"'' src/builtins/mod.rs && grep -rq ''#\[test\]'' src/builtins/wc.rs && cargo test builtin_wc --lib 2>&1 | grep -q ''test result: ok'''
+  created_at: '2026-03-03T07:54:27.537625Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193'
+  title: 'LEXER-BUG: Unquoted --flag=value splits into 3 tokens'
+  status: closed
+  priority: 1
+  updated_at: '2026-02-02T21:38:04.408077Z'
+  has_verify: true
+  verify: rush -c "echo test" | grep test
+  created_at: '2026-02-02T04:18:38.440817Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.1'
+  title: getopts builtin - POSIX option parsing
+  status: closed
+  priority: 0
+  labels:
+  - posix
+  - builtin
+  - critical
+  updated_at: '2026-02-02T21:56:08.904593Z'
+  has_verify: true
+  verify: cargo test --test getopts_tests
+  created_at: '2026-02-02T01:07:48.430168Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '193.2'
+  title: ANSI-C quoting $'...' syntax
+  status: closed
+  priority: 0
+  labels:
+  - posix
+  - posix-2024
+  - parser
+  - quoting
+  updated_at: '2026-02-02T21:46:28.332549Z'
+  has_verify: true
+  verify: cargo test --test ansi_c_quoting_tests
+  created_at: '2026-02-02T01:08:19.905577Z'
+  attempts: 2
+  feature: false
+  has_decisions: false
+- id: '193.3'
+  title: Case statement fall-through terminators
+  status: closed
+  priority: 1
+  parent: '193'
+  labels:
+  - posix
+  - posix-2024
+  - parser
+  - control-flow
+  updated_at: '2026-02-02T09:39:24.248431Z'
+  has_verify: true
+  verify: cargo test case_fallthrough
+  created_at: '2026-02-02T01:08:21.663156Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.4'
+  title: Arbitrary FD redirection (N>&M syntax)
+  status: closed
+  priority: 1
+  parent: '193'
+  labels:
+  - posix
+  - io
+  - redirection
+  updated_at: '2026-02-02T09:39:29.136878Z'
+  has_verify: true
+  verify: cargo test arbitrary_fd_redirect
+  created_at: '2026-02-02T01:08:23.326929Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.5'
+  title: Standard shell variables (OLDPWD, PPID, SHLVL)
+  status: closed
+  priority: 1
+  parent: '193'
+  labels:
+  - posix
+  - variables
+  - runtime
+  updated_at: '2026-02-02T09:38:58.383954Z'
+  has_verify: true
+  verify: cargo test shell_variables
+  created_at: '2026-02-02T01:08:51.592841Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.6'
+  title: fc builtin - history control
+  status: closed
+  priority: 2
+  parent: '193'
+  labels:
+  - posix
+  - builtin
+  - history
+  updated_at: '2026-02-02T09:39:29.611138Z'
+  has_verify: true
+  verify: cargo test fc_builtin
+  created_at: '2026-02-02T01:08:53.084314Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.7'
+  title: read -d delimiter option
+  status: closed
+  priority: 2
+  parent: '193'
+  labels:
+  - posix
+  - posix-2024
+  - builtin
+  updated_at: '2026-02-02T09:39:30.080033Z'
+  has_verify: true
+  verify: cargo test read_delimiter
+  created_at: '2026-02-02T01:08:55.089579Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.8'
+  title: cd -e option for PWD error detection
+  status: closed
+  priority: 2
+  parent: '193'
+  labels:
+  - posix
+  - posix-2024
+  - builtin
+  updated_at: '2026-02-02T09:39:30.542939Z'
+  has_verify: true
+  verify: cargo test cd_e_option
+  created_at: '2026-02-02T01:08:56.469593Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.9'
+  title: hash builtin - command path caching
+  status: closed
+  priority: 2
+  parent: '193'
+  labels:
+  - posix
+  - builtin
+  updated_at: '2026-02-02T09:39:31.002043Z'
+  has_verify: true
+  verify: cargo test hash_builtin
+  created_at: '2026-02-02T01:09:22.962525Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.10'
+  title: umask builtin - file creation mask
+  status: closed
+  priority: 2
+  parent: '193'
+  labels:
+  - posix
+  - builtin
+  updated_at: '2026-02-02T09:39:31.467478Z'
+  has_verify: true
+  verify: cargo test umask_builtin
+  created_at: '2026-02-02T01:09:25.098298Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.11'
+  title: trap -p enhancement
+  status: closed
+  priority: 3
+  parent: '193'
+  labels:
+  - posix
+  - posix-2024
+  - builtin
+  updated_at: '2026-02-02T09:39:31.938564Z'
+  has_verify: true
+  verify: cargo test trap_print
+  created_at: '2026-02-02T01:09:26.581558Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '193.12'
+  title: POSIX.1-2024 Compliance Test Suite
+  status: closed
+  priority: 1
+  dependencies:
+  - '193.1'
+  - '193.2'
+  - '193.3'
+  - '193.4'
+  - '193.5'
+  labels:
+  - posix
+  - testing
+  updated_at: '2026-02-03T02:15:34.131979Z'
+  has_verify: true
+  verify: cargo test --test posix_2024_compliance
+  created_at: '2026-02-02T01:09:28.120082Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '194'
+  title: 'LEXER-BUG: Tilde (~) always tokenized separately'
+  status: closed
+  priority: 1
+  updated_at: '2026-02-02T21:38:55.149087Z'
+  has_verify: true
+  verify: rush -c "echo test" | grep test
+  created_at: '2026-02-02T04:18:49.702491Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '195'
+  title: 'SCRIPT-BUG: Line-by-line execution breaks multi-line constructs'
+  status: closed
+  priority: 0
+  updated_at: '2026-02-02T22:06:49.949327Z'
+  has_verify: true
+  verify: printf "for i in 1 2 3; do\necho \"test-\$i\"\ndone\n" > /tmp/multiline_test.sh && rush /tmp/multiline_test.sh 2>&1 | grep -q "test-1"
+  created_at: '2026-02-02T04:19:04.138669Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '195.1'
+  title: 'SCRIPT-BUG: Loop variables empty or wrong in scripts'
+  status: closed
+  priority: 1
+  parent: '195'
+  updated_at: '2026-02-02T22:06:14.975834Z'
+  has_verify: true
+  verify: printf "for x in A B C; do echo \$x; done\n" > /tmp/loop_test.sh && rush /tmp/loop_test.sh 2>&1 | tr "\n" "," | grep -q "A,B,C,"
+  created_at: '2026-02-02T04:19:16.738383Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '196'
+  title: 'BUILTIN-BUG: grep missing common flags (-q, -r, -l, etc)'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-02T09:29:18.921353Z'
+  has_verify: true
+  verify: echo test | grep -q test 2>/dev/null
+  created_at: '2026-02-02T04:19:28.794613Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '197'
+  title: 'LEXER-BUG: Single-quoted strings truncate at dollar sign'
+  status: closed
+  priority: 1
+  updated_at: '2026-02-02T09:29:26.610833Z'
+  has_verify: true
+  verify: rush -c "echo hello" | grep hello
+  created_at: '2026-02-02T04:21:16.175403Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '198'
+  title: 'BUILTIN-BUG: Stderr redirect (2>/dev/null) ignored for builtins'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-02T09:35:15.366891Z'
+  has_verify: true
+  verify: rush -c "ls /nonexistent 2>/dev/null" 2>&1 | wc -l | tr -d " " | grep -q "^0"
+  created_at: '2026-02-02T04:21:59.454596Z'
+  attempts: 2
+  feature: false
+  has_decisions: false
+- id: '199'
+  title: 'PARSER-BUG: Command negation (!) not supported'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-02T09:38:32.080962Z'
+  has_verify: true
+  verify: rush -c "! false && echo works" | grep -q works
+  created_at: '2026-02-02T04:22:56.838230Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '200'
+  title: 'POSIX-BUG: Parameter expansion operators not implemented'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-02T21:36:52.326674Z'
+  has_verify: true
+  verify: rush -c "x=hello; echo \${#x}" | grep -q 5
+  created_at: '2026-02-02T04:23:54.076552Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '200.1'
+  title: 'Parameter expansion: string length ${#var}'
+  status: closed
+  priority: 2
+  parent: '200'
+  updated_at: '2026-02-02T17:35:35.751669Z'
+  has_verify: true
+  verify: rush -c "x=hello; echo \${#x}" | grep -q 5
+  created_at: '2026-02-02T17:20:40.968098Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '200.2'
+  title: 'Parameter expansion: alternate and error operators ${var:+} ${var:?}'
+  status: closed
+  priority: 2
+  parent: '200'
+  updated_at: '2026-02-02T21:35:09.028723Z'
+  has_verify: true
+  verify: rush -c "x=set; echo \${x:+alternate}" | grep -q alternate
+  created_at: '2026-02-02T17:20:50.158762Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '200.3'
+  title: 'Parameter expansion: pattern removal ${var%} ${var#}'
+  status: closed
+  priority: 2
+  parent: '200'
+  updated_at: '2026-02-02T21:36:40.450776Z'
+  has_verify: true
+  verify: rush -c "x=hello.txt; echo \${x%.txt}" | grep -q hello
+  created_at: '2026-02-02T17:21:03.091655Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '201'
+  title: 'ALIAS-BUG: Aliases not expanded in pipelines'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-02T21:42:40.409615Z'
+  has_verify: true
+  verify: rush -c 'alias ll="ls -la"; ll | head -1' 2>&1 | grep -v 'Failed to spawn'
+  created_at: '2026-02-02T04:29:07.010749Z'
+  attempts: 2
+  feature: false
+  has_decisions: false
+- id: '202'
+  title: Rush Shell Bug Hunt - Session Summary
+  status: closed
+  priority: 3
+  updated_at: '2026-02-02T09:46:27.678684Z'
+  has_verify: true
+  verify: 'true'
+  created_at: '2026-02-02T04:29:53.901364Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211'
+  title: Rush Lexer and Parser Bug Fixes - Wave 1
+  status: closed
+  priority: 2
+  updated_at: '2026-02-02T09:45:54.732946Z'
+  has_verify: true
+  verify: test $(ls .beans/archive/2026/02/211.* 2>/dev/null | wc -l) -ge 8
+  created_at: '2026-02-02T05:14:10.955165Z'
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '211.1'
+  title: 'LEXER-BUG: Unquoted colon in non-path arguments causes parse error'
+  status: closed
+  priority: 1
+  parent: '211'
+  updated_at: '2026-02-02T08:28:46.484490Z'
+  has_verify: true
+  verify: rush -c 'echo hello:world' | grep -q 'hello:world'
+  created_at: '2026-02-02T04:39:36.581985Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.2'
+  title: 'BUILTIN-BUG: Dot (.) source command not implemented'
+  status: closed
+  priority: 1
+  parent: '211'
+  updated_at: '2026-02-02T06:57:46.053060Z'
+  has_verify: true
+  verify: echo 'echo sourced_ok' > /tmp/test_dot.sh && rush -c '. /tmp/test_dot.sh' | grep -q 'sourced_ok'
+  created_at: '2026-02-02T04:39:36.620893Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.3'
+  title: 'LEXER-BUG: Backticks not expanded inside double-quoted strings'
+  status: closed
+  priority: 2
+  parent: '211'
+  updated_at: '2026-02-02T06:42:59.136232Z'
+  has_verify: true
+  verify: 'rush -c ''echo "test: `echo ok`"'' | grep -q ''test: ok'''
+  created_at: '2026-02-02T04:39:36.631583Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.4'
+  title: 'EXECUTOR-BUG: exec command skips all prior commands in sequence'
+  status: closed
+  priority: 1
+  parent: '211'
+  updated_at: '2026-02-02T06:25:39.006124Z'
+  has_verify: true
+  verify: rush -c 'echo before; exec /bin/echo after' | head -1 | grep -q 'before'
+  created_at: '2026-02-02T04:39:36.641934Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.5'
+  title: 'BUILTIN-BUG: set -- does not set positional parameters'
+  status: closed
+  priority: 2
+  parent: '211'
+  updated_at: '2026-02-02T08:32:31.277931Z'
+  has_verify: true
+  verify: rush -c 'set -- a b c; echo $1' | grep -q 'a'
+  created_at: '2026-02-02T04:39:49.291964Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.6'
+  title: 'LEXER-BUG: Backslash-escaped quote not handled in double-quoted strings'
+  status: closed
+  priority: 1
+  parent: '211'
+  updated_at: '2026-02-02T08:28:46.538631Z'
+  has_verify: true
+  verify: rush -c 'echo "a\"b"' | grep -q 'a"b'
+  created_at: '2026-02-02T04:39:57.082476Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.7'
+  title: 'PARSER-BUG: Pipes into while/until/compound commands not supported'
+  status: closed
+  priority: 1
+  parent: '211'
+  updated_at: '2026-02-02T07:11:24.546802Z'
+  has_verify: true
+  verify: rush -c 'echo hello | while read x; do echo "got-$x"; done' | grep -q 'got-hello'
+  created_at: '2026-02-02T04:41:06.522837Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '211.8'
+  title: 'BUILTIN-BUG: Input redirection (<) ignored for builtin commands'
+  status: closed
+  priority: 1
+  parent: '211'
+  updated_at: '2026-02-02T06:38:24.410573Z'
+  has_verify: true
+  verify: echo test > /tmp/in.txt && rush -c 'cat < /tmp/in.txt' | grep -q test
+  created_at: '2026-02-02T04:41:53.101560Z'
   attempts: 0
   feature: false
   has_decisions: false

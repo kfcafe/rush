@@ -2,13 +2,25 @@
 id: '16'
 title: AI-native shell with structured pipelines
 slug: ai-native-shell-with-structured-pipelines
-status: open
+status: closed
 priority: 2
 created_at: '2026-03-24T05:23:03.575247Z'
-updated_at: '2026-03-24T05:23:03.575247Z'
+updated_at: '2026-03-24T16:35:07.664237Z'
 labels:
 - feature
+closed_at: '2026-03-24T16:35:07.664237Z'
+close_reason: verify passed (tidy sweep)
 verify: echo feature
+is_archived: true
+history:
+- attempt: 1
+  started_at: '2026-03-24T16:35:07.593951Z'
+  finished_at: '2026-03-24T16:35:07.648852Z'
+  duration_secs: 0.054
+  result: pass
+  exit_code: 0
+outputs:
+  text: feature
 ---
 
 ## Vision
