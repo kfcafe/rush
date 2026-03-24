@@ -403,6 +403,11 @@ impl RushPrompt {
     }
 
     fn get_prompt_indicator(&self) -> String {
+        // If RUSH_PROMPT is set, expand its tokens. Otherwise use the default.
+        if let Ok(fmt) = env::var("RUSH_PROMPT") {
+            return self.expand_prompt(&fmt);
+        }
+
         let cwd_path = env::current_dir().ok();
         let cwd = cwd_path
             .as_deref()
@@ -429,6 +434,89 @@ impl RushPrompt {
         prompt.push_str("\x1b[36m>\x1b[0m ");
         prompt
     }
+
+    /// Expand prompt format tokens:
+    ///   {cwd}     — shortened working directory
+    ///   {git}     — current branch or empty
+    ///   {exit}    — last exit code or empty if 0
+    ///   {user}    — username
+    ///   {host}    — hostname
+    ///   {time}    — HH:MM
+    ///   {#rrggbb} — set foreground color
+    ///   {bold}    — bold
+    ///   {dim}     — dim
+    ///   {reset}   — reset styling
+    ///   {nl}      — newline
+    fn expand_prompt(&self, fmt: &str) -> String {
+        let cwd_path = env::current_dir().ok();
+        let cwd = cwd_path
+            .as_deref()
+            .map(terminal::shorten_home)
+            .unwrap_or_else(|| "?".to_string());
+
+        let git_branch = cwd_path
+            .as_ref()
+            .and_then(|p| terminal::git_branch_fast(p))
+            .unwrap_or_default();
+
+        let exit_code = self
+            .last_exit_code
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        let user = env::var("USER").unwrap_or_default();
+        let host = env::var("HOSTNAME")
+            .or_else(|_| env::var("HOST"))
+            .unwrap_or_default();
+
+        let now = chrono::Local::now();
+        let time = now.format("%H:%M").to_string();
+
+        let mut result = String::new();
+        let mut chars = fmt.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                let token: String = chars.by_ref().take_while(|&c| c != '}').collect();
+                match token.as_str() {
+                    "cwd" => result.push_str(&cwd),
+                    "git" => result.push_str(&git_branch),
+                    "exit" => {
+                        if exit_code != 0 {
+                            result.push_str(&exit_code.to_string());
+                        }
+                    }
+                    "user" => result.push_str(&user),
+                    "host" => result.push_str(&host),
+                    "time" => result.push_str(&time),
+                    "bold" => result.push_str("\x1b[1m"),
+                    "dim" => result.push_str("\x1b[2m"),
+                    "italic" => result.push_str("\x1b[3m"),
+                    "reset" => result.push_str("\x1b[0m"),
+                    "nl" => result.push('\n'),
+                    s if s.starts_with('#') && s.len() == 7 => {
+                        // Hex color: {#ff5f87}
+                        if let (Ok(r), Ok(g), Ok(b)) = (
+                            u8::from_str_radix(&s[1..3], 16),
+                            u8::from_str_radix(&s[3..5], 16),
+                            u8::from_str_radix(&s[5..7], 16),
+                        ) {
+                            result.push_str(&format!("\x1b[38;2;{};{};{}m", r, g, b));
+                        }
+                    }
+                    _ => {
+                        // Unknown token — pass through literally
+                        result.push('{');
+                        result.push_str(&token);
+                        result.push('}');
+                    }
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+
+        result
+    }
 }
 
 impl Prompt for RushPrompt {
@@ -437,7 +525,11 @@ impl Prompt for RushPrompt {
     }
 
     fn render_prompt_right(&self) -> Cow<'_, str> {
-        Cow::Borrowed("")
+        if let Ok(fmt) = env::var("RUSH_PROMPT_RIGHT") {
+            Cow::Owned(self.expand_prompt(&fmt))
+        } else {
+            Cow::Borrowed("")
+        }
     }
 
     fn render_prompt_indicator(&self, _prompt_mode: reedline::PromptEditMode) -> Cow<'_, str> {

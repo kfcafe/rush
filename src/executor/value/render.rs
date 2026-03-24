@@ -2,6 +2,19 @@ use super::{Table, Value};
 use nu_ansi_term::Color;
 use std::collections::HashMap;
 
+/// Parse a hex color (#rrggbb) from an env var into a nu_ansi_term Color.
+fn parse_env_color(var: &str) -> Option<Color> {
+    let val = std::env::var(var).ok()?;
+    let hex = val.strip_prefix('#').unwrap_or(&val);
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some(Color::Rgb(r, g, b))
+}
+
 /// Table renderer with automatic column width adjustment and color support
 pub struct TableRenderer {
     use_colors: bool,
@@ -122,7 +135,8 @@ impl TableRenderer {
             .map(|(col, &width)| {
                 let padded = format!("{:width$}", col, width = width);
                 if self.use_colors {
-                    Color::Cyan.bold().paint(&padded).to_string()
+                    let color = parse_env_color("RUSH_COLOR_HEADER").unwrap_or(Color::Cyan);
+                    color.bold().paint(&padded).to_string()
                 } else {
                     padded
                 }

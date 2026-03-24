@@ -114,9 +114,7 @@ pub enum LlmError {
     #[error("Configuration error: {0}")]
     Config(String),
 
-    #[error(
-        "Provider '{0}' requires an API key (set {1} env var or add api_key to ~/.rushrc)"
-    )]
+    #[error("Provider '{0}' requires an API key (set {1} env var or add api_key to ~/.rushrc)")]
     MissingApiKey(String, String),
 }
 
