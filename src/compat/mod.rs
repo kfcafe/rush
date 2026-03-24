@@ -15,7 +15,5 @@ pub mod migrate;
 pub mod report;
 
 pub use analyzer::{AnalysisResult, ScriptAnalyzer};
-pub use database::CompatDatabase;
-pub use features::RushCompatFeature;
 pub use migrate::MigrationEngine;
 pub use report::CompatibilityReport;

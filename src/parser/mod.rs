@@ -141,15 +141,22 @@ impl Parser {
         }
         // Check if this is a pipeline
         else if self.match_token(&Token::Pipe) {
-            // Build elements list supporting commands, subshells, and compound commands
+            // Build elements list supporting commands, subshells, compound commands, and structured ops
             let first_element = Self::statement_to_pipeline_element(first_statement)?;
 
             self.advance();
             let mut elements = vec![first_element];
 
             loop {
-                let stmt = self.parse_pipeline_element()?;
-                let elem = Self::statement_to_pipeline_element(stmt)?;
+                // Try to parse a structured pipeline operator keyword first.
+                // This must be checked before falling through to generic command parsing so that
+                // identifiers like `where`, `sort`, `count` etc. are treated as operators, not commands.
+                let elem = if let Some(op) = self.try_parse_structured_op()? {
+                    PipelineElement::StructuredOp(op)
+                } else {
+                    let stmt = self.parse_pipeline_element()?;
+                    Self::statement_to_pipeline_element(stmt)?
+                };
                 elements.push(elem);
 
                 if !self.match_token(&Token::Pipe) {
@@ -180,7 +187,9 @@ impl Parser {
                 .iter()
                 .filter_map(|e| match e {
                     PipelineElement::Command(cmd) => Some(cmd.clone()),
-                    PipelineElement::Subshell(_) | PipelineElement::CompoundCommand(_) => None,
+                    PipelineElement::Subshell(_)
+                    | PipelineElement::CompoundCommand(_)
+                    | PipelineElement::StructuredOp(_) => None,
                 })
                 .collect();
 
@@ -371,6 +380,197 @@ impl Parser {
         self.expect_token(&Token::RightBrace)?;
 
         Ok(Statement::BraceGroup(statements))
+    }
+
+    /// Try to parse a structured pipeline operator at the current position.
+    ///
+    /// Returns `Some(op)` if the current token is a recognized structured-op keyword
+    /// (`where`, `sort`, `select`, `count`, `first`, `last`, `uniq`) and the parse succeeds,
+    /// or `None` if the current token is not a structured-op keyword.
+    ///
+    /// This is called inside the pipeline loop so that these keywords are consumed
+    /// as native operators rather than dispatched to external commands.
+    fn try_parse_structured_op(&mut self) -> Result<Option<StructuredOp>> {
+        let keyword = match self.peek() {
+            Some(Token::Identifier(s)) => s.clone(),
+            _ => return Ok(None),
+        };
+
+        match keyword.as_str() {
+            "where" => {
+                self.advance(); // consume "where"
+                let field = self.expect_identifier("where: expected field name")?;
+                let op = self.parse_compare_op()?;
+                let value = self.parse_op_value()?;
+                Ok(Some(StructuredOp::Where { field, op, value }))
+            }
+            "sort" => {
+                self.advance(); // consume "sort"
+                let mut reverse = false;
+                if matches!(self.peek(), Some(Token::ShortFlag(f)) if f == "-r")
+                    || matches!(self.peek(), Some(Token::LongFlag(f)) if f == "--reverse")
+                {
+                    self.advance();
+                    reverse = true;
+                }
+                let field = match self.peek() {
+                    Some(Token::Identifier(_)) => {
+                        Some(self.expect_identifier("sort: expected field name")?)
+                    }
+                    _ => None,
+                };
+                Ok(Some(StructuredOp::Sort { field, reverse }))
+            }
+            "select" => {
+                self.advance(); // consume "select"
+                let mut fields = Vec::new();
+                while let Some(Token::Identifier(_)) = self.peek() {
+                    fields.push(self.expect_identifier("select: expected field name")?);
+                }
+                if fields.is_empty() {
+                    return Err(anyhow!("select: at least one field name required"));
+                }
+                Ok(Some(StructuredOp::Select { fields }))
+            }
+            "count" => {
+                self.advance();
+                Ok(Some(StructuredOp::Count))
+            }
+            "first" => {
+                self.advance();
+                let n = self.parse_optional_count(1)?;
+                Ok(Some(StructuredOp::First(n)))
+            }
+            "last" => {
+                self.advance();
+                let n = self.parse_optional_count(1)?;
+                Ok(Some(StructuredOp::Last(n)))
+            }
+            "uniq" => {
+                self.advance();
+                let field = match self.peek() {
+                    Some(Token::Identifier(_)) => {
+                        Some(self.expect_identifier("uniq: expected field name")?)
+                    }
+                    _ => None,
+                };
+                Ok(Some(StructuredOp::Uniq { field }))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Parse a comparison operator for `where` expressions.
+    fn parse_compare_op(&mut self) -> Result<CompareOp> {
+        match self.peek() {
+            Some(Token::DoubleEquals) => {
+                self.advance();
+                Ok(CompareOp::Eq)
+            }
+            Some(Token::Equals) => {
+                self.advance();
+                // `=~` — `=` followed by `~` (Tilde) — is the regex/glob match operator
+                if matches!(self.peek(), Some(Token::Tilde)) {
+                    self.advance();
+                    Ok(CompareOp::Match)
+                } else {
+                    Ok(CompareOp::Eq)
+                }
+            }
+            Some(Token::NotEquals) => {
+                self.advance();
+                Ok(CompareOp::Ne)
+            }
+            Some(Token::Bang) => {
+                // `!~` — Bang followed by Tilde
+                self.advance();
+                if matches!(self.peek(), Some(Token::Tilde)) {
+                    self.advance();
+                    Ok(CompareOp::NotMatch)
+                } else {
+                    Err(anyhow!("where: expected `!~` operator"))
+                }
+            }
+            Some(Token::GreaterThanOrEqual) => {
+                self.advance();
+                Ok(CompareOp::Ge)
+            }
+            Some(Token::LessThanOrEqual) => {
+                self.advance();
+                Ok(CompareOp::Le)
+            }
+            Some(Token::GreaterThan) => {
+                self.advance();
+                Ok(CompareOp::Gt)
+            }
+            // `<` is StdinRedirect in the lexer — treat as less-than in operator position
+            Some(Token::StdinRedirect) => {
+                self.advance();
+                Ok(CompareOp::Lt)
+            }
+            Some(Token::Identifier(s)) if s == "=~" => {
+                self.advance();
+                Ok(CompareOp::Match)
+            }
+            Some(Token::Identifier(s)) if s == "!~" => {
+                self.advance();
+                Ok(CompareOp::NotMatch)
+            }
+            other => Err(anyhow!(
+                "where: expected comparison operator, got {:?}",
+                other
+            )),
+        }
+    }
+
+    /// Parse a comparison value (identifier, string literal, or integer).
+    fn parse_op_value(&mut self) -> Result<String> {
+        match self.peek() {
+            Some(Token::Identifier(s)) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            Some(Token::String(s)) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            Some(Token::SingleQuotedString(s)) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            Some(Token::Integer(n)) => {
+                let s = n.to_string();
+                self.advance();
+                Ok(s)
+            }
+            other => Err(anyhow!("where: expected value, got {:?}", other)),
+        }
+    }
+
+    /// Parse an optional integer count (used by `first N` and `last N`).
+    fn parse_optional_count(&mut self, default: usize) -> Result<usize> {
+        if let Some(Token::Integer(n)) = self.peek() {
+            let n = *n as usize;
+            self.advance();
+            Ok(n)
+        } else {
+            Ok(default)
+        }
+    }
+
+    /// Consume and return an Identifier token, or return an error with `context`.
+    fn expect_identifier(&mut self, context: &str) -> Result<String> {
+        match self.peek() {
+            Some(Token::Identifier(s)) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            other => Err(anyhow!("{}: expected identifier, got {:?}", context, other)),
+        }
     }
 
     /// Convert a parsed statement into a pipeline element

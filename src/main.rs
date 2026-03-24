@@ -1,6 +1,9 @@
+#![allow(dead_code, unused_imports)]
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+mod ai;
 mod arithmetic;
 mod banner;
 mod benchmark;
@@ -20,6 +23,7 @@ mod history;
 mod intent;
 mod jobs;
 mod lexer;
+mod lua;
 mod output;
 mod parser;
 mod progress;
@@ -29,6 +33,7 @@ mod signal;
 mod stats;
 mod terminal;
 mod undo;
+mod value;
 
 use anyhow::Result;
 use completion::Completer;
@@ -122,6 +127,16 @@ fn main() -> Result<()> {
                     }
                     std::process::exit(0);
                 }
+                "--setup-ai" => {
+                    // Run the interactive AI setup wizard
+                    match rush::ai::setup_wizard() {
+                        Ok(_) => std::process::exit(0),
+                        Err(e) => {
+                            eprintln!("Setup failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 "--info" => {
                     // Handle --info flag: show system stats
                     // Check for optional stat name or --json flag
@@ -137,7 +152,6 @@ fn main() -> Result<()> {
                             }
                             arg if !arg.starts_with('-') => {
                                 stat_name = Some(arg.to_string());
-                                j += 1;
                                 break; // Only take first non-flag arg
                             }
                             _ => break,
@@ -160,7 +174,7 @@ fn main() -> Result<()> {
     // Full initialization for interactive / script modes
     // Put the shell in its own process group for proper job control
     let shell_pid = getpid();
-    if let Err(e) = setpgid(shell_pid, shell_pid) {
+    if let Err(_e) = setpgid(shell_pid, shell_pid) {
         // Non-fatal warning - continue anyway (may fail if already session leader)
         // This is expected for login shells
     }
@@ -418,26 +432,26 @@ impl RushPrompt {
 }
 
 impl Prompt for RushPrompt {
-    fn render_prompt_left(&self) -> Cow<str> {
+    fn render_prompt_left(&self) -> Cow<'_, str> {
         Cow::Owned(self.get_prompt_indicator())
     }
 
-    fn render_prompt_right(&self) -> Cow<str> {
+    fn render_prompt_right(&self) -> Cow<'_, str> {
         Cow::Borrowed("")
     }
 
-    fn render_prompt_indicator(&self, _prompt_mode: reedline::PromptEditMode) -> Cow<str> {
+    fn render_prompt_indicator(&self, _prompt_mode: reedline::PromptEditMode) -> Cow<'_, str> {
         Cow::Borrowed("")
     }
 
-    fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
         Cow::Borrowed("> ")
     }
 
     fn render_prompt_history_search_indicator(
         &self,
         history_search: PromptHistorySearch,
-    ) -> Cow<str> {
+    ) -> Cow<'_, str> {
         let prefix = match history_search.status {
             PromptHistorySearchStatus::Passing => "",
             PromptHistorySearchStatus::Failing => "failing ",
@@ -649,9 +663,21 @@ fn run_interactive_with_reedline(
     const MAX_HISTORY_FOR_CONTEXT: usize = 20;
 
     loop {
+        // Check if stdin is still a valid terminal.
+        // On macOS, closing a terminal tab "revokes" the PTY, leaving the
+        // shell process alive with dead file descriptors.  Without this
+        // guard, reedline enters a tight poll/read error loop and the
+        // process never exits — accumulating CPU time and inflating
+        // Activity Monitor memory counts.
+        if unsafe { libc::isatty(libc::STDIN_FILENO) } == 0 {
+            break;
+        }
+
         // Check for signals before reading next line
         if signal_handler.should_shutdown() {
-            println!("\nExiting due to signal...");
+            // Use write(2) directly — println! panics on revoked stdout
+            let _ =
+                std::io::Write::write_all(&mut std::io::stderr(), b"\nExiting due to signal...\n");
             std::process::exit(signal_handler.exit_code());
         }
 
@@ -719,9 +745,11 @@ fn run_interactive_with_reedline(
                             println!("Executing: {}", command);
                             match execute_line(&command, &mut executor) {
                                 Ok(exec_result) => {
-                                    let stdout_text = exec_result.stdout();
-                                    if !stdout_text.is_empty() {
-                                        print!("{}", stdout_text);
+                                    let agent_mode = executor.runtime_mut().agent_mode();
+                                    let rendered =
+                                        executor::render_output(&exec_result.output, agent_mode);
+                                    if !rendered.is_empty() {
+                                        print!("{}", rendered);
                                     }
                                     if !exec_result.stderr.is_empty() {
                                         eprintln!("{}", exec_result.stderr);
@@ -766,9 +794,10 @@ fn run_interactive_with_reedline(
                 match execute_line(line, &mut executor) {
                     Ok(result) => {
                         let elapsed = cmd_start.elapsed();
-                        let stdout_text = result.stdout();
-                        if !stdout_text.is_empty() {
-                            print!("{}", stdout_text);
+                        let agent_mode = executor.runtime_mut().agent_mode();
+                        let rendered = executor::render_output(&result.output, agent_mode);
+                        if !rendered.is_empty() {
+                            print!("{}", rendered);
                         }
                         if !result.stderr.is_empty() {
                             eprintln!("{}", result.stderr);
@@ -808,7 +837,9 @@ fn run_interactive_with_reedline(
                 if e.kind() == std::io::ErrorKind::Interrupted {
                     continue;
                 }
-                eprintln!("Error reading line: {}", e);
+                // Use write(2) directly — eprintln! panics if stderr is revoked
+                let msg = format!("Error reading line: {}\n", e);
+                let _ = std::io::Write::write_all(&mut std::io::stderr(), msg.as_bytes());
                 break;
             }
         }
@@ -1193,7 +1224,7 @@ fn run_info_command(stat_name: Option<String>, json_output: bool) -> ! {
         // Human-readable output with pretty 2-column table
         let cyan = "\x1b[36m";
         let bold = "\x1b[1m";
-        let dim = "\x1b[2m";
+        let _dim = "\x1b[2m";
         let reset = "\x1b[0m";
 
         // Column width (content only, not including border and padding)

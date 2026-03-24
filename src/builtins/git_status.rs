@@ -243,8 +243,13 @@ fn output_json(git_ctx: &GitContext) -> Result<ExecutionResult> {
         },
     };
 
-    let json = serde_json::to_string_pretty(&output)?;
-    Ok(ExecutionResult::success(json + "\n"))
+    let json_value = serde_json::to_value(&output)?;
+    Ok(ExecutionResult {
+        output: crate::executor::Output::Structured(json_value),
+        stderr: String::new(),
+        exit_code: 0,
+        error: None,
+    })
 }
 
 #[cfg(test)]

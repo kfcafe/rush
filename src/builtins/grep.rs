@@ -102,64 +102,70 @@ pub fn builtin_grep(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
             }
         }
 
-        let json_output = serde_json::to_string_pretty(&json_matches)
+        let exit_code = if found_any { 0 } else { 1 };
+        let json_value = serde_json::to_value(&json_matches)
             .map_err(|e| anyhow!("Failed to serialize JSON: {}", e))?;
-        stdout = json_output.into_bytes();
-    } else {
-        // Text mode (original behavior)
-        if config.recursive {
-            for path in &config.paths {
-                let walker = WalkBuilder::new(path)
-                    .git_ignore(config.respect_gitignore)
-                    .hidden(!config.search_hidden)
-                    .build();
+        return Ok(ExecutionResult {
+            output: crate::executor::Output::Structured(json_value),
+            stderr: String::from_utf8_lossy(&stderr).to_string(),
+            exit_code,
+            error: None,
+        });
+    }
 
-                for entry in walker {
-                    match entry {
-                        Ok(entry) => {
-                            if entry.file_type().is_some_and(|ft| ft.is_file())
-                                && search_file(
-                                    &matcher,
-                                    entry.path(),
-                                    &config,
-                                    &mut stdout,
-                                    &mut stderr,
-                                )?
-                            {
-                                found_any = true;
-                            }
+    // Text mode (original behavior)
+    if config.recursive {
+        for path in &config.paths {
+            let walker = WalkBuilder::new(path)
+                .git_ignore(config.respect_gitignore)
+                .hidden(!config.search_hidden)
+                .build();
+
+            for entry in walker {
+                match entry {
+                    Ok(entry) => {
+                        if entry.file_type().is_some_and(|ft| ft.is_file())
+                            && search_file(
+                                &matcher,
+                                entry.path(),
+                                &config,
+                                &mut stdout,
+                                &mut stderr,
+                            )?
+                        {
+                            found_any = true;
                         }
-                        Err(e) => {
-                            writeln!(&mut stderr, "Error walking directory: {}", e)?;
-                        }
+                    }
+                    Err(e) => {
+                        writeln!(&mut stderr, "Error walking directory: {}", e)?;
                     }
                 }
             }
-        } else {
-            for path in &config.paths {
-                let path_buf = if path.is_absolute() {
-                    path.clone()
-                } else {
-                    runtime.get_cwd().join(path)
-                };
+        }
+    } else {
+        for path in &config.paths {
+            let path_buf = if path.is_absolute() {
+                path.clone()
+            } else {
+                runtime.get_cwd().join(path)
+            };
 
-                if path_buf.is_dir() {
-                    writeln!(&mut stderr, "grep: {}: Is a directory", path.display())?;
-                    continue;
-                }
+            if path_buf.is_dir() {
+                writeln!(&mut stderr, "grep: {}: Is a directory", path.display())?;
+                continue;
+            }
 
-                if !path_buf.exists() {
-                    writeln!(
-                        &mut stderr,
-                        "grep: {}: No such file or directory",
-                        path.display()
-                    )?;
-                    continue;
-                }
+            if !path_buf.exists() {
+                writeln!(
+                    &mut stderr,
+                    "grep: {}: No such file or directory",
+                    path.display()
+                )?;
+                continue;
+            }
 
-                if search_file(&matcher, &path_buf, &config, &mut stdout, &mut stderr)? {
-                    found_any = true;
-                }
+            if search_file(&matcher, &path_buf, &config, &mut stdout, &mut stderr)? {
+                found_any = true;
             }
         }
     }
@@ -201,13 +207,18 @@ pub fn builtin_grep_with_stdin(
         search_stdin(&matcher, stdin_data, &config, &mut stdout, &mut stderr)?
     };
 
-    if config.json_output {
-        let json_output = serde_json::to_string_pretty(&json_matches)
-            .map_err(|e| anyhow!("Failed to serialize JSON: {}", e))?;
-        stdout = json_output.into_bytes();
-    }
-
     let exit_code = if found { 0 } else { 1 };
+
+    if config.json_output {
+        let json_value = serde_json::to_value(&json_matches)
+            .map_err(|e| anyhow!("Failed to serialize JSON: {}", e))?;
+        return Ok(ExecutionResult {
+            output: crate::executor::Output::Structured(json_value),
+            stderr: String::from_utf8_lossy(&stderr).to_string(),
+            exit_code,
+            error: None,
+        });
+    }
 
     Ok(ExecutionResult {
         output: crate::executor::Output::Text(String::from_utf8_lossy(&stdout).to_string()),

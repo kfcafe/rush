@@ -6,7 +6,7 @@
 //! - Automatically excludes common build directories (.git, node_modules, target)
 //! - Uses efficient pattern matching with glob patterns
 
-use crate::executor::ExecutionResult;
+use crate::executor::{ExecutionResult, Output};
 use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
@@ -476,19 +476,27 @@ pub fn builtin_find(args: &[String], runtime: &mut Runtime) -> Result<ExecutionR
         }
     }
 
-    let output = if options.exec_command.is_some() {
-        exec_output
-    } else if options.json_output {
-        serde_json::to_string_pretty(&json_results)
-            .map_err(|e| anyhow!("Failed to serialize JSON: {}", e))?
-            + "\n"
-    } else if !text_results.is_empty() {
+    if options.exec_command.is_some() {
+        return Ok(ExecutionResult::success(exec_output));
+    }
+
+    if options.json_output {
+        let json_value = serde_json::to_value(&json_results)
+            .map_err(|e| anyhow!("Failed to serialize JSON: {}", e))?;
+        return Ok(ExecutionResult {
+            output: Output::Structured(json_value),
+            stderr: String::new(),
+            exit_code: 0,
+            error: None,
+        });
+    }
+
+    let text = if !text_results.is_empty() {
         text_results.join("\n") + "\n"
     } else {
         String::new()
     };
-
-    Ok(ExecutionResult::success(output))
+    Ok(ExecutionResult::success(text))
 }
 
 #[cfg(test)]

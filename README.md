@@ -3,397 +3,316 @@
 [![CI](https://github.com/opus-workshop/rush/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/opus-workshop/rush/actions/workflows/integration-tests.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
-A high-performance, POSIX-compliant shell written in Rust.
+**The AI-native shell with structured pipelines.**
 
-Rush combines the compatibility of traditional shells with the speed and safety of Rust. Built-in commands run **17-427x faster** than their GNU counterparts, while maintaining full POSIX compliance for scripts and interactive use.
+Rush is a POSIX-compatible shell built in Rust with three things your current shell doesn't have: a real AI agent at the prompt, typed structured pipelines, and Lua extensions for anything else.
 
-## Why Rush?
+---
 
-| Feature | Bash | Zsh | Rush |
-|---------|------|-----|------|
-| `ls` (1000 files) | 12ms | 15ms | **0.1ms** (120x faster) |
-| `grep` pattern search | 45ms | 42ms | **0.2ms** (212x faster) |
-| `cat` small file | 8ms | 9ms | **0.02ms** (427x faster) |
-| Startup time | 2.5ms | 12ms | 4.9ms (0.4ms daemon) |
-| Memory | 3MB | 8MB | <10MB |
-| POSIX compliant | Yes | Partial | Yes |
+## What makes it different
 
-## Quick Start
+**Structured pipelines** — builtins produce typed data, not text. Pipe into `| where`, `| select`, `| sort`, `| count` without touching `awk` or `jq`.
 
-```bash
-# Build from source
-git clone https://github.com/opus-workshop/rush.git
-cd rush
-cargo build --release
+**AI agent built in** — prefix any query with `?` and Rush sends it to the LLM, shows you the command, and asks to run it. Works with Ollama (local), OpenAI, or Anthropic. No wrapper scripts.
 
-# Run interactively
-./target/release/rush
+**Lua extensions** — register custom builtins, prompt segments, completions, and shell hooks in `~/.rush/lua/`. No recompile.
 
-# Run a command
-./target/release/rush -c "ls -la | grep src"
+Oh, and it's still a shell. Your existing scripts run unchanged.
 
-# Run a script
-./target/release/rush script.sh
-```
+---
 
-## Features
-
-### High-Performance Built-ins
-
-Rush implements 50+ commands natively in Rust, eliminating fork/exec overhead:
-
-**File Operations**
-- `ls` - Directory listing with color, long format, human-readable sizes
-- `cat` - Memory-mapped I/O for large files, binary detection
-- `find` - Parallel traversal with .gitignore awareness
-- `grep` - Ripgrep-powered search with regex support
-- `mkdir` - Directory creation with `-p` support
-
-**Git Integration** (native git2 bindings)
-- `git status` - Fast repository status
-- `git log` - Commit history
-- `git diff` - Change comparison
-
-**JSON Processing**
-- `json_get` - Extract values with path expressions
-- `json_set` - Modify JSON data
-- `json_query` - Complex queries with jq-like syntax
-
-**Networking**
-- `fetch` - HTTP client with JSON support
-
-**Shell Builtins**
-- Full POSIX set: `cd`, `pwd`, `echo`, `export`, `source`, `eval`, `exec`, `test`, `[`, `printf`, `read`, `trap`, `set`, `unset`, `readonly`, `local`, `return`, `break`, `continue`, `shift`, `type`, `command`, `builtin`, `alias`, `unalias`, `jobs`, `fg`, `bg`, `kill`, `wait`, and more
-
-### POSIX Compliance
-
-Rush targets 90%+ POSIX.1-2017 compliance:
-
-- **Control Flow**: `if`/`elif`/`else`, `while`, `until`, `for`, `case`, functions
-- **Job Control**: Background jobs, process groups, `fg`/`bg`, job specs (`%1`, `%+`, `%-`)
-- **I/O Redirection**: `>`, `>>`, `<`, `2>&1`, here-docs (`<<EOF`), arbitrary FD redirection
-- **Expansions**: Variables, command substitution `$(...)`, arithmetic `$((...))`, globbing, brace expansion
-- **Signal Handling**: `trap`, SIGCHLD, terminal signals (SIGTSTP, SIGCONT, SIGTTIN, SIGTTOU)
-- **Special Variables**: `$$`, `$!`, `$?`, `$-`, `$_`, `$0`, `$1`-`$9`, `$@`, `$*`, `$#`, `$IFS`
-
-### Daemon Mode (Ultra-Fast Startup)
-
-For workloads with many shell invocations, Rush offers a daemon mode that reduces startup time to **0.4ms**:
+## Quick examples
 
 ```bash
-# Start the daemon
-rushd start
+# Ask the AI to write a command — it generates, you confirm
+? find all Rust files changed in the last week
 
-# Commands connect to daemon instead of cold-starting
-rush -c "ls"      # 0.4ms instead of 4.9ms
-rush -c "grep x"  # 0.4ms instead of 4.9ms
+# Structured pipeline: filter git status without awk
+git status --json | where status == "modified" | select path
 
-# Stop the daemon
-rushd stop
+# Count TODO comments across the codebase
+grep --json 'TODO' src/**/*.rs | count
+
+# Register a custom builtin in Lua
+# ~/.rush/lua/weather.lua
+rush.register_builtin("weather", {
+    description = "Current weather",
+    run = function(args)
+        local city = args[1] or "London"
+        local data = rush.exec_structured("fetch https://wttr.in/" .. city .. "?format=j1")
+        return { text = data.current_condition[1].temp_C .. "°C in " .. city }
+    end
+})
 ```
 
-This is ideal for:
-- CI/CD pipelines with hundreds of shell commands
-- Build systems (Make, scripts)
-- Test suites that spawn shell processes
-- AI agents making many rapid shell calls
-
-### JSON Output Mode
-
-All commands support structured JSON output for scripting and automation:
-
-```bash
-# Get structured output
-rush -c "ls --json"
-rush -c "git status --json"
-rush -c "grep --json 'TODO' src/**/*.rs"
-
-# Parse and process with built-in JSON tools
-rush -c "git status --json | json_get '.staged[]'"
-rush -c "fetch --json https://api.github.com/user | json_query '.name'"
-```
-
-### Designed for AI Agents
-
-Rush is optimized for AI coding assistants that make hundreds of shell calls per task:
-
-```python
-import subprocess
-import json
-
-def rush(cmd: str) -> dict:
-    """Run a Rush command and return parsed JSON."""
-    result = subprocess.run(
-        ['rush', '-c', cmd],
-        capture_output=True, text=True,
-        env={'RUSH_ERROR_FORMAT': 'json'}
-    )
-    return json.loads(result.stdout)
-
-# Fast, structured data for AI analysis
-status = rush("git status --json")
-todos = rush("grep --json 'TODO|FIXME' src/**/*.rs")
-```
+---
 
 ## Installation
 
-### macOS (Homebrew)
-
-```bash
-brew tap opus-workshop/rush
-brew install rush
-```
-
-### Pre-built Binaries
-
-Download the latest release from the [releases page](https://github.com/opus-workshop/rush/releases):
-
-```bash
-# Linux x86_64
-curl -LO https://github.com/opus-workshop/rush/releases/latest/download/rush-linux-x86_64.tar.gz
-tar xzf rush-linux-x86_64.tar.gz
-sudo mv rush /usr/local/bin/
-
-# macOS ARM (Apple Silicon)
-curl -LO https://github.com/opus-workshop/rush/releases/latest/download/rush-macos-aarch64.tar.gz
-tar xzf rush-macos-aarch64.tar.gz
-sudo mv rush /usr/local/bin/
-
-# macOS Intel
-curl -LO https://github.com/opus-workshop/rush/releases/latest/download/rush-macos-x86_64.tar.gz
-tar xzf rush-macos-x86_64.tar.gz
-sudo mv rush /usr/local/bin/
-```
-
-#### Verify Download
-
-SHA256 checksums are provided for all binaries:
-
-```bash
-# Download checksums
-curl -LO https://github.com/opus-workshop/rush/releases/latest/download/SHA256SUMS.txt
-
-# Verify (Linux)
-sha256sum -c SHA256SUMS.txt --ignore-missing
-
-# Verify (macOS)
-shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-```
-
-### Cargo Install
+### Cargo
 
 ```bash
 cargo install --git https://github.com/opus-workshop/rush
 ```
 
-### From Source
+### Build from source
 
 ```bash
 git clone https://github.com/opus-workshop/rush.git
 cd rush
-cargo build --release
-sudo cp target/release/rush /usr/local/bin/
+cargo install --path .
 ```
 
-### Requirements
+**Requirements:** Rust 1.70+.
 
-- **Binary downloads**: No dependencies (statically linked available for Linux)
-- **Cargo install / source build**: Rust 1.70+
-- **OS**: macOS (Intel/ARM), Linux (x86_64)
+---
 
-### Set as Default Shell
+## AI setup
+
+On first `?` use, Rush runs an interactive wizard. Or set it up manually:
+
+```toml
+# ~/.rush/ai.toml
+provider = "ollama"           # ollama | openai | anthropic
+model = "qwen2.5-coder:7b"
+```
+
+**Ollama** (local, private — recommended):
+```bash
+ollama pull qwen2.5-coder:7b
+# That's it. Rush finds Ollama at localhost:11434 automatically.
+```
+
+**OpenAI:**
+```toml
+provider = "openai"
+model = "gpt-4o"
+# Set OPENAI_API_KEY in your environment
+```
+
+**Anthropic:**
+```toml
+provider = "anthropic"
+model = "claude-3-5-sonnet-20241022"
+# Set ANTHROPIC_API_KEY in your environment
+```
+
+### How the agent works
+
+The `?` prefix sends your natural language query to the LLM with shell context (cwd, project type, recent history). The model returns a command with an explanation. Rush shows you both and asks to run, edit, or cancel. Destructive commands always require explicit confirmation.
 
 ```bash
-# Add to allowed shells
-echo "/usr/local/bin/rush" | sudo tee -a /etc/shells
-
-# Change your shell
-chsh -s /usr/local/bin/rush
+? find files over 100MB and list them by size
+# Suggests: find . -type f -size +100M | xargs ls -lh | sort -k5 -rh
+# [r]un  [e]dit  [c]ancel?
 ```
 
-## Usage Examples
+---
 
-### Interactive Shell
+## Lua extensions
+
+Scripts in `~/.rush/lua/` load at startup in alphabetical order.
+
+```lua
+-- ~/.rush/lua/myconfig.lua
+
+-- Custom builtin
+rush.register_builtin("greet", {
+    description = "Say hello",
+    run = function(args)
+        return { text = "Hello, " .. (args[1] or "world") }
+    end
+})
+
+-- Prompt segment
+rush.register_prompt("git_branch", function()
+    local branch = rush.exec("git rev-parse --abbrev-ref HEAD 2>/dev/null")
+    if branch ~= "" then
+        return " " .. branch
+    end
+end)
+
+-- Shell hooks
+rush.on("precmd", function(exit_code, elapsed_ms)
+    -- fires before every prompt draw
+end)
+
+-- Custom completion
+rush.register_completion("deploy", function(args)
+    return { "staging", "production", "preview" }
+end)
+```
+
+The full API surface: `rush.exec()`, `rush.exec_structured()`, `rush.json_parse()`, `rush.json_encode()`, `rush.env.get/set()`, `rush.cwd()`.
+
+---
+
+## Structured pipelines
+
+All Rush builtins emit typed `Value` objects — not text. The pipeline operators work on that data directly.
 
 ```bash
-$ rush
-Rush v0.1.0 - A Modern Shell in Rust
+# Filter: keep rows where field matches value
+ls --json | where type == "file"
 
-> pwd
-/home/user/projects
+# Select: keep only named columns
+git log --json | select hash message author
 
-> ls -la | grep ".rs"
--rw-r--r--  1 user  staff  4374 Jan 24 12:56 error.rs
--rw-r--r--  1 user  staff  20344 Jan 25 02:43 main.rs
+# Sort: order by field
+find --json . -name "*.rs" | sort size --reverse
 
-> export PROJECT=rush
-> echo "Working on $PROJECT"
-Working on rush
+# Count: number of rows
+grep --json 'TODO' src/**/*.rs | count
 
-> exit
+# Chaining
+find --json . -name "*.rs" | where size > 10000 | sort size | select path size
 ```
 
-### Scripting
+Text output from external commands is coerced into a single-column table (`{line: "..."}`) so operators work on anything.
+
+### Built-in structured commands
+
+| Command | Output |
+|---------|--------|
+| `ls --json` | File list with name, size, type, modified |
+| `git status --json` | Staged, unstaged, untracked, branch info |
+| `git log --json` | Commits with hash, author, date, message |
+| `git diff --json` | Hunks with additions, deletions, context |
+| `grep --json` | Matches with file, line number, context |
+| `find --json` | Paths with size, type, permissions |
+| `fetch --json` | HTTP response with status, headers, body |
+
+---
+
+## Designed for AI coding agents
+
+Rush is optimized for AI assistants that make hundreds of shell calls per task.
+
+```python
+import subprocess, json
+
+def rush(cmd: str):
+    result = subprocess.run(
+        ["rush", "-c", cmd],
+        capture_output=True, text=True,
+        env={"RUSH_ERROR_FORMAT": "json"}
+    )
+    return json.loads(result.stdout)
+
+# Structured data, no text parsing
+todos  = rush("grep --json 'TODO|FIXME' src/**/*.rs")
+status = rush("git status --json")
+staged = [f["path"] for f in status["staged"]]
+```
+
+Errors come back as typed JSON (`CommandNotFound`, `GitError`, `NetworkError`, etc.) so agents can handle them programmatically instead of parsing stderr.
+
+For workloads with many rapid calls, the daemon mode cuts startup to **0.4ms**:
+
+```bash
+rushd start          # keep Rush warm in the background
+rush -c "ls"         # 0.4ms instead of 4.9ms cold start
+rushd stop
+```
+
+See [docs/AI_AGENT_GUIDE.md](docs/AI_AGENT_GUIDE.md) for the full integration guide including JSON schemas, error types, and Python/batch examples.
+
+---
+
+## POSIX compatibility
+
+Rush targets 90%+ POSIX.1-2017 compliance. Your scripts work.
+
+- **Control flow**: `if`/`elif`/`else`, `while`, `until`, `for`, `case`, functions
+- **Job control**: background jobs, `fg`/`bg`, job specs (`%1`, `%+`, `%-`), process groups
+- **Redirections**: `>`, `>>`, `<`, `2>&1`, here-docs (`<<EOF`), arbitrary FD redirection
+- **Expansions**: variables, `$(...)`, `$((...))`, globbing, brace expansion
+- **Signals**: `trap`, SIGCHLD, SIGTSTP/SIGCONT, SIGTTIN/SIGTTOU
+- **Special vars**: `$$`, `$!`, `$?`, `$-`, `$_`, `$0`, `$@`, `$*`, `$#`, `$IFS`
+- **50+ builtins**: `cd`, `pwd`, `echo`, `export`, `source`, `eval`, `exec`, `test`, `[`, `printf`, `read`, `trap`, `alias`, `jobs`, `fg`, `bg`, `kill`, `wait`, and more
 
 ```bash
 #!/usr/bin/env rush
 
-# Variables and loops
+# This is valid POSIX sh — rush runs it fine
 for file in $(find . -name "*.rs"); do
     if grep -q "TODO" "$file"; then
         echo "Found TODO in: $file"
     fi
 done
-
-# Functions
-deploy() {
-    local env=$1
-    echo "Deploying to $env..."
-    # deployment logic
-}
-
-deploy production
 ```
 
-### Pipeline Processing
+---
 
-```bash
-# Find large files
-rush -c "find . -type f | xargs ls -la | sort -k5 -n -r | head -10"
+## Performance
 
-# Git workflow
-rush -c "git status --json | json_get '.unstaged[] | select(.status==\"modified\") | .path'"
+Rush builtins skip fork/exec entirely. Commands are native Rust, not subprocess calls.
 
-# API data processing
-rush -c "fetch https://api.github.com/repos/rust-lang/rust --json | json_get '.stargazers_count'"
-```
+| Operation | Bash/Zsh | Rush | Speedup |
+|-----------|----------|------|---------|
+| `ls` (1000 files) | 12–15ms | **0.1ms** | 120x |
+| `grep` pattern | 42–45ms | **0.2ms** | 212x |
+| `cat` small file | 8–9ms | **0.02ms** | 427x |
+| Cold startup | 2.5–12ms | **4.9ms** | — |
+| Daemon startup | — | **0.4ms** | — |
+
+For AI agent workloads (git status × 3, file search × 5, JSON ops × 10, HTTP × 2): roughly **2–5s in Rush vs 10–20s in bash + external tools**.
+
+---
 
 ## Architecture
 
 ```
 rush/
 ├── src/
-│   ├── lexer/        # Token stream generation (Logos)
-│   ├── parser/       # AST construction (nom)
-│   ├── executor/     # Command execution engine
+│   ├── ai/           # LLM client, agent loop, provider adapters (Ollama/OpenAI/Anthropic)
+│   ├── lua/          # Lua 5.4 runtime (mlua), rush.* API, script loader
+│   ├── lexer/        # Token stream (Logos)
+│   ├── parser/       # AST (nom)
+│   ├── executor/     # Command execution + structured_ops (where/select/sort/count)
+│   ├── value/        # Typed Value system (String, Int, List, Table, Path, ...)
+│   ├── builtins/     # 80+ native Rust commands
+│   ├── daemon/       # Client-server fast startup
+│   ├── intent/       # ? prefix: natural language → shell command
 │   ├── runtime/      # Variable scoping, environment
-│   ├── builtins/     # 50+ native Rust commands
-│   ├── daemon/       # Client-server architecture
 │   ├── signal.rs     # POSIX signal handling
-│   └── jobs/         # Job control subsystem
+│   └── jobs/         # Job control
 ├── tests/
 │   ├── posix/        # POSIX compliance suite
-│   └── *.rs          # Integration tests (47 test files, 1,800+ tests)
+│   └── *.rs          # 52 integration test files
 ├── benches/          # Criterion benchmarks
 ├── examples/         # 12 example scripts
 └── docs/             # 65+ documentation files
 ```
 
-## Performance
-
-### Benchmarks
-
-Run the benchmark suite yourself:
-
-```bash
-# Build optimized
-cargo build --release
-
-# Criterion microbenchmarks
-cargo bench
-
-# Compare against bash/zsh
-./scripts/benchmark.sh
-
-# Quick self-test
-./target/release/rush --benchmark quick
-```
-
-### Key Metrics
-
-| Metric | Target | Achieved |
-|--------|--------|----------|
-| Cold startup | <10ms | **4.9ms** |
-| Warm startup (daemon) | <1ms | **0.4ms** |
-| Memory usage | <10MB | **<10MB** |
-| Builtin speedup | 3-10x | **17-427x** |
+---
 
 ## Testing
 
 ```bash
-# Run all tests
 cargo test
-
-# POSIX compliance tests
-cd tests/posix && ./run_tests.sh
-
-# Specific test category
 cargo test --test posix_compliance_tests
 cargo test --test pipeline_tests
-cargo test --test signal_handling_tests
+cargo bench
 ```
 
-**Test Coverage:**
-- 47 integration test files with 1,800+ tests
-- POSIX compliance suite
-- Criterion performance benchmarks
+52 test files including a POSIX compliance suite.
+
+---
 
 ## Documentation
 
-- [AI Agent Integration Guide](docs/AI_AGENT_GUIDE.md) - Using Rush with AI assistants
-- [POSIX Compliance Report](tests/posix/COMPLIANCE_REPORT.md) - Detailed compatibility analysis
-- [Daemon Architecture](docs/daemon-architecture.md) - Client-server design
-- [Performance Guide](docs/PERFORMANCE.md) - Optimization details
-- [Builtin Reference](docs/builtins/) - Command documentation
+- [AI Agent Integration Guide](docs/AI_AGENT_GUIDE.md)
+- [POSIX Compliance Report](tests/posix/COMPLIANCE_REPORT.md)
+- [Daemon Architecture](docs/daemon-architecture.md)
+- [Performance Guide](docs/PERFORMANCE.md)
+- [Builtin Reference](docs/builtins/)
 
-## Example Scripts
-
-The `examples/` directory contains practical scripts:
-
-- `branch_cleaner.rush` - Clean up merged git branches
-- `changelog_generator.rush` - Generate changelogs from commits
-- `code_review_prep.rush` - Prepare code for review
-- `commit_message_generator.rush` - AI-friendly commit messages
-- `dead_code_finder.rush` - Find unused code
-- `dependency_check.rush` - Check for outdated dependencies
-- `find_todos.rush` - Locate TODO/FIXME comments
-- `git_author_stats.rush` - Contributor statistics
-- `file_stats.rush` - File and directory statistics
-- `performance_profiler.rush` - Profile command performance
-- `security_audit.rush` - Basic security scanning
-- `test_coverage_analyzer.rush` - Analyze test coverage
-
-## Project Status
-
-Rush is under active development with a focus on POSIX compliance and performance.
-
-**Implemented:**
-- Core shell functionality (lexer, parser, executor)
-- 50+ high-performance builtins
-- Full job control (fg, bg, jobs, process groups)
-- POSIX control flow (if, while, until, for, case, functions)
-- Signal handling (trap, SIGCHLD, terminal signals)
-- I/O redirection (including arbitrary FD)
-- Variable expansion and special variables
-- Daemon mode for fast startup
-- JSON output mode
-- Interactive line editing (reedline)
-- Tab completion with fuzzy matching and caching
-- Command history with fuzzy search and persistence
-- Project context detection (Rust, Node, Python, Go, Ruby, Java)
-- Undo capability for file operations
+---
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, testing guidelines, and how to submit pull requests.
-
-Areas where help is appreciated:
-
-- POSIX compliance edge cases
-- Performance optimizations
-- Documentation improvements
-- Platform support (BSD, Windows via WSL)
-- Bug reports and test cases
+See [CONTRIBUTING.md](CONTRIBUTING.md). Help wanted on POSIX edge cases, platform support (BSD, WSL), and documentation.
 
 ## License
 
@@ -401,12 +320,8 @@ Dual-licensed under MIT or Apache-2.0 (your choice).
 
 ## Acknowledgments
 
-Rush builds on excellent Rust crates:
-- [logos](https://github.com/maciejhirsz/logos) - Fast lexer generation
-- [nom](https://github.com/rust-bakery/nom) - Parser combinators
-- [reedline](https://github.com/nushell/reedline) - Line editing
-- [git2](https://github.com/rust-lang/git2-rs) - Git operations
-- [grep-*](https://github.com/BurntSushi/ripgrep) - Fast text search
+Built on: [logos](https://github.com/maciejhirsz/logos), [nom](https://github.com/rust-bakery/nom), [reedline](https://github.com/nushell/reedline), [git2](https://github.com/rust-lang/git2-rs), [mlua](https://github.com/khvzalenko/mlua), [grep-*](https://github.com/BurntSushi/ripgrep)
+
 ---
 
-**~46,000 lines of Rust** | **50+ builtins** | **1,800+ tests** | **17-427x faster**
+**~68,000 lines of Rust** · **80+ builtins** · **Ollama/OpenAI/Anthropic** · **Lua extensions**

@@ -81,3 +81,209 @@ units:
   attempts: 0
   feature: false
   has_decisions: false
+- id: '8'
+  title: 'bug: exit N always returns code 1, custom exit codes not propagated'
+  status: closed
+  priority: 1
+  labels:
+  - bug
+  - exit-codes
+  updated_at: '2026-03-24T00:46:42.013224Z'
+  has_verify: true
+  verify: ~/bin/rush -c 'exit 42' ; test $? -eq 42
+  created_at: '2026-03-24T00:04:16.480299Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.1.1'
+  title: Builtins emit Output::Structured by default
+  status: closed
+  priority: 2
+  parent: '16.1'
+  labels:
+  - core
+  updated_at: '2026-03-24T05:49:43.187887Z'
+  has_verify: true
+  verify: grep -rq "Output::Structured" src/builtins/ls.rs && grep -rq "Output::Structured" src/builtins/find.rs && grep -rq "Output::Structured" src/builtins/grep.rs && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:23:38.636276Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.1.2'
+  title: Auto-render structured output at terminal boundary
+  status: closed
+  priority: 2
+  parent: '16.1'
+  dependencies:
+  - '16.1.1'
+  labels:
+  - core
+  updated_at: '2026-03-24T06:04:27.216284Z'
+  has_verify: true
+  verify: grep -rq "fn render_output" src/executor/ && grep -rq "TableRenderer" src/executor/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:23:53.475156Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.2'
+  title: 'Phase 2: AI Agent Backend'
+  status: closed
+  priority: 2
+  parent: '16'
+  labels:
+  - phase
+  updated_at: '2026-03-24T06:52:03.809061Z'
+  has_verify: true
+  verify: 'cargo test ai_backend 2>&1 | grep -q "test result: ok"'
+  created_at: '2026-03-24T05:23:13.894194Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.2.1'
+  title: Provider-agnostic LLM client
+  status: closed
+  priority: 2
+  parent: '16.2'
+  labels:
+  - core
+  updated_at: '2026-03-24T05:53:25.323520Z'
+  has_verify: true
+  verify: grep -rq "pub struct LlmClient" src/ai/ && grep -rq "Ollama" src/ai/ && grep -rq "fn chat" src/ai/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:24:30.173998Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.2.2'
+  title: AI setup wizard
+  status: closed
+  priority: 2
+  parent: '16.2'
+  dependencies:
+  - '16.2.1'
+  labels:
+  - ux
+  updated_at: '2026-03-24T06:02:38.518101Z'
+  has_verify: true
+  verify: grep -rq "fn setup_wizard" src/ai/ && grep -rq "Available models" src/ai/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:24:44.351912Z'
+  claimed_by: pi-agent
+  attempts: 1
+  feature: false
+  has_decisions: false
+- id: '16.2.3'
+  title: '? agent with tool usage'
+  status: closed
+  priority: 2
+  parent: '16.2'
+  dependencies:
+  - '16.2.1'
+  - '16.2.2'
+  - '16.1.2'
+  labels:
+  - core
+  updated_at: '2026-03-24T06:25:57.874079Z'
+  has_verify: true
+  verify: grep -rq "fn execute_agent" src/ai/ && grep -rq "ToolCall" src/ai/ && grep -rq "run_command\|read_file\|list_dir" src/ai/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:25:13.223742Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.2.4'
+  title: '|? pipe-to-AI with structured context'
+  status: closed
+  priority: 2
+  parent: '16.2'
+  dependencies:
+  - '16.2.3'
+  labels:
+  - feature
+  updated_at: '2026-03-24T06:52:03.707552Z'
+  has_verify: true
+  verify: grep -rq "fn execute_pipe_ask" src/executor/ && grep -rq "LlmClient" src/executor/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:25:32.875742Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.3.1'
+  title: Embed Lua runtime with mlua
+  status: closed
+  priority: 2
+  parent: '16.3'
+  labels:
+  - core
+  updated_at: '2026-03-24T05:49:03.228376Z'
+  has_verify: true
+  verify: grep -rq "mlua" Cargo.toml && grep -rq "pub fn init_lua" src/lua/ && cargo check 2>&1 | grep -q "Finished"
+  created_at: '2026-03-24T05:25:49.371879Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.4'
+  title: 'Phase 4: Launch Prep'
+  status: closed
+  priority: 2
+  parent: '16'
+  labels:
+  - phase
+  updated_at: '2026-03-24T06:51:25.199182Z'
+  has_verify: true
+  verify: test -f README.md && grep -q "AI-native" README.md
+  created_at: '2026-03-24T05:23:23.927042Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.4.1'
+  title: Clean up warnings + add deny gate
+  status: closed
+  priority: 2
+  parent: '16.4'
+  labels:
+  - chore
+  updated_at: '2026-03-24T05:51:35.242587Z'
+  has_verify: true
+  verify: cargo check 2>&1 | grep -c "warning" | grep -q "^0$"
+  created_at: '2026-03-24T05:26:18.427576Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.4.2'
+  title: Replace reqwest with ureq
+  status: closed
+  priority: 2
+  parent: '16.4'
+  labels:
+  - chore
+  updated_at: '2026-03-24T05:49:47.102949Z'
+  has_verify: true
+  verify: '! grep -q "^reqwest" Cargo.toml && grep -q "ureq" Cargo.toml && cargo check 2>&1 | grep -q "Finished"'
+  created_at: '2026-03-24T05:26:27.901717Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '16.4.3'
+  title: README rewrite for AI-native positioning
+  status: closed
+  priority: 2
+  parent: '16.4'
+  dependencies:
+  - '16.1'
+  - '16.2'
+  - '16.3'
+  labels:
+  - docs
+  updated_at: '2026-03-24T06:51:24.894379Z'
+  has_verify: true
+  verify: grep -q "AI-native" README.md && grep -q "structured" README.md && grep -q "Lua" README.md && grep -q "ollama\|Ollama" README.md
+  created_at: '2026-03-24T05:26:37.044706Z'
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+  has_decisions: false

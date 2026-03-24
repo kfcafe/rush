@@ -1,15 +1,12 @@
 use crate::executor::{ExecutionResult, Output};
 use crate::runtime::Runtime;
 use anyhow::{anyhow, Context, Result};
-use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::str::FromStr;
 use std::time::{Duration, Instant};
+use ureq::{http, ResponseExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FetchResponse {
@@ -23,7 +20,7 @@ struct FetchResponse {
 
 #[derive(Debug)]
 struct FetchOptions {
-    method: Method,
+    method: String,
     headers: Vec<(String, String)>,
     body: Option<String>,
     timeout: Option<Duration>,
@@ -37,7 +34,7 @@ struct FetchOptions {
 impl Default for FetchOptions {
     fn default() -> Self {
         Self {
-            method: Method::GET,
+            method: "GET".to_string(),
             headers: Vec::new(),
             body: None,
             timeout: Some(Duration::from_secs(30)),
@@ -68,8 +65,7 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
                 if i >= args.len() {
                     return Err(anyhow!("Missing method after {}", arg));
                 }
-                opts.method =
-                    Method::from_str(&args[i].to_uppercase()).context("Invalid HTTP method")?;
+                opts.method = args[i].to_uppercase();
             }
             "-H" | "--header" => {
                 i += 1;
@@ -140,8 +136,7 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
                 if i >= args.len() {
                     return Err(anyhow!("Missing method after --method"));
                 }
-                opts.method =
-                    Method::from_str(&args[i].to_uppercase()).context("Invalid HTTP method")?;
+                opts.method = args[i].to_uppercase();
             }
             _ => {
                 if arg.starts_with('-') {
@@ -167,80 +162,80 @@ fn parse_args(args: &[String]) -> Result<(String, FetchOptions)> {
     Ok((url, opts))
 }
 
-/// Execute the HTTP request
-fn execute_request(url: &str, opts: &FetchOptions) -> Result<(Response, u64)> {
-    let client = Client::builder()
-        .redirect(if opts.follow_redirects {
-            reqwest::redirect::Policy::default()
-        } else {
-            reqwest::redirect::Policy::none()
-        })
-        .build()
-        .context("Failed to create HTTP client")?;
+/// Build a configured ureq Agent based on fetch options
+fn build_agent(opts: &FetchOptions) -> Result<ureq::Agent> {
+    let mut builder = ureq::Agent::config_builder();
 
-    let mut request: RequestBuilder = client.request(opts.method.clone(), url);
-
-    // Add custom headers
-    for (key, value) in &opts.headers {
-        let header_name =
-            HeaderName::from_str(key).with_context(|| format!("Invalid header name: {}", key))?;
-        let header_value = HeaderValue::from_str(value)
-            .with_context(|| format!("Invalid header value: {}", value))?;
-        request = request.header(header_name, header_value);
-    }
-
-    // Add body if present
-    if let Some(body) = &opts.body {
-        request = request.body(body.clone());
-    }
-
-    // Add timeout if specified
     if let Some(timeout) = opts.timeout {
-        request = request.timeout(timeout);
+        builder = builder.timeout_global(Some(timeout));
     }
 
-    // Execute request and measure time
+    if !opts.follow_redirects {
+        builder = builder.max_redirects(0);
+    }
+
+    // Disable treating HTTP error status codes as Err — we handle them ourselves
+    builder = builder.http_status_as_error(false);
+
+    let config = builder.build();
+    Ok(ureq::Agent::new_with_config(config))
+}
+
+/// Execute the HTTP request, returning the response and elapsed time in ms
+fn execute_request(url: &str, opts: &FetchOptions) -> Result<(http::Response<ureq::Body>, u64)> {
+    let agent = build_agent(opts)?;
+
+    // Build request using the http crate's builder (ureq 3.x accepts http::Request)
+    let mut req_builder = http::Request::builder()
+        .method(opts.method.as_str())
+        .uri(url);
+
+    for (key, value) in &opts.headers {
+        req_builder = req_builder.header(key.as_str(), value.as_str());
+    }
+
     let start = Instant::now();
-    let response = request.send().context("Failed to send HTTP request")?;
+    let response = match &opts.body {
+        Some(body) => {
+            let request = req_builder
+                .body(body.as_str())
+                .context("Failed to build HTTP request")?;
+            agent.run(request).context("Failed to send HTTP request")?
+        }
+        None => {
+            let request = req_builder
+                .body(())
+                .context("Failed to build HTTP request")?;
+            agent.run(request).context("Failed to send HTTP request")?
+        }
+    };
     let elapsed = start.elapsed();
 
     Ok((response, elapsed.as_millis() as u64))
 }
 
-/// Parse response body as JSON or return as string
-fn parse_response_body(response: Response) -> Result<Value> {
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+/// Parse a response body as JSON, falling back to a plain string
+fn parse_body_as_json(body_text: &str, content_type: &str) -> Value {
+    let is_json =
+        content_type.contains("application/json") || content_type.contains("application/ld+json");
+    let looks_like_json = body_text.trim().starts_with('{') || body_text.trim().starts_with('[');
 
-    let body_text = response.text().context("Failed to read response body")?;
-
-    // Try to parse as JSON if content type suggests it, or if it looks like JSON
-    if content_type.contains("application/json") || content_type.contains("application/ld+json") {
-        match serde_json::from_str::<Value>(&body_text) {
-            Ok(json_value) => Ok(json_value),
-            Err(_) => Ok(Value::String(body_text)),
-        }
-    } else if body_text.trim().starts_with('{') || body_text.trim().starts_with('[') {
-        // Looks like JSON, try to parse
-        match serde_json::from_str::<Value>(&body_text) {
-            Ok(json_value) => Ok(json_value),
-            Err(_) => Ok(Value::String(body_text)),
-        }
+    if is_json || looks_like_json {
+        serde_json::from_str::<Value>(body_text)
+            .unwrap_or_else(|_| Value::String(body_text.to_string()))
     } else {
-        Ok(Value::String(body_text))
+        Value::String(body_text.to_string())
     }
 }
 
-/// Format response as JSON structure
-fn format_json_response(response: Response, response_time_ms: u64) -> Result<FetchResponse> {
+/// Format a response as the structured FetchResponse JSON type
+fn format_json_response(
+    response: http::Response<ureq::Body>,
+    response_time_ms: u64,
+) -> Result<FetchResponse> {
     let status = response.status();
-    let final_url = response.url().to_string();
+    let final_url = response.get_uri().to_string();
 
-    // Extract headers
     let mut headers = HashMap::new();
     for (key, value) in response.headers() {
         if let Ok(value_str) = value.to_str() {
@@ -248,8 +243,14 @@ fn format_json_response(response: Response, response_time_ms: u64) -> Result<Fet
         }
     }
 
-    // Parse body
-    let body = parse_response_body(response)?;
+    let content_type = headers.get("content-type").cloned().unwrap_or_default();
+
+    let body_text = response
+        .into_body()
+        .read_to_string()
+        .context("Failed to read response body")?;
+
+    let body = parse_body_as_json(&body_text, &content_type);
 
     Ok(FetchResponse {
         status: status.as_u16(),
@@ -269,20 +270,16 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
     }
 
     let (url, opts) = parse_args(args)?;
-
-    // Execute the request
     let (response, response_time_ms) =
         execute_request(&url, &opts).context("HTTP request failed")?;
 
     let status = response.status();
 
     if opts.json_output {
-        // Format as JSON
         let fetch_response = format_json_response(response, response_time_ms)?;
         let json_output = serde_json::to_string_pretty(&fetch_response)
             .context("Failed to serialize JSON response")?;
 
-        // Check for HTTP errors
         let exit_code = if status.is_success() {
             0
         } else {
@@ -296,10 +293,8 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
             error: None,
         })
     } else {
-        // Text output mode
         let mut output = String::new();
 
-        // Include headers if requested
         if opts.include_headers || opts.verbose {
             output.push_str(&format!(
                 "HTTP/1.1 {} {}\n",
@@ -314,10 +309,11 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
             output.push('\n');
         }
 
-        // Get response body
-        let body_text = response.text().context("Failed to read response body")?;
+        let body_text = response
+            .into_body()
+            .read_to_string()
+            .context("Failed to read response body")?;
 
-        // Save to file if requested
         if let Some(output_file) = &opts.output_file {
             fs::write(output_file, &body_text)
                 .with_context(|| format!("Failed to write to file: {}", output_file))?;
@@ -329,7 +325,6 @@ pub fn builtin_fetch(args: &[String], _runtime: &mut Runtime) -> Result<Executio
             }
         }
 
-        // Check for HTTP errors
         let exit_code = if status.is_success() {
             0
         } else {
@@ -354,7 +349,7 @@ mod tests {
         let args = vec!["https://example.com".to_string()];
         let (url, opts) = parse_args(&args).unwrap();
         assert_eq!(url, "https://example.com");
-        assert_eq!(opts.method, Method::GET);
+        assert_eq!(opts.method, "GET");
         assert!(!opts.json_output);
     }
 
@@ -375,7 +370,7 @@ mod tests {
         ];
         let (url, opts) = parse_args(&args).unwrap();
         assert_eq!(url, "https://api.example.com");
-        assert_eq!(opts.method, Method::POST);
+        assert_eq!(opts.method, "POST");
     }
 
     #[test]
@@ -461,7 +456,7 @@ mod tests {
         let (url, opts) = parse_args(&args).unwrap();
         assert_eq!(url, "https://api.example.com/endpoint");
         assert!(opts.json_output);
-        assert_eq!(opts.method, Method::POST);
+        assert_eq!(opts.method, "POST");
         assert_eq!(opts.headers.len(), 1);
         assert_eq!(opts.body, Some(r#"{"test":"data"}"#.to_string()));
         assert_eq!(opts.timeout, Some(Duration::from_secs(10)));

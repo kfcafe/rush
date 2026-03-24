@@ -145,8 +145,13 @@ pub fn builtin_git_branch(args: &[String], runtime: &mut Runtime) -> Result<Exec
     }
 
     if json_output {
-        let json = serde_json::to_string_pretty(&branch_list)?;
-        return Ok(ExecutionResult::success(json + "\n"));
+        let json_value = serde_json::to_value(&branch_list)?;
+        return Ok(ExecutionResult {
+            output: crate::executor::Output::Structured(json_value),
+            stderr: String::new(),
+            exit_code: 0,
+            error: None,
+        });
     }
 
     let mut output = String::new();

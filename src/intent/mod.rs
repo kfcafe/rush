@@ -9,6 +9,7 @@
 //! # Shows preview, user confirms with Enter or edits
 //! ```
 
+use crate::ai::config::LlmConfig;
 use crate::daemon::{PiClient, PiClientError, PiToRush, ShellContext};
 use nu_ansi_term::Color;
 use std::collections::HashMap;
@@ -248,63 +249,53 @@ pub fn prompt_user_action() -> IntentResult {
 /// 3. Displays suggestion
 /// 4. Handles user input (accept/edit/cancel)
 /// 5. Returns the result
+/// Ensure the AI backend is configured; if not, run the setup wizard.
+///
+/// Returns `true` if the caller should proceed (config exists or was just
+/// created), `false` if the user skipped setup or setup failed.
+pub fn ensure_ai_configured() -> bool {
+    let config_exists = LlmConfig::config_path()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+
+    if config_exists {
+        return true;
+    }
+
+    // No config — run the wizard
+    match crate::ai::setup_wizard() {
+        Ok(Some(_)) => true,
+        Ok(None) => false, // user skipped
+        Err(e) => {
+            eprintln!("AI setup error: {}", e);
+            false
+        }
+    }
+}
+
 pub fn process_intent(
     intent: &str,
-    last_command: Option<&str>,
-    last_exit_code: Option<i32>,
-    history: Vec<String>,
+    _last_command: Option<&str>,
+    _last_exit_code: Option<i32>,
+    _history: Vec<String>,
 ) -> IntentResult {
-    // Try to connect to Pi
-    let mut client = match PiClient::connect() {
-        Ok(c) => c,
-        Err(PiClientError::NotRunning) => {
-            eprintln!(
-                "{}",
-                Color::Yellow.paint("Pi daemon not running. Start with: pi daemon start")
-            );
-            return IntentResult::Error("Pi daemon not running".to_string());
+    // Ensure AI is configured before running the agent.
+    if !ensure_ai_configured() {
+        return IntentResult::Cancel;
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+    match crate::ai::execute_agent(intent, &cwd) {
+        Ok(()) => {
+            // The agent handled everything — no command to execute.
+            // Return Cancel so the REPL doesn't try to run a command.
+            IntentResult::Cancel
         }
         Err(e) => {
-            eprintln!(
-                "{}",
-                Color::Red.paint(format!("Failed to connect to Pi: {}", e))
-            );
-            return IntentResult::Error(e.to_string());
+            eprintln!("{}", Color::Red.paint(format!("Agent error: {}", e)));
+            IntentResult::Error(e.to_string())
         }
-    };
-
-    // Build context
-    let context = build_shell_context(last_command, last_exit_code, history);
-    let project_type = detect_project_type();
-
-    // Query Pi for suggested command
-    print!("{}", Color::DarkGray.paint("Thinking..."));
-    io::stdout().flush().ok();
-
-    let suggestion = match query_intent(&mut client, intent, context, project_type.as_deref()) {
-        Ok(s) => s,
-        Err(e) => {
-            // Clear "Thinking..." line
-            print!("\r                \r");
-            io::stdout().flush().ok();
-            eprintln!("{}", Color::Red.paint(format!("Error: {}", e)));
-            return IntentResult::Error(e.to_string());
-        }
-    };
-
-    // Clear "Thinking..." line
-    print!("\r                \r");
-    io::stdout().flush().ok();
-
-    // Display the suggestion
-    display_suggestion(&suggestion);
-
-    // Get user action
-    match prompt_user_action() {
-        IntentResult::Accept(_) => IntentResult::Accept(suggestion.command),
-        IntentResult::Edit(_) => IntentResult::Edit(suggestion.command),
-        IntentResult::Cancel => IntentResult::Cancel,
-        IntentResult::Error(e) => IntentResult::Error(e),
     }
 }
 

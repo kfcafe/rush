@@ -1,5 +1,6 @@
-use super::{CallStack, ExecutionResult, Executor, Output};
+use super::{structured_to_text_lines, CallStack, ExecutionResult, Executor, Output};
 use crate::builtins::Builtins;
+use crate::executor::structured_ops::execute_structured_op;
 use crate::executor::suggestions::SuggestionEngine;
 use crate::glob_expansion;
 use crate::parser::ast::*;
@@ -130,7 +131,12 @@ pub fn execute_pipeline(
             });
         }
 
-        previous_output = result.stdout().into_bytes();
+        // Flatten structured output to text lines when passing between pipeline stages.
+        // TSV is used so external tools (grep, awk, cut) can process columnar data naturally.
+        previous_output = match &result.output {
+            Output::Structured(v) => structured_to_text_lines(v).into_bytes(),
+            Output::Text(t) => t.clone().into_bytes(),
+        };
     }
 
     Ok(ExecutionResult::default())
@@ -147,13 +153,16 @@ fn execute_pipeline_elements(
     }
 
     if elements.len() == 1 {
-        let result = execute_element(&elements[0], runtime, builtins, None)?;
+        let result = execute_element(&elements[0], runtime, builtins, None, None)?;
         runtime.set_last_exit_code(result.exit_code);
         runtime.set_pipestatus(vec![result.exit_code]);
         return Ok(result);
     }
 
-    let mut previous_output = Vec::new();
+    // previous_bytes: the bytes-form of the last stage output (for text-based commands)
+    // previous_typed: the typed Output of the last stage (for structured ops)
+    let mut previous_bytes: Vec<u8> = Vec::new();
+    let mut previous_typed: Option<Output> = None;
     let mut first_failed_exit_code = None;
     let mut combined_stderr = String::new();
     let mut pipestatus = Vec::new();
@@ -170,14 +179,23 @@ fn execute_pipeline_elements(
             None
         };
 
+        // Structured ops receive the typed output of the previous stage.
+        // All other elements receive the bytes representation.
+        let stdin_bytes: Option<&[u8]> = if is_first {
+            None
+        } else {
+            Some(&previous_bytes)
+        };
+
         let result = execute_element(
             element,
             runtime,
             builtins,
+            stdin_bytes,
             if is_first {
                 None
             } else {
-                Some(&previous_output)
+                previous_typed.as_ref()
             },
         )?;
 
@@ -196,10 +214,13 @@ fn execute_pipeline_elements(
                     Statement::BraceGroup(_) => "brace_group".to_string(),
                     _ => "compound".to_string(),
                 },
+                PipelineElement::StructuredOp(_) => "structured_op".to_string(),
             };
             let is_builtin = match element {
                 PipelineElement::Command(cmd) => builtins.is_builtin(&cmd.name),
-                PipelineElement::Subshell(_) | PipelineElement::CompoundCommand(_) => false,
+                PipelineElement::Subshell(_)
+                | PipelineElement::CompoundCommand(_)
+                | PipelineElement::StructuredOp(_) => false,
             };
             crate::builtins::time::record_stage_timing(stage_name, is_builtin, elapsed);
         }
@@ -224,15 +245,22 @@ fn execute_pipeline_elements(
             runtime.set_last_exit_code(pipeline_exit_code);
             runtime.set_pipestatus(pipestatus);
 
+            // Preserve the full output (structured or text) from the last stage.
             return Ok(ExecutionResult {
-                output: Output::Text(result.stdout()),
+                output: result.output,
                 stderr: combined_stderr,
                 exit_code: pipeline_exit_code,
                 error: None,
             });
         }
 
-        previous_output = result.stdout().into_bytes();
+        // Compute bytes for text-based next stages (TSV flattening of structured data).
+        previous_bytes = match &result.output {
+            Output::Structured(v) => structured_to_text_lines(v).into_bytes(),
+            Output::Text(t) => t.clone().into_bytes(),
+        };
+        // Keep the typed output so the next stage (if a structured op) can use it directly.
+        previous_typed = Some(result.output);
     }
 
     Ok(ExecutionResult::default())
@@ -244,6 +272,7 @@ fn execute_element(
     runtime: &mut Runtime,
     builtins: &Builtins,
     stdin: Option<&[u8]>,
+    previous_output: Option<&Output>,
 ) -> Result<ExecutionResult> {
     match element {
         PipelineElement::Command(cmd) => execute_pipeline_command(cmd, runtime, builtins, stdin),
@@ -252,6 +281,21 @@ fn execute_element(
         }
         PipelineElement::CompoundCommand(stmt) => {
             execute_compound_in_pipeline(stmt, runtime, builtins, stdin)
+        }
+        PipelineElement::StructuredOp(op) => {
+            let input = match previous_output {
+                Some(out) => out,
+                None => {
+                    // No previous stage — treat empty text as input
+                    return Ok(ExecutionResult {
+                        output: Output::Structured(serde_json::Value::Array(vec![])),
+                        stderr: String::new(),
+                        exit_code: 0,
+                        error: None,
+                    });
+                }
+            };
+            execute_structured_op(op, input)
         }
     }
 }

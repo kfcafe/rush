@@ -33,13 +33,65 @@ pub struct Command {
     pub prefix_env: Vec<(String, String)>,
 }
 
-/// An element in a pipeline - either a regular command, subshell, or compound command
+/// An element in a pipeline - either a regular command, subshell, compound command, or structured op
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PipelineElement {
     Command(Command),
     Subshell(Vec<Statement>),
     /// Compound commands (while, until, for, if, case, brace groups) as pipeline elements
     CompoundCommand(Box<Statement>),
+    /// Structured data pipeline operator (where, sort, select, count, first, last, uniq)
+    StructuredOp(StructuredOp),
+}
+
+/// Comparison operator used in `where` filter expressions
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CompareOp {
+    /// `==` — exact equality
+    Eq,
+    /// `!=` — inequality
+    Ne,
+    /// `>` — numeric or lexicographic greater-than
+    Gt,
+    /// `<` — numeric or lexicographic less-than
+    Lt,
+    /// `>=`
+    Ge,
+    /// `<=`
+    Le,
+    /// `=~` — regex / glob match
+    Match,
+    /// `!~` — regex / glob non-match
+    NotMatch,
+}
+
+/// A structured-data pipeline operator.
+///
+/// These are not external commands — they operate natively on `Output::Structured`
+/// and are parsed specially when they appear immediately after a `|`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StructuredOp {
+    /// `where <field> <op> <value>` — filter rows
+    Where {
+        field: String,
+        op: CompareOp,
+        value: String,
+    },
+    /// `sort [field]` / `sort -r [field]` — sort rows by a field
+    Sort {
+        field: Option<String>,
+        reverse: bool,
+    },
+    /// `select <field>...` — keep only named columns
+    Select { fields: Vec<String> },
+    /// `count` — count rows, emitting a single integer
+    Count,
+    /// `first [N]` — keep the first N rows (default 1)
+    First(usize),
+    /// `last [N]` — keep the last N rows (default 1)
+    Last(usize),
+    /// `uniq [field]` — deduplicate by field (or whole row if omitted)
+    Uniq { field: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

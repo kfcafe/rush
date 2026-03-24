@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_scoped_profiler() {
-        let mut data = ProfileData::new();
+        let data = ProfileData::new();
         {
             let _profiler = ScopedProfiler::new(ExecutionStage::Parse);
             std::thread::sleep(Duration::from_millis(5));

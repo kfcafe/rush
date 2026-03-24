@@ -394,6 +394,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_command_V_flag_builtin() {
         let mut runtime = Runtime::new();
         let args = vec!["-V".to_string(), "pwd".to_string()];
@@ -414,6 +415,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_command_V_flag_external() {
         let mut runtime = Runtime::new();
         let args = vec!["-V".to_string(), "sh".to_string()];

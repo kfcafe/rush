@@ -189,22 +189,27 @@ pub fn builtin_git_log(args: &[String], runtime: &mut Runtime) -> Result<Executi
     }
 
     // Generate output
-    let output = if json_output {
-        serde_json::to_string_pretty(&commits)
-            .map_err(|e| anyhow!("Failed to serialize to JSON: {}", e))?
-            + "\n"
-    } else {
-        // Human-readable output (like git log --oneline)
-        commits
-            .iter()
-            .map(|c| {
-                let message_line = c.message.lines().next().unwrap_or("");
-                format!("{} {}", c.short_hash, message_line)
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-            + "\n"
-    };
+    if json_output {
+        let json_value = serde_json::to_value(&commits)
+            .map_err(|e| anyhow!("Failed to serialize to JSON: {}", e))?;
+        return Ok(ExecutionResult {
+            output: crate::executor::Output::Structured(json_value),
+            stderr: String::new(),
+            exit_code: 0,
+            error: None,
+        });
+    }
+
+    // Human-readable output (like git log --oneline)
+    let output = commits
+        .iter()
+        .map(|c| {
+            let message_line = c.message.lines().next().unwrap_or("");
+            format!("{} {}", c.short_hash, message_line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
 
     Ok(ExecutionResult::success(output))
 }

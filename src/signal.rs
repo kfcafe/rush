@@ -101,6 +101,10 @@ impl SignalHandler {
                         SIGNAL_RECEIVED.store(true, Ordering::SeqCst);
                         SIGNAL_NUMBER.store(SIGHUP, Ordering::SeqCst);
                         shutdown_flag.store(true, Ordering::SeqCst);
+                        // Exit immediately on SIGHUP (terminal closed).
+                        // The main thread may be blocked inside reedline::read_line()
+                        // which won't return promptly on a revoked PTY.
+                        std::process::exit(129); // 128 + SIGHUP(1)
                     }
                     SIGTSTP => {
                         // Terminal stop signal (Ctrl+Z)

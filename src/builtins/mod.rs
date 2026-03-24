@@ -1,11 +1,15 @@
 use crate::correction::Corrector;
 use crate::executor::{ExecutionResult, Output};
+use crate::lua::LuaRuntime;
 use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+
+/// Re-export so callers can use `builtins::LuaBuiltin` without knowing the lua module path.
+pub use crate::lua::LuaBuiltin;
 
 mod cat;
 mod find;
@@ -111,11 +115,17 @@ static BUILTIN_MAP: LazyLock<HashMap<&'static str, BuiltinFn>> = LazyLock::new(|
     m
 });
 
-/// Zero-cost wrapper around the process-global builtin table.
-/// Creating a Builtins instance does no allocation — the static map
-/// is initialized once on first use.
+/// Dispatch layer for shell builtins — both native (compiled-in) and Lua-registered.
+///
+/// Native builtins are stored in the process-global `BUILTIN_MAP` and incur no
+/// per-instance allocation. Lua builtins are resolved at runtime via an optional
+/// `LuaRuntime` reference; when absent, Lua dispatch is simply skipped.
 #[derive(Clone)]
-pub struct Builtins;
+pub struct Builtins {
+    /// Optional Lua runtime for dispatching Lua-registered builtins.
+    /// `None` when the Lua extension system is not active.
+    lua: Option<Arc<LuaRuntime>>,
+}
 
 impl Default for Builtins {
     fn default() -> Self {
@@ -124,19 +134,51 @@ impl Default for Builtins {
 }
 
 impl Builtins {
+    /// Create a `Builtins` dispatcher without Lua support.
     pub fn new() -> Self {
-        Self
+        Self { lua: None }
     }
 
+    /// Create a `Builtins` dispatcher backed by a Lua runtime.
+    pub fn with_lua(lua_runtime: Arc<LuaRuntime>) -> Self {
+        Self {
+            lua: Some(lua_runtime),
+        }
+    }
+
+    /// Attach (or replace) the Lua runtime after construction.
+    pub fn set_lua_runtime(&mut self, lua_runtime: Arc<LuaRuntime>) {
+        self.lua = Some(lua_runtime);
+    }
+
+    /// Returns `true` if `name` is a native builtin or a registered Lua builtin.
     #[inline]
     pub fn is_builtin(&self, name: &str) -> bool {
-        BUILTIN_MAP.contains_key(name)
+        if BUILTIN_MAP.contains_key(name) {
+            return true;
+        }
+        if let Some(lua) = &self.lua {
+            return lua.get_registered_builtins().iter().any(|b| b.name == name);
+        }
+        false
     }
 
+    /// Names of all available builtins — native and Lua-registered.
     pub fn builtin_names(&self) -> Vec<String> {
-        BUILTIN_MAP.keys().map(|k| k.to_string()).collect()
+        let mut names: Vec<String> = BUILTIN_MAP.keys().map(|k| k.to_string()).collect();
+        if let Some(lua) = &self.lua {
+            for b in lua.get_registered_builtins() {
+                names.push(b.name);
+            }
+        }
+        names
     }
 
+    /// Execute a builtin by name.
+    ///
+    /// Dispatch order:
+    /// 1. Native builtins (compiled-in, fast-path via static map)
+    /// 2. Lua-registered builtins (if a `LuaRuntime` is attached)
     #[inline]
     pub fn execute(
         &self,
@@ -145,10 +187,12 @@ impl Builtins {
         runtime: &mut Runtime,
     ) -> Result<ExecutionResult> {
         if let Some(func) = BUILTIN_MAP.get(name) {
-            func(&args, runtime)
-        } else {
-            Err(anyhow!("Builtin '{}' not found", name))
+            return func(&args, runtime);
         }
+        if let Some(lua) = &self.lua {
+            return dispatch_lua_builtin(lua, name, args);
+        }
+        Err(anyhow!("Builtin '{}' not found", name))
     }
 
     /// Execute a builtin with optional stdin data
@@ -199,8 +243,104 @@ impl Builtins {
             }
         }
 
-        // For other builtins, use regular execute
+        // For other builtins, use regular execute (includes Lua fallback)
         self.execute(name, args, runtime)
+    }
+}
+
+/// Convert args strings to `Value::String`, call the Lua runtime, and wrap the
+/// result in an `ExecutionResult`.
+///
+/// Lua builtins receive their arguments as a Lua array of strings (matching how
+/// native builtins receive `&[String]`). The return value is converted:
+/// - Primitive `Value` types → `Output::Text` (via `to_text()`)
+/// - `Value::List`, `Value::Record`, `Value::Table` → `Output::Structured` (via JSON)
+fn dispatch_lua_builtin(
+    lua: &LuaRuntime,
+    name: &str,
+    args: Vec<String>,
+) -> Result<ExecutionResult> {
+    use crate::value::Value;
+
+    let value_args: Vec<Value> = args.into_iter().map(Value::String).collect();
+    let result = lua.call_builtin(name, &value_args)?;
+
+    let output = match &result {
+        // Collections and structured types → JSON for pipeline consumption.
+        // We convert to a plain JSON value (no serde type-tags) so downstream
+        // tools can consume the output without knowing about rush's Value enum.
+        Value::List(_) | Value::Record(_) | Value::Table(_) => {
+            let json_val = rush_value_to_json(&result);
+            Output::Structured(json_val)
+        }
+        // Null → empty text (successful no-op)
+        Value::Null => Output::Text(String::new()),
+        // Everything else → text representation
+        _ => Output::Text(result.to_text()),
+    };
+
+    Ok(ExecutionResult {
+        output,
+        stderr: String::new(),
+        exit_code: 0,
+        error: None,
+    })
+}
+
+/// Convert a rush `Value` to a plain `serde_json::Value` without the `#[serde(tag = "type")]`
+/// envelope that the derived `Serialize` impl produces.
+///
+/// This produces idiomatic JSON (arrays, objects) that external tools can consume directly.
+fn rush_value_to_json(value: &crate::value::Value) -> serde_json::Value {
+    use crate::value::Value;
+    use serde_json::{json, Value as Json};
+
+    match value {
+        Value::String(s) => Json::String(s.clone()),
+        Value::Int(i) => json!(*i),
+        Value::Float(f) => json!(*f),
+        Value::Bool(b) => json!(*b),
+        Value::Null => Json::Null,
+        Value::Path(p) => Json::String(p.to_string_lossy().into_owned()),
+        Value::Duration(d) => json!(d.as_secs_f64()),
+        Value::Filesize(b) => json!(*b),
+        Value::Date(dt) => Json::String(dt.to_rfc3339()),
+        Value::Error(e) => Json::String(e.clone()),
+
+        Value::List(items) => Json::Array(items.iter().map(rush_value_to_json).collect()),
+
+        Value::Record(map) => {
+            let obj: serde_json::Map<String, Json> = map
+                .iter()
+                .map(|(k, v)| (k.clone(), rush_value_to_json(v)))
+                .collect();
+            Json::Object(obj)
+        }
+
+        Value::Table(table) => {
+            // Serialize as {"columns": [...], "rows": [{...}, ...]}
+            let cols = Json::Array(
+                table
+                    .columns
+                    .iter()
+                    .map(|c| Json::String(c.clone()))
+                    .collect(),
+            );
+            let rows = Json::Array(
+                table
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        let obj: serde_json::Map<String, Json> = row
+                            .iter()
+                            .map(|(k, v)| (k.clone(), rush_value_to_json(v)))
+                            .collect();
+                        Json::Object(obj)
+                    })
+                    .collect(),
+            );
+            json!({ "columns": cols, "rows": rows })
+        }
     }
 }
 

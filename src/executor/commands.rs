@@ -112,15 +112,16 @@ impl Executor {
             let piped_stdin = self.runtime.get_piped_stdin().map(|s| s.to_vec());
             
             // Helper to convert builtin errors to stderr in result (for redirect handling)
-            // Flow-control signals (break, continue, return) are re-propagated as errors.
+            // Flow-control signals (break, continue, return, exit) are re-propagated as errors.
             let builtin_result_to_stderr = |res: Result<ExecutionResult>, cmd_name: &str| -> Result<ExecutionResult> {
                 match res {
                     Ok(r) => Ok(r),
                     Err(e) => {
-                        // Propagate flow-control signals so loops/functions can catch them
+                        // Propagate flow-control signals so loops/functions/exit can catch them
                         if e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>().is_some()
                             || e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>().is_some()
                             || e.downcast_ref::<crate::builtins::return_builtin::ReturnSignal>().is_some()
+                            || e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>().is_some()
                         {
                             Err(e)
                         } else {

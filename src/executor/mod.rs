@@ -2,16 +2,16 @@ pub mod error_formatter;
 pub mod pipeline;
 pub mod profile;
 pub mod stack;
+pub mod structured_ops;
 pub mod suggestions;
 pub mod value;
 
 // Re-export Value type for convenience
-pub use error_formatter::ErrorFormatter;
-pub use profile::{ExecutionStage, ProfileData, ProfileFormatter};
+pub use profile::{ProfileData, ProfileFormatter};
 pub use stack::CallStack;
 pub use suggestions::{SuggestionConfig, SuggestionEngine};
-pub use value::Value;
 
+use crate::ai::client::{LlmClient, Message, Response};
 use crate::arithmetic;
 use crate::builtins::Builtins;
 use crate::correction::Corrector;
@@ -23,8 +23,7 @@ use crate::runtime::Runtime;
 use crate::signal::SignalHandler;
 use crate::terminal::TerminalControl;
 use anyhow::{anyhow, Result};
-use nix::unistd::{getpid, setpgid, Pid};
-use std::collections::HashMap;
+use nix::unistd::{getpid, setpgid};
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::process::Command as StdCommand;
@@ -121,6 +120,10 @@ impl Executor {
         let mut accumulated_stdout = String::new();
         let mut accumulated_stderr = String::new();
         let mut last_exit_code = 0;
+        // Preserve structured output from the last statement (e.g. a structured pipeline).
+        // When the final statement produces structured data we return it instead of Text,
+        // so callers can inspect the typed output without round-tripping through JSON text.
+        let mut last_output: Output = Output::Text(String::new());
 
         for statement in statements {
             // Check for signals before each statement
@@ -163,6 +166,7 @@ impl Executor {
             accumulated_stdout.push_str(&result.stdout());
             accumulated_stderr.push_str(&result.stderr);
             last_exit_code = result.exit_code;
+            last_output = result.output;
 
             // Update $? after each statement
             self.runtime.set_last_exit_code(last_exit_code);
@@ -183,8 +187,16 @@ impl Executor {
             }
         }
 
+        // When the final statement produced structured data, return it as-is so that
+        // callers (e.g. tests, interactive rendering) can work with the typed output.
+        // For text output, return the accumulated string as before.
+        let final_output = match last_output {
+            Output::Structured(_) => last_output,
+            Output::Text(_) => Output::Text(accumulated_stdout),
+        };
+
         Ok(ExecutionResult {
-            output: Output::Text(accumulated_stdout),
+            output: final_output,
             stderr: accumulated_stderr,
             exit_code: last_exit_code,
             error: None,
@@ -214,32 +226,84 @@ impl Executor {
     }
 
     fn execute_pipe_ask(&mut self, pipe_ask: PipeAsk) -> Result<ExecutionResult> {
-        // Execute the inner command and capture its output
+        // Execute the left-hand side and capture its output (structured or text)
         let cmd_result = self.execute_statement(*pipe_ask.command)?;
-        let stdin_content = cmd_result.stdout();
 
-        // Build the full prompt including the piped input
         let user_prompt = if pipe_ask.prompt.is_empty() {
             "Analyze this output".to_string()
         } else {
             pipe_ask.prompt.clone()
         };
 
-        let full_prompt = if stdin_content.is_empty() {
-            user_prompt
-        } else {
-            format!("{}\n\nInput:\n```\n{}\n```", user_prompt, stdin_content)
+        // Format the piped content, preserving structured data as JSON when available
+        let piped_content = match &cmd_result.output {
+            Output::Structured(value) => {
+                serde_json::to_string_pretty(value).unwrap_or_else(|_| cmd_result.stdout())
+            }
+            Output::Text(_) => cmd_result.stdout(),
         };
 
-        // Use PiRpcManager to spawn pi --rpc subprocess
+        let full_prompt = if piped_content.is_empty() {
+            user_prompt
+        } else {
+            format!("{}\n\nInput:\n```\n{}\n```", user_prompt, piped_content)
+        };
+
+        // Try the configured LLM provider first (Ollama, OpenAI, Anthropic)
+        match LlmClient::from_config() {
+            Ok(client) => {
+                let messages = vec![Message::user(full_prompt)];
+                match client.chat(&messages, None) {
+                    Ok(Response::Text(text)) => {
+                        print!("{}", text);
+                        if !text.ends_with('\n') {
+                            println!();
+                        }
+                        Ok(ExecutionResult {
+                            output: Output::Text(text),
+                            stderr: String::new(),
+                            exit_code: 0,
+                            error: None,
+                        })
+                    }
+                    Ok(Response::ToolCall { name, .. }) => {
+                        // |? is read-only analysis — tool calls are unexpected
+                        let msg = format!("Unexpected tool call '{}' from AI in |? context", name);
+                        eprintln!("{}", msg);
+                        Ok(ExecutionResult {
+                            output: Output::Text(String::new()),
+                            stderr: msg.clone(),
+                            exit_code: 1,
+                            error: Some(msg),
+                        })
+                    }
+                    Err(e) => {
+                        let msg = format!("AI error: {}", e);
+                        eprintln!("{}", msg);
+                        Ok(ExecutionResult {
+                            output: Output::Text(String::new()),
+                            stderr: msg.clone(),
+                            exit_code: 1,
+                            error: Some(msg),
+                        })
+                    }
+                }
+            }
+            Err(_) => {
+                // No rush AI config — fall back to the pi subprocess if available
+                self.execute_pipe_ask_via_pi(full_prompt)
+            }
+        }
+    }
+
+    /// Fallback: send a prompt through the pi --rpc subprocess when no local LLM is configured.
+    fn execute_pipe_ask_via_pi(&mut self, full_prompt: String) -> Result<ExecutionResult> {
         let mut manager = PiRpcManager::new();
 
-        // Ensure pi subprocess is running
         if let Err(e) = manager.ensure_running() {
             let error_msg = match e {
                 PiRpcError::SpawnFailed(_) => {
-                    "pi not found. Install with: npm install -g @mariozechner/pi-coding-agent"
-                        .to_string()
+                    "AI not configured. Run `rush ai setup` or install pi: npm install -g @mariozechner/pi-coding-agent".to_string()
                 }
                 other => format!("Pi error: {}", other),
             };
@@ -252,7 +316,6 @@ impl Executor {
             });
         }
 
-        // Send prompt and stream responses
         let mut response_text = String::new();
         let mut final_exit_code = 0;
 
@@ -261,13 +324,11 @@ impl Executor {
                 for event_result in events {
                     match event_result {
                         Ok(PiEvent::ContentDelta { content }) => {
-                            // Print streaming text and accumulate
                             print!("{}", content);
                             let _ = std::io::stdout().flush();
                             response_text.push_str(&content);
                         }
                         Ok(PiEvent::AgentEnd {}) => {
-                            // Response complete
                             if !response_text.is_empty() && !response_text.ends_with('\n') {
                                 println!();
                             }
@@ -278,9 +339,7 @@ impl Executor {
                             final_exit_code = 1;
                             break;
                         }
-                        Ok(PiEvent::Ready {}) | Ok(PiEvent::Unknown) => {
-                            // Ignore ready signals and unknown events
-                        }
+                        Ok(PiEvent::Ready {}) | Ok(PiEvent::Unknown) => {}
                         Err(e) => {
                             eprintln!("Error reading from pi: {}", e);
                             final_exit_code = 1;
@@ -290,10 +349,11 @@ impl Executor {
                 }
             }
             Err(e) => {
-                eprintln!("Failed to send prompt to pi: {}", e);
+                let msg = format!("Failed to send prompt to pi: {}", e);
+                eprintln!("{}", msg);
                 return Ok(ExecutionResult {
                     output: Output::Text(String::new()),
-                    stderr: format!("Failed to send prompt to pi: {}", e),
+                    stderr: msg,
                     exit_code: 1,
                     error: None,
                 });
@@ -3063,8 +3123,6 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
             }
             // For parallel execution, we need to execute command substitution
             // Create a minimal executor for this
-            use crate::lexer::Lexer;
-            use crate::parser::Parser;
 
             let command = if cmd.starts_with("$(") && cmd.ends_with(')') {
                 &cmd[2..cmd.len() - 1]
@@ -3408,6 +3466,153 @@ impl ExecutionResult {
         if let Output::Text(s) = &mut self.output {
             s.push_str(text);
         }
+    }
+}
+
+/// Render an `Output` value for display at the terminal boundary.
+///
+/// - `Output::Structured` containing an array of objects → pretty table via `TableRenderer`
+/// - `Output::Structured` with any other shape → pretty-printed JSON
+/// - `Output::Text` → returned as-is
+///
+/// When `compact_json` is true (e.g. agent mode), structured output is emitted as
+/// compact single-line JSON rather than a human-readable table.
+pub fn render_output(output: &Output, compact_json: bool) -> String {
+    match output {
+        Output::Text(s) => s.clone(),
+        Output::Structured(v) => render_json_value(v, compact_json),
+    }
+}
+
+/// Convert `Output::Structured` to newline-separated text lines suitable for piping
+/// to external commands (grep, awk, sed, etc.).
+///
+/// Arrays of objects → TSV (header row + one data row per entry)
+/// Arrays of scalars → one value per line
+/// Objects → pretty-printed JSON
+/// Scalars → their string representation
+pub fn structured_to_text_lines(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::Array(items) => {
+            if items.is_empty() {
+                return String::new();
+            }
+            // Detect if all items are objects → emit TSV
+            let all_objects = items.iter().all(|i| i.is_object());
+            if all_objects {
+                // Collect union of all keys preserving first-seen order
+                let mut columns: Vec<String> = Vec::new();
+                for item in items {
+                    if let serde_json::Value::Object(map) = item {
+                        for key in map.keys() {
+                            if !columns.contains(key) {
+                                columns.push(key.clone());
+                            }
+                        }
+                    }
+                }
+                let mut out = columns.join("\t");
+                out.push('\n');
+                for item in items {
+                    if let serde_json::Value::Object(map) = item {
+                        let row: Vec<String> = columns
+                            .iter()
+                            .map(|col| {
+                                json_scalar_to_string(
+                                    map.get(col).unwrap_or(&serde_json::Value::Null),
+                                )
+                            })
+                            .collect();
+                        out.push_str(&row.join("\t"));
+                        out.push('\n');
+                    }
+                }
+                out
+            } else {
+                // Array of scalars → one per line
+                items
+                    .iter()
+                    .map(json_scalar_to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        }
+        other => serde_json::to_string_pretty(other).unwrap_or_default(),
+    }
+}
+
+/// Render a `serde_json::Value` for terminal display.
+/// Arrays of objects are rendered as a pretty table; everything else as JSON.
+fn render_json_value(v: &serde_json::Value, compact_json: bool) -> String {
+    if compact_json {
+        return serde_json::to_string(v).unwrap_or_default();
+    }
+
+    match v {
+        serde_json::Value::Array(items)
+            if !items.is_empty() && items.iter().all(|i| i.is_object()) =>
+        {
+            // Convert array-of-objects to a Table and render
+            use crate::executor::value::render::TableRenderer;
+            use crate::executor::value::{Table, Value as RushValue};
+            use std::collections::HashMap;
+
+            // Collect columns preserving first-seen order
+            let mut columns: Vec<String> = Vec::new();
+            for item in items {
+                if let serde_json::Value::Object(map) = item {
+                    for key in map.keys() {
+                        if !columns.contains(key) {
+                            columns.push(key.clone());
+                        }
+                    }
+                }
+            }
+
+            let mut table = Table::new(columns.clone());
+            for item in items {
+                if let serde_json::Value::Object(map) = item {
+                    let mut row: HashMap<String, RushValue> = HashMap::new();
+                    for col in &columns {
+                        let val = match map.get(col).unwrap_or(&serde_json::Value::Null) {
+                            serde_json::Value::String(s) => RushValue::String(s.clone()),
+                            serde_json::Value::Number(n) => {
+                                if let Some(i) = n.as_i64() {
+                                    RushValue::Int(i)
+                                } else {
+                                    RushValue::Float(n.as_f64().unwrap_or(0.0))
+                                }
+                            }
+                            serde_json::Value::Bool(b) => RushValue::Bool(*b),
+                            serde_json::Value::Null => RushValue::Null,
+                            other => RushValue::String(other.to_string()),
+                        };
+                        row.insert(col.clone(), val);
+                    }
+                    table.push_row(row);
+                }
+            }
+
+            TableRenderer::new().render(&table)
+        }
+        serde_json::Value::Array(items) => {
+            // Flat array of scalars → one per line
+            items
+                .iter()
+                .map(json_scalar_to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        other => serde_json::to_string_pretty(other).unwrap_or_default(),
+    }
+}
+
+/// Convert a scalar JSON value to a plain string (no quotes for strings).
+fn json_scalar_to_string(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
     }
 }
 

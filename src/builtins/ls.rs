@@ -81,10 +81,10 @@ pub fn builtin_ls(args: &[String], runtime: &mut Runtime) -> Result<ExecutionRes
             }
         }
 
-        let json_output = serde_json::to_string_pretty(&all_entries)?;
+        let json_value = serde_json::to_value(&all_entries)?;
 
         Ok(ExecutionResult {
-            output: Output::Text(json_output + "\n"),
+            output: Output::Structured(json_value),
             stderr: stderr_output,
             exit_code: if had_error { 1 } else { 0 },
             error: None,

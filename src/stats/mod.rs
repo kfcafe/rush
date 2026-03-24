@@ -658,7 +658,7 @@ impl StatsCollector {
     fn get_macos_battery() -> String {
         // Read from IOKit power source info via pmset -g batt style file
         // Actually, let's read from the IOPowerSources directory
-        if let Ok(content) =
+        if let Ok(_content) =
             std::fs::read_to_string("/Library/Preferences/com.apple.PowerManagement.plist")
         {
             // This plist doesn't have current battery level
