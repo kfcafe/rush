@@ -116,7 +116,7 @@ fn setup_ollama(stdin: &io::Stdin) -> Result<Option<LlmConfig>, String> {
                 provider: ProviderType::Ollama,
                 model,
                 api_key: None,
-                base_url: None,
+                base_url: None, autorun: false,
             };
 
             save_and_confirm(config)
@@ -162,7 +162,7 @@ fn setup_openai(stdin: &io::Stdin) -> Result<Option<LlmConfig>, String> {
         provider: ProviderType::OpenAi,
         model,
         api_key: Some(key),
-        base_url: None,
+        base_url: None, autorun: false,
     };
 
     save_and_confirm(config)
@@ -205,7 +205,7 @@ fn setup_anthropic(stdin: &io::Stdin) -> Result<Option<LlmConfig>, String> {
         provider: ProviderType::Anthropic,
         model,
         api_key: Some(key),
-        base_url: None,
+        base_url: None, autorun: false,
     };
 
     save_and_confirm(config)

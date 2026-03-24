@@ -68,6 +68,14 @@ pub struct LlmConfig {
     /// Override the provider's default base URL (e.g. a custom Ollama port).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+
+    /// Auto-confirm all agent tool calls (no Y/n prompts).
+    ///
+    /// ```toml
+    /// autorun = true
+    /// ```
+    #[serde(default)]
+    pub autorun: bool,
 }
 
 impl Default for LlmConfig {
@@ -77,6 +85,7 @@ impl Default for LlmConfig {
             model: "qwen2.5-coder:7b".to_string(),
             api_key: None,
             base_url: None,
+            autorun: false,
         }
     }
 }
