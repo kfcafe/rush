@@ -737,6 +737,7 @@ fn run_interactive_with_reedline(
                         last_command.as_deref(),
                         last_exit_code,
                         command_history.clone(),
+                        &mut executor,
                     );
 
                     match result {

@@ -11,7 +11,8 @@
 //! | `edit`  | edits file   | yes               |
 
 use crate::ai::client::{LlmClient, Message, Response, Tool};
-use crate::ai::tools::{confirm, execute_shell_command, show_edit_preview};
+use crate::ai::tools::{confirm, show_edit_preview};
+use crate::executor::Executor;
 use anyhow::{anyhow, Result};
 use nu_ansi_term::Color;
 use serde_json::{json, Value};
@@ -135,9 +136,10 @@ impl Agent {
 
     /// Run the agent loop for the given user intent.
     ///
-    /// Prints all intermediate tool calls and their results to stdout.
-    /// Blocks until the model produces a final text response or an error.
-    pub fn run(&mut self, intent: &str, cwd: &Path) -> Result<()> {
+    /// Takes a mutable reference to the shell's own executor so tool calls
+    /// run through rush (getting structured output from builtins, persisting
+    /// environment changes like `cd` and `export`).
+    pub fn run(&mut self, intent: &str, cwd: &Path, executor: &mut Executor) -> Result<()> {
         let cwd_str = cwd.display().to_string();
 
         let mut messages = vec![
@@ -191,7 +193,7 @@ impl Agent {
                         name: name.clone(),
                         arguments: arguments.clone(),
                     };
-                    let result = self.execute_tool(&tool_call)?;
+                    let result = self.execute_tool(&tool_call, executor)?;
 
                     // Add the assistant's tool call and our result to history
                     // so the model knows what happened.
@@ -209,12 +211,12 @@ impl Agent {
 
     /// Dispatch a single tool call, printing progress and asking for
     /// confirmation where required.
-    fn execute_tool(&self, call: &ToolCall) -> Result<String> {
+    fn execute_tool(&self, call: &ToolCall, executor: &mut Executor) -> Result<String> {
         match call.name.as_str() {
             "read" => self.tool_read(&call.arguments),
-            "shell" => self.tool_shell(&call.arguments),
-            "write" => self.tool_write(&call.arguments),
-            "edit" => self.tool_edit(&call.arguments),
+            "shell" => self.tool_shell(&call.arguments, executor),
+            "write" => self.tool_write(&call.arguments, executor),
+            "edit" => self.tool_edit(&call.arguments, executor),
             other => Ok(format!("Unknown tool: {}", other)),
         }
     }
@@ -234,7 +236,7 @@ impl Agent {
 
     // ── shell ─────────────────────────────────────────────────────────────────
 
-    fn tool_shell(&self, args: &Value) -> Result<String> {
+    fn tool_shell(&self, args: &Value, executor: &mut Executor) -> Result<String> {
         let command = required_str(args, "command")?;
         println!(
             "  {} {}",
@@ -242,24 +244,44 @@ impl Agent {
             Color::White.bold().paint(command)
         );
 
-        // run_command synonym — used here for grep verification
         if !confirm("Run")? {
             return Ok("User declined.".to_string());
         }
 
-        let output = execute_shell_command(command)?;
-        if !output.is_empty() {
-            // Indent output slightly for visual grouping.
-            for line in output.lines() {
-                println!("  {}", line);
+        // Run through rush's own executor — builtins produce structured
+        // output, cd/export persist in the session, everything stays
+        // in-process.
+        let tokens =
+            crate::lexer::Lexer::tokenize(command).map_err(|e| anyhow!("Parse error: {}", e))?;
+        let mut parser = crate::parser::Parser::new(tokens);
+        let statements = parser.parse().map_err(|e| anyhow!("Parse error: {}", e))?;
+
+        match executor.execute(statements) {
+            Ok(result) => {
+                let stdout_text = result.stdout();
+                if !stdout_text.is_empty() {
+                    for line in stdout_text.lines() {
+                        println!("  {}", line);
+                    }
+                }
+                if !result.stderr.is_empty() {
+                    for line in result.stderr.lines() {
+                        eprintln!("  {}", line);
+                    }
+                }
+                let mut output = stdout_text;
+                if result.exit_code != 0 {
+                    output.push_str(&format!("\n[exit {}]", result.exit_code));
+                }
+                Ok(output)
             }
+            Err(e) => Ok(format!("Error: {}", e)),
         }
-        Ok(output)
     }
 
     // ── write ─────────────────────────────────────────────────────────────────
 
-    fn tool_write(&self, args: &Value) -> Result<String> {
+    fn tool_write(&self, args: &Value, executor: &mut Executor) -> Result<String> {
         let path = required_str(args, "path")?;
         let content = required_str(args, "content")?;
 
@@ -274,8 +296,14 @@ impl Agent {
             return Ok("User declined.".to_string());
         }
 
-        // Track in the undo system if possible, then write.
-        track_write_for_undo(path);
+        // Track in the runtime's undo manager so `undo` works in-session.
+        let undo = executor.runtime_mut().undo_manager_mut();
+        let p = std::path::PathBuf::from(path);
+        if p.exists() {
+            undo.track_modify(&p, format!("agent write {}", path)).ok();
+        } else {
+            undo.track_create(p.clone(), format!("agent write {}", path));
+        }
         if let Some(parent) = Path::new(path).parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent)?;
@@ -288,7 +316,7 @@ impl Agent {
 
     // ── edit ──────────────────────────────────────────────────────────────────
 
-    fn tool_edit(&self, args: &Value) -> Result<String> {
+    fn tool_edit(&self, args: &Value, executor: &mut Executor) -> Result<String> {
         let path = required_str(args, "path")?;
         let old_text = required_str(args, "old_text")?;
         let new_text = required_str(args, "new_text")?;
@@ -314,8 +342,15 @@ impl Agent {
             ));
         }
 
-        // Track in undo system before modifying.
-        track_modify_for_undo(path);
+        // Track in the runtime's undo manager so `undo` works in-session.
+        executor
+            .runtime_mut()
+            .undo_manager_mut()
+            .track_modify(
+                &std::path::PathBuf::from(path),
+                format!("agent edit {}", path),
+            )
+            .ok();
 
         let updated = content.replacen(old_text, new_text, 1);
         std::fs::write(path, updated)?;
@@ -330,9 +365,9 @@ impl Agent {
 ///
 /// This is what `intent::process_intent` calls after verifying the user has
 /// AI configured.
-pub fn execute_agent(intent: &str, cwd: &Path) -> Result<()> {
+pub fn execute_agent(intent: &str, cwd: &Path, executor: &mut Executor) -> Result<()> {
     let mut agent = Agent::from_config()?;
-    agent.run(intent, cwd)
+    agent.run(intent, cwd, executor)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -342,33 +377,6 @@ fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
     args.get(key)
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("Tool argument '{}' is required", key))
-}
-
-/// Attempt to track a file write in the undo system.
-///
-/// Silently ignores failures — the undo manager is a nice-to-have, not a
-/// blocker for the write operation.
-fn track_write_for_undo(path: &str) {
-    use crate::undo::UndoManager;
-    if let Ok(mut mgr) = UndoManager::new() {
-        let p = std::path::PathBuf::from(path);
-        if p.exists() {
-            // File exists: treat as modify so we can restore the original.
-            mgr.track_modify(&p, format!("agent write {}", path)).ok();
-        } else {
-            // New file: track as create so undo can delete it.
-            mgr.track_create(p, format!("agent write {}", path));
-        }
-    }
-}
-
-/// Attempt to track a file modification in the undo system.
-fn track_modify_for_undo(path: &str) {
-    use crate::undo::UndoManager;
-    if let Ok(mut mgr) = UndoManager::new() {
-        let p = std::path::PathBuf::from(path);
-        mgr.track_modify(&p, format!("agent edit {}", path)).ok();
-    }
 }
 
 // ─── Verify grep anchors ──────────────────────────────────────────────────────

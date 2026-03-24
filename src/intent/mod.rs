@@ -278,6 +278,7 @@ pub fn process_intent(
     _last_command: Option<&str>,
     _last_exit_code: Option<i32>,
     _history: Vec<String>,
+    executor: &mut crate::executor::Executor,
 ) -> IntentResult {
     // Ensure AI is configured before running the agent.
     if !ensure_ai_configured() {
@@ -286,7 +287,7 @@ pub fn process_intent(
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-    match crate::ai::execute_agent(intent, &cwd) {
+    match crate::ai::execute_agent(intent, &cwd, executor) {
         Ok(()) => {
             // The agent handled everything — no command to execute.
             // Return Cancel so the REPL doesn't try to run a command.
