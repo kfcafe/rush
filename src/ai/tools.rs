@@ -14,6 +14,12 @@ use std::io::{self, Write};
 /// Uses raw mode so a single keypress is enough — no need to hit Enter.
 /// Returns an error only if terminal setup fails.
 pub fn confirm(prompt: &str) -> Result<bool> {
+    // Skip confirmation if auto-confirm is enabled
+    if std::env::var("RUSH_AGENT_AUTORUN").as_deref() == Ok("1") {
+        println!("  {} ✓", prompt);
+        return Ok(true);
+    }
+
     print!("  {} [Y/n] ", prompt);
     io::stdout().flush()?;
 
