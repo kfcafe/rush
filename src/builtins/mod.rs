@@ -12,6 +12,7 @@ use std::sync::{Arc, LazyLock};
 pub use crate::lua::LuaBuiltin;
 
 mod cat;
+mod edit_file;
 mod find;
 mod getopts;
 #[cfg(feature = "git-builtins")]
@@ -51,6 +52,7 @@ mod type_builtin;
 mod undo;
 mod unset;
 mod wait;
+mod write_file;
 
 type BuiltinFn = fn(&[String], &mut Runtime) -> Result<ExecutionResult>;
 
@@ -109,6 +111,8 @@ static BUILTIN_MAP: LazyLock<HashMap<&'static str, BuiltinFn>> = LazyLock::new(|
     m.insert("readonly", readonly::builtin_readonly);
     m.insert("rm", rm::builtin_rm);
     m.insert("wait", wait::builtin_wait);
+    m.insert("write", write_file::builtin_write);
+    m.insert("edit", edit_file::builtin_edit);
     m.insert("profile", profile::builtin_profile);
     m.insert("time", time::builtin_time);
     m.insert("getopts", getopts::builtin_getopts);
@@ -240,6 +244,13 @@ impl Builtins {
         if name == "json_query" {
             if let Some(stdin_data) = stdin {
                 return json::builtin_json_query_with_stdin(&args, runtime, stdin_data);
+            }
+        }
+
+        // Special handling for write with stdin
+        if name == "write" {
+            if let Some(stdin_data) = stdin {
+                return write_file::builtin_write_with_stdin(&args, runtime, Some(stdin_data));
             }
         }
 

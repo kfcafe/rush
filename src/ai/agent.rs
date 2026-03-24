@@ -213,7 +213,7 @@ impl Agent {
     /// confirmation where required.
     fn execute_tool(&self, call: &ToolCall, executor: &mut Executor) -> Result<String> {
         match call.name.as_str() {
-            "read" => self.tool_read(&call.arguments),
+            "read" => self.tool_read(&call.arguments, executor),
             "shell" => self.tool_shell(&call.arguments, executor),
             "write" => self.tool_write(&call.arguments, executor),
             "edit" => self.tool_edit(&call.arguments, executor),
@@ -223,15 +223,15 @@ impl Agent {
 
     // ── read ─────────────────────────────────────────────────────────────────
 
-    fn tool_read(&self, args: &Value) -> Result<String> {
+    fn tool_read(&self, args: &Value, executor: &mut Executor) -> Result<String> {
         let path = required_str(args, "path")?;
+        let cmd = format!("cat {}", shell_escape(path));
         println!(
             "  {} {}",
-            Color::Blue.paint("📖 read"),
-            Color::Cyan.paint(path)
+            Color::Blue.paint("⚡"),
+            Color::White.bold().paint(&cmd)
         );
-
-        std::fs::read_to_string(path).map_err(|e| anyhow!("read_file error for '{}': {}", path, e))
+        execute_through_rush(&cmd, executor)
     }
 
     // ── shell ─────────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ impl Agent {
         let command = required_str(args, "command")?;
         println!(
             "  {} {}",
-            Color::Yellow.paint("⚡ shell:"),
+            Color::Yellow.paint("⚡"),
             Color::White.bold().paint(command)
         );
 
@@ -248,35 +248,7 @@ impl Agent {
             return Ok("User declined.".to_string());
         }
 
-        // Run through rush's own executor — builtins produce structured
-        // output, cd/export persist in the session, everything stays
-        // in-process.
-        let tokens =
-            crate::lexer::Lexer::tokenize(command).map_err(|e| anyhow!("Parse error: {}", e))?;
-        let mut parser = crate::parser::Parser::new(tokens);
-        let statements = parser.parse().map_err(|e| anyhow!("Parse error: {}", e))?;
-
-        match executor.execute(statements) {
-            Ok(result) => {
-                let stdout_text = result.stdout();
-                if !stdout_text.is_empty() {
-                    for line in stdout_text.lines() {
-                        println!("  {}", line);
-                    }
-                }
-                if !result.stderr.is_empty() {
-                    for line in result.stderr.lines() {
-                        eprintln!("  {}", line);
-                    }
-                }
-                let mut output = stdout_text;
-                if result.exit_code != 0 {
-                    output.push_str(&format!("\n[exit {}]", result.exit_code));
-                }
-                Ok(output)
-            }
-            Err(e) => Ok(format!("Error: {}", e)),
-        }
+        execute_through_rush(command, executor)
     }
 
     // ── write ─────────────────────────────────────────────────────────────────
@@ -285,9 +257,10 @@ impl Agent {
         let path = required_str(args, "path")?;
         let content = required_str(args, "content")?;
 
+        let cmd = format!("write {} {}", shell_escape(path), shell_escape(content));
         println!(
-            "  {} {} ({} bytes)",
-            Color::Green.paint("📝 write"),
+            "  {} write {} ({} bytes)",
+            Color::Green.paint("⚡"),
             Color::Cyan.paint(path),
             content.len()
         );
@@ -296,22 +269,7 @@ impl Agent {
             return Ok("User declined.".to_string());
         }
 
-        // Track in the runtime's undo manager so `undo` works in-session.
-        let undo = executor.runtime_mut().undo_manager_mut();
-        let p = std::path::PathBuf::from(path);
-        if p.exists() {
-            undo.track_modify(&p, format!("agent write {}", path)).ok();
-        } else {
-            undo.track_create(p.clone(), format!("agent write {}", path));
-        }
-        if let Some(parent) = Path::new(path).parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
-        std::fs::write(path, content)?;
-        println!("  {} Written", Color::Green.paint("✓"));
-        Ok("Written.".to_string())
+        execute_through_rush(&cmd, executor)
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────
@@ -321,9 +279,15 @@ impl Agent {
         let old_text = required_str(args, "old_text")?;
         let new_text = required_str(args, "new_text")?;
 
+        let cmd = format!(
+            "edit {} --old {} --new {}",
+            shell_escape(path),
+            shell_escape(old_text),
+            shell_escape(new_text)
+        );
         println!(
-            "  {} {}",
-            Color::Magenta.paint("✏️  edit"),
+            "  {} edit {}",
+            Color::Magenta.paint("⚡"),
             Color::Cyan.paint(path)
         );
         show_edit_preview(old_text, new_text);
@@ -332,30 +296,7 @@ impl Agent {
             return Ok("User declined.".to_string());
         }
 
-        let content =
-            std::fs::read_to_string(path).map_err(|e| anyhow!("Cannot read '{}': {}", path, e))?;
-
-        if !content.contains(old_text) {
-            return Ok(format!(
-                "Error: old_text not found in '{}'. No changes made.",
-                path
-            ));
-        }
-
-        // Track in the runtime's undo manager so `undo` works in-session.
-        executor
-            .runtime_mut()
-            .undo_manager_mut()
-            .track_modify(
-                &std::path::PathBuf::from(path),
-                format!("agent edit {}", path),
-            )
-            .ok();
-
-        let updated = content.replacen(old_text, new_text, 1);
-        std::fs::write(path, updated)?;
-        println!("  {} Applied (undo available)", Color::Green.paint("✓"));
-        Ok("Applied.".to_string())
+        execute_through_rush(&cmd, executor)
     }
 }
 
@@ -371,6 +312,46 @@ pub fn execute_agent(intent: &str, cwd: &Path, executor: &mut Executor) -> Resul
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Execute a command string through rush's own executor.
+///
+/// All four agent tools funnel through this so every action is visible
+/// as a real rush command.
+fn execute_through_rush(command: &str, executor: &mut Executor) -> Result<String> {
+    let tokens =
+        crate::lexer::Lexer::tokenize(command).map_err(|e| anyhow!("Parse error: {}", e))?;
+    let mut parser = crate::parser::Parser::new(tokens);
+    let statements = parser.parse().map_err(|e| anyhow!("Parse error: {}", e))?;
+
+    match executor.execute(statements) {
+        Ok(result) => {
+            let stdout_text = result.stdout();
+            if !stdout_text.is_empty() {
+                for line in stdout_text.lines() {
+                    println!("  {}", line);
+                }
+            }
+            if !result.stderr.is_empty() {
+                for line in result.stderr.lines() {
+                    eprintln!("  {}", line);
+                }
+            }
+            let mut output = stdout_text;
+            if result.exit_code != 0 {
+                output.push_str(&format!("\n[exit {}]", result.exit_code));
+            }
+            Ok(output)
+        }
+        Err(e) => Ok(format!("Error: {}", e)),
+    }
+}
+
+/// Escape a string for safe inclusion in a rush command.
+///
+/// Wraps in single quotes, escaping any existing single quotes.
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
 
 /// Extract a required string field from a JSON arguments object.
 fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
