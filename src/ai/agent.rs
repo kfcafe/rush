@@ -128,7 +128,7 @@ impl Agent {
         }
     }
 
-    /// Load config from `~/.rush/ai.toml` and create an agent.
+    /// Load config from `~/.rushrc` and create an agent.
     pub fn from_config() -> Result<Self> {
         let client = LlmClient::from_config().map_err(|e| anyhow!("{}", e))?;
         Ok(Self::new(client))

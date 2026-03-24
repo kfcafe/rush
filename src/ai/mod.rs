@@ -15,7 +15,7 @@
 //!
 //! # Configuration
 //!
-//! Reads `~/.rush/ai.toml`. If missing, defaults to Ollama on localhost.
+//! Reads `~/.rushrc`. If missing, defaults to Ollama on localhost.
 //! ```toml
 //! provider = "ollama"
 //! model = "qwen2.5-coder:7b"

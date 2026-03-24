@@ -1,16 +1,19 @@
-//! Configuration for the LLM client
+//! Configuration for the LLM client.
 //!
-//! Loaded from `~/.rush/ai.toml`. If the file does not exist, the defaults
-//! point to a local Ollama instance so no setup is required for local use.
+//! All settings are read from environment variables, which are typically set
+//! in `~/.rushrc`:
+//!
+//! ```bash
+//! RUSH_AI_PROVIDER=ollama
+//! RUSH_AI_MODEL=qwen2.5-coder:7b
+//! RUSH_AI_AUTORUN=true
+//! ```
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::path::PathBuf;
 use std::str::FromStr;
 
-/// Which LLM provider to use
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+/// Which LLM provider to use.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderType {
     Ollama,
     OpenAi,
@@ -43,38 +46,13 @@ impl FromStr for ProviderType {
     }
 }
 
-/// Configuration for the LLM client
-///
-/// Stored in `~/.rush/ai.toml`:
-/// ```toml
-/// provider = "ollama"
-/// model = "qwen2.5-coder:7b"
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Configuration for the LLM client, read entirely from env vars.
+#[derive(Debug, Clone)]
 pub struct LlmConfig {
-    /// Which provider to use
     pub provider: ProviderType,
-
-    /// Model name (provider-specific, e.g. "qwen2.5-coder:7b" for Ollama)
     pub model: String,
-
-    /// API key — required for OpenAI and Anthropic, unused for Ollama.
-    ///
-    /// If `None`, the client falls back to the provider's standard env var
-    /// (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
-
-    /// Override the provider's default base URL (e.g. a custom Ollama port).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
-
-    /// Auto-confirm all agent tool calls (no Y/n prompts).
-    ///
-    /// ```toml
-    /// autorun = true
-    /// ```
-    #[serde(default)]
     pub autorun: bool,
 }
 
@@ -91,56 +69,46 @@ impl Default for LlmConfig {
 }
 
 impl LlmConfig {
-    /// Load config from `~/.rush/ai.toml`.
+    /// Load config from environment variables.
     ///
-    /// Returns `Default` if the file does not exist.
-    /// Returns an error if the file exists but cannot be parsed.
+    /// Returns `Ok` with defaults for any unset variable.
+    /// Returns `Err` only if a variable has an invalid value.
     pub fn load() -> Result<Self, String> {
-        let path =
-            Self::config_path().ok_or_else(|| "Could not determine home directory".to_string())?;
+        let provider = match std::env::var("RUSH_AI_PROVIDER") {
+            Ok(val) => val.parse::<ProviderType>()?,
+            Err(_) => ProviderType::Ollama,
+        };
 
-        if !path.exists() {
-            return Ok(Self::default());
-        }
+        let model =
+            std::env::var("RUSH_AI_MODEL").unwrap_or_else(|_| "qwen2.5-coder:7b".to_string());
 
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+        let api_key = std::env::var("RUSH_AI_API_KEY")
+            .ok()
+            .or_else(|| match provider {
+                ProviderType::OpenAi => std::env::var("OPENAI_API_KEY").ok(),
+                ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
+                ProviderType::Ollama => None,
+            });
 
-        toml::from_str(&content).map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
+        let base_url = std::env::var("RUSH_AI_BASE_URL").ok();
+
+        let autorun = matches!(
+            std::env::var("RUSH_AI_AUTORUN").as_deref(),
+            Ok("1" | "true" | "yes")
+        );
+
+        Ok(Self {
+            provider,
+            model,
+            api_key,
+            base_url,
+            autorun,
+        })
     }
 
-    /// Save config to `~/.rush/ai.toml`.
-    pub fn save(&self) -> Result<(), String> {
-        let path =
-            Self::config_path().ok_or_else(|| "Could not determine home directory".to_string())?;
-
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create config dir: {}", e))?;
-        }
-
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| format!("Failed to serialize config: {}", e))?;
-
-        std::fs::write(&path, content)
-            .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
-    }
-
-    /// Path to the config file: `~/.rush/ai.toml`
-    pub fn config_path() -> Option<PathBuf> {
-        dirs::home_dir().map(|h| h.join(".rush").join("ai.toml"))
-    }
-
-    /// Resolve the API key: config field first, then env var fallback.
-    pub fn resolved_api_key(&self) -> Option<String> {
-        if let Some(ref key) = self.api_key {
-            return Some(key.clone());
-        }
-        match self.provider {
-            ProviderType::OpenAi => std::env::var("OPENAI_API_KEY").ok(),
-            ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
-            ProviderType::Ollama => None,
-        }
+    /// Check if AI has been configured (provider env var is set).
+    pub fn is_configured() -> bool {
+        std::env::var("RUSH_AI_PROVIDER").is_ok()
     }
 }
 
@@ -154,7 +122,7 @@ mod tests {
         assert_eq!(cfg.provider, ProviderType::Ollama);
         assert_eq!(cfg.model, "qwen2.5-coder:7b");
         assert!(cfg.api_key.is_none());
-        assert!(cfg.base_url.is_none());
+        assert!(!cfg.autorun);
     }
 
     #[test]
@@ -179,20 +147,5 @@ mod tests {
             ProviderType::Anthropic
         );
         assert!("unknown".parse::<ProviderType>().is_err());
-    }
-
-    #[test]
-    fn test_toml_roundtrip() {
-        let cfg = LlmConfig {
-            provider: ProviderType::OpenAi,
-            model: "gpt-4o".to_string(),
-            api_key: Some("sk-test".to_string()),
-            base_url: None,
-        };
-        let toml_str = toml::to_string_pretty(&cfg).unwrap();
-        let parsed: LlmConfig = toml::from_str(&toml_str).unwrap();
-        assert_eq!(parsed.provider, ProviderType::OpenAi);
-        assert_eq!(parsed.model, "gpt-4o");
-        assert_eq!(parsed.api_key, Some("sk-test".to_string()));
     }
 }

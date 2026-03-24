@@ -115,7 +115,7 @@ pub enum LlmError {
     Config(String),
 
     #[error(
-        "Provider '{0}' requires an API key (set {1} env var or add api_key to ~/.rush/ai.toml)"
+        "Provider '{0}' requires an API key (set {1} env var or add api_key to ~/.rushrc)"
     )]
     MissingApiKey(String, String),
 }
@@ -138,7 +138,7 @@ pub trait LlmProvider: Send {
 /// The main entry point for LLM interaction.
 ///
 /// Created once per session (or per request) and delegates to the configured
-/// provider. Use `LlmClient::from_config` to build one from `~/.rush/ai.toml`.
+/// provider. Use `LlmClient::from_config` to build one from `~/.rushrc`.
 pub struct LlmClient {
     provider: Box<dyn LlmProvider>,
     pub config: LlmConfig,
@@ -150,13 +150,13 @@ impl LlmClient {
         let provider: Box<dyn LlmProvider> = match config.provider {
             ProviderType::Ollama => Box::new(OllamaProvider::new(&config)),
             ProviderType::OpenAi => {
-                let key = config.resolved_api_key().ok_or_else(|| {
+                let key = config.api_key.clone().ok_or_else(|| {
                     LlmError::MissingApiKey("openai".to_string(), "OPENAI_API_KEY".to_string())
                 })?;
                 Box::new(OpenAiProvider::new(&config, key))
             }
             ProviderType::Anthropic => {
-                let key = config.resolved_api_key().ok_or_else(|| {
+                let key = config.api_key.clone().ok_or_else(|| {
                     LlmError::MissingApiKey(
                         "anthropic".to_string(),
                         "ANTHROPIC_API_KEY".to_string(),
@@ -169,7 +169,7 @@ impl LlmClient {
         Ok(Self { provider, config })
     }
 
-    /// Load config from `~/.rush/ai.toml` and create a client.
+    /// Load config from `~/.rushrc` and create a client.
     pub fn from_config() -> Result<Self, LlmError> {
         let config = LlmConfig::load().map_err(LlmError::Config)?;
         Self::new(config)

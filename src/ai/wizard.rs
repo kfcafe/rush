@@ -2,7 +2,7 @@
 //!
 //! Runs on first `?` usage (when no config exists) or when the user invokes
 //! `rush --setup-ai`. Guides the user through picking a provider, detecting
-//! available backends, and writing `~/.rush/ai.toml`.
+//! available backends, and writing `~/.rushrc`.
 //!
 //! # Flow
 //! 1. Ask which provider to use (Ollama / OpenAI / Anthropic / Skip)
@@ -116,7 +116,8 @@ fn setup_ollama(stdin: &io::Stdin) -> Result<Option<LlmConfig>, String> {
                 provider: ProviderType::Ollama,
                 model,
                 api_key: None,
-                base_url: None, autorun: false,
+                base_url: None,
+                autorun: false,
             };
 
             save_and_confirm(config)
@@ -162,7 +163,8 @@ fn setup_openai(stdin: &io::Stdin) -> Result<Option<LlmConfig>, String> {
         provider: ProviderType::OpenAi,
         model,
         api_key: Some(key),
-        base_url: None, autorun: false,
+        base_url: None,
+        autorun: false,
     };
 
     save_and_confirm(config)
@@ -205,7 +207,8 @@ fn setup_anthropic(stdin: &io::Stdin) -> Result<Option<LlmConfig>, String> {
         provider: ProviderType::Anthropic,
         model,
         api_key: Some(key),
-        base_url: None, autorun: false,
+        base_url: None,
+        autorun: false,
     };
 
     save_and_confirm(config)
@@ -322,11 +325,33 @@ fn summarise_model(name: &str) -> String {
 
 /// Save config and print confirmation message.
 fn save_and_confirm(config: LlmConfig) -> Result<Option<LlmConfig>, String> {
-    config.save()?;
+    // Set env vars for the current session
+    std::env::set_var("RUSH_AI_PROVIDER", config.provider.to_string());
+    std::env::set_var("RUSH_AI_MODEL", &config.model);
+    if let Some(ref key) = config.api_key {
+        std::env::set_var("RUSH_AI_API_KEY", key);
+    }
 
-    let path = LlmConfig::config_path()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "~/.rush/ai.toml".to_string());
+    // Append to ~/.rushrc for persistence
+    let rushrc = dirs::home_dir()
+        .map(|h| h.join(".rushrc"))
+        .ok_or_else(|| "Could not determine home directory".to_string())?;
+
+    let mut lines = String::from("\n# AI configuration (added by rush --setup-ai)\n");
+    lines.push_str(&format!("RUSH_AI_PROVIDER={}\n", config.provider));
+    lines.push_str(&format!("RUSH_AI_MODEL={}\n", config.model));
+    if let Some(ref key) = config.api_key {
+        lines.push_str(&format!("RUSH_AI_API_KEY={}\n", key));
+    }
+
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&rushrc)
+        .map_err(|e| format!("Failed to open ~/.rushrc: {}", e))?;
+    file.write_all(lines.as_bytes())
+        .map_err(|e| format!("Failed to write ~/.rushrc: {}", e))?;
 
     println!();
     println!(
@@ -334,7 +359,10 @@ fn save_and_confirm(config: LlmConfig) -> Result<Option<LlmConfig>, String> {
         Color::Green.paint("✓"),
         Color::Cyan.paint("?")
     );
-    println!("Config saved to {}", Color::DarkGray.paint(&path));
+    println!(
+        "Config appended to {}",
+        Color::DarkGray.paint(rushrc.display().to_string())
+    );
 
     Ok(Some(config))
 }

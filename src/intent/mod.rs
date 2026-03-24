@@ -254,11 +254,7 @@ pub fn prompt_user_action() -> IntentResult {
 /// Returns `true` if the caller should proceed (config exists or was just
 /// created), `false` if the user skipped setup or setup failed.
 pub fn ensure_ai_configured() -> bool {
-    let config_exists = LlmConfig::config_path()
-        .map(|p| p.exists())
-        .unwrap_or(false);
-
-    if config_exists {
+    if LlmConfig::is_configured() {
         return true;
     }
 

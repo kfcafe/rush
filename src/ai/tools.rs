@@ -14,12 +14,11 @@ use std::io::{self, Write};
 /// Uses raw mode so a single keypress is enough — no need to hit Enter.
 /// Returns an error only if terminal setup fails.
 pub fn confirm(prompt: &str) -> Result<bool> {
-    // Skip confirmation if autorun is enabled (config or env var)
-    let autorun = std::env::var("RUSH_AGENT_AUTORUN").as_deref() == Ok("1")
-        || crate::ai::config::LlmConfig::load()
-            .map(|c| c.autorun)
-            .unwrap_or(false);
-    if autorun {
+    // Skip confirmation if autorun is enabled via RUSH_AI_AUTORUN in .rushrc
+    if matches!(
+        std::env::var("RUSH_AI_AUTORUN").as_deref(),
+        Ok("1" | "true" | "yes")
+    ) {
         println!("  {} ✓", prompt);
         return Ok(true);
     }
