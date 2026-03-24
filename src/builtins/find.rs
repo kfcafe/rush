@@ -52,6 +52,10 @@ struct FindOptions {
     start_path: PathBuf,
     /// Pattern for file name matching (glob pattern)
     name_pattern: Option<String>,
+    /// Patterns to exclude by file name (-not -name / ! -name)
+    exclude_name_patterns: Vec<String>,
+    /// Pattern for full path matching (glob pattern)
+    path_pattern: Option<String>,
     /// File type filter (file, directory, or any)
     file_type: FileType,
     /// Size filter
@@ -75,6 +79,8 @@ impl Default for FindOptions {
         Self {
             start_path: PathBuf::from("."),
             name_pattern: None,
+            exclude_name_patterns: Vec::new(),
+            path_pattern: None,
             file_type: FileType::Any,
             size_filter: None,
             mtime_filter: None,
@@ -114,6 +120,13 @@ fn parse_args(args: &[String], runtime: &Runtime) -> Result<FindOptions> {
                     return Err(anyhow!("find: -name requires an argument"));
                 }
                 options.name_pattern = Some(args[i].clone());
+            }
+            "-path" | "-ipath" | "-wholename" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(anyhow!("find: {} requires an argument", args[i - 1]));
+                }
+                options.path_pattern = Some(args[i].clone());
             }
             "-type" => {
                 i += 1;
@@ -171,6 +184,24 @@ fn parse_args(args: &[String], runtime: &Runtime) -> Result<FindOptions> {
                         .parse()
                         .map_err(|_| anyhow!("find: -maxdepth must be a positive integer"))?,
                 );
+            }
+            "-not" | "!" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(anyhow!("find: -not requires a predicate"));
+                }
+                match args[i].as_str() {
+                    "-name" => {
+                        i += 1;
+                        if i >= args.len() {
+                            return Err(anyhow!("find: -not -name requires an argument"));
+                        }
+                        options.exclude_name_patterns.push(args[i].clone());
+                    }
+                    pred => {
+                        return Err(anyhow!("find: -not: unsupported predicate: {}", pred));
+                    }
+                }
             }
             flag => {
                 return Err(anyhow!("find: unknown flag: {}", flag));
@@ -312,13 +343,32 @@ fn matches_filters(path: &Path, options: &FindOptions) -> Result<bool> {
         _ => {}
     }
 
-    // Name pattern filter
+    // Name pattern filter (matches only the filename component)
     if let Some(pattern) = &options.name_pattern {
         if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
             if !matches_pattern(file_name, pattern) {
                 return Ok(false);
             }
         } else {
+            return Ok(false);
+        }
+    }
+
+    // Exclude name patterns (-not -name / ! -name)
+    if !options.exclude_name_patterns.is_empty() {
+        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+            for pattern in &options.exclude_name_patterns {
+                if matches_pattern(file_name, pattern) {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+
+    // Path pattern filter (matches against the full path string)
+    if let Some(pattern) = &options.path_pattern {
+        let path_str = path.to_string_lossy();
+        if !matches_pattern(&path_str, pattern) {
             return Ok(false);
         }
     }

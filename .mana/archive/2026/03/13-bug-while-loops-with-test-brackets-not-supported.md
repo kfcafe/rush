@@ -2,10 +2,10 @@
 id: '13'
 title: 'bug: while loops with test brackets [ ] not supported'
 slug: bug-while-loops-with-test-brackets-not-supported
-status: open
+status: closed
 priority: 1
 created_at: '2026-03-24T03:11:23.609547Z'
-updated_at: '2026-03-24T17:13:40.480882Z'
+updated_at: '2026-03-24T17:28:24.847733Z'
 notes: |2-
 
   ## Attempt 1 — 2026-03-24T16:35:07Z
@@ -66,8 +66,11 @@ labels:
 - bug
 - parser
 - while
+closed_at: '2026-03-24T17:28:24.847733Z'
+close_reason: verify passed (tidy sweep)
 verify: ~/bin/rush -c 'i=0; while [ $i -lt 3 ]; do echo $i; i=$((i+1)); done' 2>&1 | head -1 | grep 0
 attempts: 2
+is_archived: true
 history:
 - attempt: 1
   started_at: '2026-03-24T16:35:07.298532Z'
@@ -81,6 +84,13 @@ history:
   duration_secs: 0.051
   result: fail
   exit_code: 1
+- attempt: 3
+  started_at: '2026-03-24T17:28:24.750633Z'
+  finished_at: '2026-03-24T17:28:24.806947Z'
+  duration_secs: 0.056
+  result: pass
+  exit_code: 0
+outputs: 0
 attempt_log:
 - num: 1
   outcome: abandoned

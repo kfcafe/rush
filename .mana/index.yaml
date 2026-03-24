@@ -6,28 +6,30 @@ units:
   labels:
   - shell
   - daily-driver
-  updated_at: '2026-03-24T16:35:28.198658Z'
+  - circuit-breaker
+  updated_at: '2026-03-24T17:37:00.200119Z'
   has_verify: true
   verify: cargo test --test quoting_tests 2>&1 | grep -q "0 failed"
   created_at: '2026-03-17T05:54:52.686692Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '6.3'
   title: 'tier-3: Pipeline hardening'
   status: open
-  priority: 2
+  priority: 0
   parent: '6'
   dependencies:
   - '6.1'
   labels:
   - executor
   - pipeline
-  updated_at: '2026-03-24T16:35:28.294778Z'
+  - circuit-breaker
+  updated_at: '2026-03-24T17:37:00.421615Z'
   has_verify: true
   verify: echo "echo hello | cat | cat | wc -l" | cargo run --quiet 2>/dev/null | grep -q "1"
   created_at: '2026-03-17T05:56:25.688346Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '6.4'
@@ -41,11 +43,11 @@ units:
   - main
   - executor
   - circuit-breaker
-  updated_at: '2026-03-24T16:35:28.391973Z'
+  updated_at: '2026-03-24T17:37:00.590749Z'
   has_verify: true
   verify: echo "echo hello" | cargo run --quiet 2>/dev/null | grep -q "hello"
   created_at: '2026-03-17T05:56:34.700683Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '6.5'
@@ -55,11 +57,11 @@ units:
   parent: '6'
   labels:
   - circuit-breaker
-  updated_at: '2026-03-24T16:35:28.594994Z'
+  updated_at: '2026-03-24T17:37:01.143155Z'
   has_verify: true
   verify: cargo test --test quoting_tests 2>&1 | grep -q "0 failed"
   created_at: '2026-03-17T06:38:05.421228Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '6.5.2'
@@ -71,13 +73,13 @@ units:
   - '6.5.1'
   labels:
   - circuit-breaker
-  updated_at: '2026-03-24T16:35:29.552270Z'
+  updated_at: '2026-03-24T17:37:01.326096Z'
   requires:
   - SingleQuoted
   has_verify: true
   verify: cargo test --test quoting_tests test_single_quotes_preserve_literal_dollar test_single_quotes_preserve_backticks test_command_substitution_blocked_in_single_quotes 2>&1 | grep -q "3 passed; 0 failed"
   created_at: '2026-03-17T06:39:01.448434Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '6.5.3'
@@ -89,14 +91,14 @@ units:
   - '6.5.1'
   labels:
   - circuit-breaker
-  updated_at: '2026-03-24T16:35:29.652872Z'
+  updated_at: '2026-03-24T17:37:01.503843Z'
   requires:
   - ArgumentPart
   - DoubleQuoted
   has_verify: true
   verify: cargo test --test quoting_tests test_double_quotes_escape_dollar test_double_quotes_escape_backtick test_quote_escaping_with_variable test_nested_command_substitution_with_quotes 2>&1 | grep -q "4 passed; 0 failed"
   created_at: '2026-03-17T06:39:17.769012Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '6.5.4'
@@ -108,28 +110,14 @@ units:
   - '6.5.1'
   labels:
   - circuit-breaker
-  updated_at: '2026-03-24T16:35:29.857273Z'
+  updated_at: '2026-03-24T17:37:01.848364Z'
   requires:
   - DoubleQuoted
   - SingleQuoted
   has_verify: true
   verify: cargo test --test quoting_tests test_adjacent_quoted_strings 2>&1 | grep -q "1 passed; 0 failed"
   created_at: '2026-03-17T06:39:30.917223Z'
-  attempts: 2
-  feature: false
-  has_decisions: false
-- id: '9'
-  title: 'bug: find -path flag not supported'
-  status: open
-  priority: 2
-  labels:
-  - bug
-  - find
-  updated_at: '2026-03-24T16:35:29.955635Z'
-  has_verify: true
-  verify: ~/bin/rush -c 'find /tmp -name "*.txt" -path "*tmp*" -maxdepth 1' 2>&1 | grep -v "unknown flag"
-  created_at: '2026-03-24T02:39:11.964693Z'
-  attempts: 2
+  attempts: 5
   feature: false
   has_decisions: false
 - id: '10'
@@ -160,50 +148,6 @@ units:
   verify: ~/bin/rush -c 'sleep 0; echo done' 2>&1 | grep -v "Expected command name" | grep done
   created_at: '2026-03-24T02:43:58.753579Z'
   claimed_by: pi-agent
-  attempts: 2
-  feature: false
-  has_decisions: false
-- id: '13'
-  title: 'bug: while loops with test brackets [ ] not supported'
-  status: open
-  priority: 1
-  labels:
-  - bug
-  - parser
-  - while
-  updated_at: '2026-03-24T17:13:40.480882Z'
-  has_verify: true
-  verify: ~/bin/rush -c 'i=0; while [ $i -lt 3 ]; do echo $i; i=$((i+1)); done' 2>&1 | head -1 | grep 0
-  created_at: '2026-03-24T03:11:23.609547Z'
-  attempts: 2
-  feature: false
-  has_decisions: false
-- id: '14'
-  title: 'bug: grep doesn''t support combined short flags (-rn, -ri, etc.)'
-  status: open
-  priority: 1
-  labels:
-  - bug
-  - grep
-  - flags
-  updated_at: '2026-03-24T16:35:30.465263Z'
-  has_verify: true
-  verify: echo "hello" > /tmp/rush-grep-combined-test.txt && ~/bin/rush -c 'grep -in HELLO /tmp/rush-grep-combined-test.txt' 2>&1 | grep hello
-  created_at: '2026-03-24T03:27:55.196254Z'
-  attempts: 2
-  feature: false
-  has_decisions: false
-- id: '15'
-  title: 'bug: find -not flag not supported'
-  status: open
-  priority: 2
-  labels:
-  - bug
-  - find
-  updated_at: '2026-03-24T16:35:30.559906Z'
-  has_verify: true
-  verify: echo x > /tmp/rush-find-a.txt && echo x > /tmp/rush-find-b.log && ~/bin/rush -c 'find /tmp -maxdepth 1 -name "rush-find*" -not -name "*.log"' 2>&1 | grep rush-find-a
-  created_at: '2026-03-24T03:28:10.413946Z'
   attempts: 2
   feature: false
   has_decisions: false

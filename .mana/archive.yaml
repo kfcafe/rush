@@ -726,13 +726,18 @@ units:
   feature: false
   has_decisions: false
 - id: '9'
-  title: 'refactor: Extract duplicated loop break/continue handling into shared helper'
+  title: 'bug: find -path flag not supported'
   status: closed
   priority: 2
-  updated_at: '2026-03-02T02:26:46.624993Z'
-  has_verify: false
-  created_at: '2026-02-19T08:32:32.639669Z'
-  attempts: 0
+  labels:
+  - bug
+  - find
+  updated_at: '2026-03-24T17:35:08.492215Z'
+  has_verify: true
+  verify: ~/bin/rush -c 'find /tmp -name "*.txt" -path "*tmp*" -maxdepth 1' 2>&1 | grep -v "unknown flag"
+  created_at: '2026-03-24T02:39:11.964693Z'
+  claimed_by: pi-agent
+  attempts: 4
   feature: false
   has_decisions: false
 - id: '10'
@@ -773,6 +778,32 @@ units:
   attempts: 2
   feature: false
   has_decisions: false
+- id: '12'
+  title: 'refactor: Move run_info_command presentation logic to stats module'
+  status: closed
+  priority: 2
+  updated_at: '2026-02-19T08:50:58.209163Z'
+  has_verify: true
+  verify: cd /Users/asher/rush && grep -q 'pub fn format_info_output' src/stats/mod.rs && cargo build 2>&1 | tail -1 | grep -q Finished
+  created_at: '2026-02-19T08:48:45.536695Z'
+  attempts: 0
+  feature: false
+  has_decisions: false
+- id: '13'
+  title: 'bug: while loops with test brackets [ ] not supported'
+  status: closed
+  priority: 1
+  labels:
+  - bug
+  - parser
+  - while
+  updated_at: '2026-03-24T17:28:24.847733Z'
+  has_verify: true
+  verify: ~/bin/rush -c 'i=0; while [ $i -lt 3 ]; do echo $i; i=$((i+1)); done' 2>&1 | head -1 | grep 0
+  created_at: '2026-03-24T03:11:23.609547Z'
+  attempts: 2
+  feature: false
+  has_decisions: false
 - id: '13'
   title: 'chore: Fix unused import and dead code warnings across the codebase'
   status: closed
@@ -785,24 +816,34 @@ units:
   feature: false
   has_decisions: false
 - id: '14'
-  title: 'chore: Fix clippy warnings across the codebase'
+  title: 'bug: grep doesn''t support combined short flags (-rn, -ri, etc.)'
   status: closed
-  priority: 2
-  updated_at: '2026-02-19T10:09:57.072586Z'
+  priority: 1
+  labels:
+  - bug
+  - grep
+  - flags
+  updated_at: '2026-03-24T17:33:04.681586Z'
   has_verify: true
-  verify: cd /Users/asher/rush && test $(cargo clippy 2>&1 | grep -c 'warning:') -lt 10
-  created_at: '2026-02-19T09:03:33.769069Z'
-  attempts: 0
+  verify: echo "hello" > /tmp/rush-grep-combined-test.txt && ~/bin/rush -c 'grep -in HELLO /tmp/rush-grep-combined-test.txt' 2>&1 | grep hello
+  created_at: '2026-03-24T03:27:55.196254Z'
+  claimed_by: pi-agent
+  attempts: 4
   feature: false
   has_decisions: false
 - id: '15'
-  title: 'bug: Add SAFETY comments to all unsafe blocks'
+  title: 'bug: find -not flag not supported'
   status: closed
   priority: 2
-  updated_at: '2026-03-02T02:28:24.032554Z'
-  has_verify: false
-  created_at: '2026-02-19T10:10:22.319293Z'
-  attempts: 0
+  labels:
+  - bug
+  - find
+  updated_at: '2026-03-24T17:36:24.492945Z'
+  has_verify: true
+  verify: echo x > /tmp/rush-find-a.txt && echo x > /tmp/rush-find-b.log && ~/bin/rush -c 'find /tmp -maxdepth 1 -name "rush-find*" -not -name "*.log"' 2>&1 | grep rush-find-a
+  created_at: '2026-03-24T03:28:10.413946Z'
+  claimed_by: pi-agent
+  attempts: 4
   feature: false
   has_decisions: false
 - id: '16'

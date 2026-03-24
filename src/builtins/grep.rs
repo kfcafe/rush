@@ -686,6 +686,17 @@ fn parse_args(args: &[String]) -> Result<GrepConfig> {
                 ));
             }
             _ => {
+                // Try to expand combined short flags like -rn, -in, -rni
+                // Only applies to single-dash flags with multiple chars (not --)
+                if arg.starts_with('-') && !arg.starts_with("--") && arg.len() > 2 {
+                    let chars: Vec<String> = arg[1..].chars().map(|c| format!("-{}", c)).collect();
+                    // Re-run parse_args with the expanded flags + remaining args
+                    let mut expanded: Vec<String> = chars;
+                    expanded.extend_from_slice(&args[i + 1..]);
+                    // Merge the result into config
+                    let expanded_config = parse_args(&expanded)?;
+                    return Ok(expanded_config);
+                }
                 return Err(anyhow!("Unknown option: {}", arg));
             }
         }

@@ -2,10 +2,10 @@
 id: '14'
 title: 'bug: grep doesn''t support combined short flags (-rn, -ri, etc.)'
 slug: bug-grep-doesnt-support-combined-short-flags-rn-ri
-status: open
+status: closed
 priority: 1
 created_at: '2026-03-24T03:27:55.196254Z'
-updated_at: '2026-03-24T16:35:30.465263Z'
+updated_at: '2026-03-24T17:33:04.681586Z'
 notes: |2
 
   ## Attempt 1 — 2026-03-24T16:35:07Z
@@ -21,12 +21,30 @@ notes: |2
   ```
 
   ```
+
+  ## Attempt 3 — 2026-03-24T17:28:25Z
+  Exit code: 1
+
+  ```
+
+  ```
+
+  ## Attempt 4 — 2026-03-24T17:28:41Z
+  Exit code: 1
+
+  ```
+
+  ```
 labels:
 - bug
 - grep
 - flags
+closed_at: '2026-03-24T17:33:04.681586Z'
 verify: echo "hello" > /tmp/rush-grep-combined-test.txt && ~/bin/rush -c 'grep -in HELLO /tmp/rush-grep-combined-test.txt' 2>&1 | grep hello
-attempts: 2
+attempts: 4
+claimed_by: pi-agent
+claimed_at: '2026-03-24T17:28:47.626857Z'
+is_archived: true
 history:
 - attempt: 1
   started_at: '2026-03-24T16:35:07.395210Z'
@@ -40,6 +58,32 @@ history:
   duration_secs: 0.053
   result: fail
   exit_code: 1
+- attempt: 3
+  started_at: '2026-03-24T17:28:24.944473Z'
+  finished_at: '2026-03-24T17:28:25.005209Z'
+  duration_secs: 0.06
+  result: fail
+  exit_code: 1
+- attempt: 4
+  started_at: '2026-03-24T17:28:41.425225Z'
+  finished_at: '2026-03-24T17:28:41.482598Z'
+  duration_secs: 0.057
+  result: fail
+  exit_code: 1
+- attempt: 5
+  started_at: '2026-03-24T17:33:04.562897Z'
+  finished_at: '2026-03-24T17:33:04.632581Z'
+  duration_secs: 0.069
+  result: pass
+  exit_code: 0
+outputs:
+  text: "1:\e[1;31mhello\e[0m"
+attempt_log:
+- num: 1
+  outcome: success
+  agent: pi-agent
+  started_at: '2026-03-24T17:28:47.626857Z'
+  finished_at: '2026-03-24T17:33:04.681586Z'
 ---
 
 ## Bug
