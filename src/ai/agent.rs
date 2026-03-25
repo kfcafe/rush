@@ -159,6 +159,10 @@ impl Agent {
 
         // Enforce a reasonable iteration cap to prevent runaway agent loops.
         const MAX_ITERATIONS: usize = 20;
+        /// Maximum total conversation size in bytes before trimming old messages.
+        const MAX_CONTEXT_BYTES: usize = 2 * 1024 * 1024; // 2MB
+        /// Maximum bytes from a single tool result before truncation.
+        const MAX_TOOL_RESULT_BYTES: usize = 256 * 1024; // 256KB
         let mut iterations = 0;
 
         loop {
@@ -193,7 +197,18 @@ impl Agent {
                         name: name.clone(),
                         arguments: arguments.clone(),
                     };
-                    let result = self.execute_tool(&tool_call, executor)?;
+                    let mut result = self.execute_tool(&tool_call, executor)?;
+
+                    // Cap individual tool results to prevent a single large
+                    // file read from blowing up context
+                    if result.len() > MAX_TOOL_RESULT_BYTES {
+                        result.truncate(MAX_TOOL_RESULT_BYTES);
+                        // Back up to UTF-8 char boundary
+                        while !result.is_char_boundary(result.len()) {
+                            result.pop();
+                        }
+                        result.push_str("\n[truncated — output exceeded 256KB]");
+                    }
 
                     // Add the assistant's tool call and our result to history
                     // so the model knows what happened.
@@ -202,6 +217,16 @@ impl Agent {
                         name, arguments
                     )));
                     messages.push(Message::tool_result(id, result));
+
+                    // Trim old messages to prevent unbounded memory growth.
+                    // Keep system (0), user intent (1), and the most recent messages.
+                    while messages.len() > 4 {
+                        let total: usize = messages.iter().map(|m| m.content.len()).sum();
+                        if total <= MAX_CONTEXT_BYTES {
+                            break;
+                        }
+                        messages.remove(2); // drop oldest tool interaction
+                    }
                 }
             }
         }
