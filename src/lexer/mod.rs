@@ -134,8 +134,8 @@ pub enum Token {
     #[token("=>")]
     FatArrow,
 
-    // String literals
-    #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice().to_string())]
+    // String literals — custom parser so nested $("...") is handled correctly
+    #[regex(r#"""#, parse_double_quoted_string)]
     String(String),
 
     #[regex(r"'([^'\\]|\\.)*'", |lex| lex.slice().to_string())]
@@ -254,6 +254,11 @@ pub enum Token {
 
     // Synthesized token: here-document body (not matched by lexer directly)
     HereDocBody(HereDocData),
+
+    // Synthesized token: marks that two adjacent word-tokens had no whitespace between them.
+    // Inserted by the tokenizer post-processing step; never produced by logos directly.
+    // The parser uses this to concatenate adjacent quoted strings into a single argument.
+    Adjacent,
 
     // Newline and EOF
     #[regex(r"\n")]
@@ -388,6 +393,94 @@ fn parse_ansi_c_string(lex: &mut logos::Lexer<Token>) -> Option<String> {
     Some(result)
 }
 
+// Custom parser for double-quoted strings.
+//
+// The logos regex `"([^"\\]|\\.)*"` cannot handle `$(...)` containing nested double-quotes
+// like `"outer: $(echo "inner")"`. This custom parser tracks paren depth inside `$(...)` and
+// skips double-quotes that appear inside command substitutions, matching the full string token.
+fn parse_double_quoted_string(lex: &mut logos::Lexer<Token>) -> Option<String> {
+    // The opening `"` has already been consumed by the regex trigger `"`.
+    let start = lex.span().start; // points at the opening `"`
+    let input = lex.source();
+    let mut pos = lex.span().end; // position after the opening `"`
+
+    while pos < input.len() {
+        let ch = input.as_bytes()[pos] as char;
+        match ch {
+            '"' => {
+                // Closing double-quote — done
+                pos += 1;
+                let result = input[start..pos].to_string();
+                lex.bump(pos - lex.span().end);
+                return Some(result);
+            }
+            '\\' if pos + 1 < input.len() => {
+                // Escape sequence — skip both chars
+                pos += 2;
+            }
+            '$' if pos + 1 < input.len() && input.as_bytes()[pos + 1] as char == '(' => {
+                // Command substitution $(...) — track paren depth so inner quotes are skipped
+                pos += 2; // skip '$' and '('
+                let mut depth = 1usize;
+                while pos < input.len() && depth > 0 {
+                    let c = input.as_bytes()[pos] as char;
+                    match c {
+                        '(' => {
+                            depth += 1;
+                            pos += 1;
+                        }
+                        ')' => {
+                            depth -= 1;
+                            pos += 1;
+                        }
+                        '\\' if pos + 1 < input.len() => {
+                            pos += 2;
+                        }
+                        '\'' => {
+                            pos += 1;
+                            while pos < input.len() && input.as_bytes()[pos] as char != '\'' {
+                                pos += 1;
+                            }
+                            if pos < input.len() {
+                                pos += 1;
+                            }
+                        }
+                        '"' => {
+                            // Nested double-quote inside $(...) — skip it
+                            pos += 1;
+                            while pos < input.len() {
+                                let inner = input.as_bytes()[pos] as char;
+                                if inner == '"' {
+                                    break;
+                                }
+                                if inner == '\\' {
+                                    pos += 1;
+                                }
+                                pos += 1;
+                            }
+                            if pos < input.len() {
+                                pos += 1;
+                            }
+                        }
+                        _ => {
+                            pos += 1;
+                        }
+                    }
+                }
+                // depth is now 0 (or we ran out of input)
+            }
+            _ => {
+                pos += 1;
+            }
+        }
+    }
+
+    // Unterminated string — return what we have
+    let result = input[start..pos].to_string();
+    lex.bump(pos - lex.span().end);
+    Some(result)
+}
+
 // Custom parser for $(...) that handles nesting
 fn parse_command_substitution(lex: &mut logos::Lexer<Token>) -> Option<String> {
     let start = lex.span().start;
@@ -474,12 +567,12 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn tokenize(input: &str) -> Result<Vec<Token>, LexerError> {
-        let mut tokens = Vec::new();
+        let mut token_spans: Vec<(Token, std::ops::Range<usize>)> = Vec::new();
         let mut lexer = Token::lexer(input);
 
         while let Some(token_result) = lexer.next() {
             match token_result {
-                Ok(token) => tokens.push(token),
+                Ok(token) => token_spans.push((token, lexer.span())),
                 Err(_) => {
                     return Err(LexerError::InvalidToken {
                         position: lexer.span().start,
@@ -489,10 +582,55 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        // Post-process: insert Adjacent markers between contiguous word-like tokens.
+        // When two tokens have no whitespace between them (span.end == next.start),
+        // they form a single shell "word" and should be concatenated by the parser.
+        let mut tokens = Vec::with_capacity(token_spans.len());
+        for i in 0..token_spans.len() {
+            tokens.push(token_spans[i].0.clone());
+
+            if i + 1 < token_spans.len() {
+                let current_end = token_spans[i].1.end;
+                let next_start = token_spans[i + 1].1.start;
+
+                // If the tokens are immediately adjacent (no gap), and both are word
+                // components (things that can form part of a shell word), insert Adjacent.
+                if current_end == next_start
+                    && Self::is_word_component(&token_spans[i].0)
+                    && Self::is_word_component(&token_spans[i + 1].0)
+                {
+                    tokens.push(Token::Adjacent);
+                }
+            }
+        }
+
         // Post-process: resolve here-documents
         let tokens = Self::resolve_heredocs(tokens, input);
 
         Ok(tokens)
+    }
+
+    /// Returns true if this token can be part of a shell "word" (argument).
+    /// Adjacent word-component tokens with no whitespace between them should be
+    /// concatenated into a single argument.
+    fn is_word_component(token: &Token) -> bool {
+        matches!(
+            token,
+            Token::String(_)
+                | Token::SingleQuotedString(_)
+                | Token::AnsiCString(_)
+                | Token::Identifier(_)
+                | Token::Variable(_)
+                | Token::SpecialVariable(_)
+                | Token::BracedVariable(_)
+                | Token::CommandSubstitution(_)
+                | Token::BacktickSubstitution(_)
+                | Token::Path(_)
+                | Token::Tilde
+                | Token::Integer(_)
+                | Token::Float(_)
+                | Token::GlobPattern(_)
+        )
     }
 
     /// Post-process token stream to resolve here-documents.
@@ -1004,5 +1142,13 @@ mod tests {
         let tokens = Lexer::tokenize("[ 1 -eq 1 ]").unwrap();
         println!("tokens: {:?}", tokens);
         assert_eq!(tokens[0], Token::LeftBracket);
+    }
+
+    #[test]
+    fn test_adjacent_quoted_strings_lexer() {
+        let tokens = Lexer::tokenize(r#"echo 'start'"$VAR"'end'"#).unwrap();
+        println!("adjacent tokens: {:?}", tokens);
+        // Should produce separate tokens for each quoted segment
+        assert!(tokens.len() >= 4); // at least: echo, 'start', "$VAR", 'end'
     }
 }

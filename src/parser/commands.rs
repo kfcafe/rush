@@ -422,6 +422,30 @@ impl Parser {
     }
 
     pub(crate) fn parse_argument(&mut self) -> Result<Argument> {
+        let first = self.parse_single_argument_token()?;
+
+        // If the next token is Adjacent, we have an adjacent-quoted-string concatenation.
+        // Consume Adjacent markers and following tokens, building a single Literal.
+        // For example: 'start'"$VAR"'end'  →  Argument::Literal("start$VAR<end>")
+        // where variable references are preserved so the executor can expand them.
+        if self.match_token(&Token::Adjacent) {
+            let mut parts = vec![Self::argument_to_raw_string(&first)];
+
+            // Each iteration: consume one Adjacent marker, then parse the next token.
+            while self.match_token(&Token::Adjacent) {
+                self.advance(); // consume the Adjacent marker
+                let next = self.parse_single_argument_token()?;
+                parts.push(Self::argument_to_raw_string(&next));
+            }
+
+            return Ok(Argument::Literal(parts.join("")));
+        }
+
+        Ok(first)
+    }
+
+    /// Parse exactly one argument token (does not handle Adjacent concatenation).
+    fn parse_single_argument_token(&mut self) -> Result<Argument> {
         match self.advance() {
             Some(Token::String(s)) => {
                 // Double-quoted string: remove outer quotes and process escape sequences
@@ -488,6 +512,29 @@ impl Parser {
             Some(Token::In) => Ok(Argument::Literal("in".to_string())),
             Some(Token::Function) => Ok(Argument::Literal("function".to_string())),
             _ => Err(anyhow!("Expected argument")),
+        }
+    }
+
+    /// Convert an already-parsed Argument back to a raw expandable string form.
+    ///
+    /// This is used when concatenating adjacent quoted tokens: each part is converted
+    /// to a string that `expand_variables_in_literal` can expand at execution time.
+    /// Variable and command substitution references are preserved as-is so they
+    /// expand correctly when the concatenated Literal is resolved.
+    fn argument_to_raw_string(arg: &Argument) -> String {
+        match arg {
+            // Literals are already plain strings (variables expanded inline by executor)
+            Argument::Literal(s) => s.clone(),
+            // Variables: keep the $NAME form so executor expands them
+            Argument::Variable(s) | Argument::BracedVariable(s) => s.clone(),
+            // Command substitution: keep the $(...) form so executor executes it
+            Argument::CommandSubstitution(s) => s.clone(),
+            // Flags, paths, globs: treat as literal text
+            Argument::Flag(s) | Argument::Path(s) | Argument::Glob(s) => s.clone(),
+            // Process substitution — unusual in a concatenation context, keep raw
+            #[cfg(feature = "process_sub")]
+            Argument::ProcessSubIn(s) | Argument::ProcessSubOut(s) => s.clone(),
+            _ => String::new(),
         }
     }
 

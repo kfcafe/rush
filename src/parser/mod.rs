@@ -875,17 +875,55 @@ impl Parser {
     }
 
     fn parse_argument(&mut self) -> Result<Argument> {
+        let first = self.parse_single_argument()?;
+
+        // Handle adjacent-quoted-string concatenation: 'start'"$VAR"'end'
+        if !self.match_token(&Token::Adjacent) {
+            return Ok(first);
+        }
+
+        // Collect all adjacent parts into a single DoubleQuoted sequence
+        // so that SingleQuoted parts stay literal and DoubleQuoted parts expand.
+        let mut parts = Self::argument_to_parts(&first);
+        while self.match_token(&Token::Adjacent) {
+            self.advance(); // consume Adjacent marker
+            let next = self.parse_single_argument()?;
+            parts.extend(Self::argument_to_parts(&next));
+        }
+        Ok(Argument::DoubleQuoted(parts))
+    }
+
+    /// Convert an Argument into DoubleQuoted parts for concatenation.
+    fn argument_to_parts(arg: &Argument) -> Vec<ArgumentPart> {
+        match arg {
+            Argument::SingleQuoted(s) | Argument::Literal(s) => {
+                vec![ArgumentPart::Literal(s.clone())]
+            }
+            Argument::DoubleQuoted(parts) => parts.clone(),
+            Argument::Variable(v) => vec![ArgumentPart::Variable(v.clone())],
+            Argument::BracedVariable(v) => vec![ArgumentPart::BracedVariable(v.clone())],
+            Argument::CommandSubstitution(c) => {
+                vec![ArgumentPart::CommandSubstitution(c.clone())]
+            }
+            Argument::Flag(s) | Argument::Path(s) | Argument::Glob(s) => {
+                vec![ArgumentPart::Literal(s.clone())]
+            }
+        }
+    }
+
+    fn parse_single_argument(&mut self) -> Result<Argument> {
         match self.advance() {
             Some(Token::String(s)) => {
-                // Double-quoted string: remove outer quotes and process escape sequences
+                // Double-quoted string: parse into parts so variables/cmd-subs expand
+                // and escape sequences like \$ produce literal '$' (not a variable).
                 let unquoted = Self::strip_outer_quotes(&s, '"');
-                let processed = Self::process_double_quote_escapes(&unquoted);
-                Ok(Argument::Literal(processed))
+                let parts = Self::parse_double_quoted_content(&unquoted);
+                Ok(Argument::DoubleQuoted(parts))
             }
             Some(Token::SingleQuotedString(s)) => {
-                // Single-quoted string: remove outer quotes, keep content literal (no escape processing)
+                // Single-quoted string: remove outer quotes, keep content literal (no expansion)
                 let unquoted = Self::strip_outer_quotes(&s, '\'');
-                Ok(Argument::Literal(unquoted))
+                Ok(Argument::SingleQuoted(unquoted))
             }
             Some(Token::AnsiCString(s)) => {
                 // ANSI-C string: already processed by lexer
@@ -1923,6 +1961,186 @@ impl Parser {
         } else {
             s.to_string()
         }
+    }
+
+    /// Parse the content of a double-quoted string into a Vec<ArgumentPart>.
+    ///
+    /// Handles:
+    /// - `\$`, `\``, `\\`, `\"` — escape sequences → Literal with resolved char
+    /// - `\<newline>` — line continuation, skip both chars
+    /// - `\X` for other X — POSIX: keep backslash, emit as Literal
+    /// - `$VARNAME` → Variable("$VARNAME")
+    /// - `${...}` → BracedVariable("${...}")
+    /// - `$(cmd)` → CommandSubstitution("$(cmd)"), counting parens for nesting
+    /// - `` `cmd` `` → CommandSubstitution("cmd")
+    /// - everything else → Literal
+    ///
+    /// Adjacent Literal parts are merged.
+    fn parse_double_quoted_content(content: &str) -> Vec<ArgumentPart> {
+        let mut parts: Vec<ArgumentPart> = Vec::new();
+        let mut current_literal = String::new();
+        let chars: Vec<char> = content.chars().collect();
+        let len = chars.len();
+        let mut i = 0;
+
+        // Helper closure: push accumulated literal as a part
+        macro_rules! flush_literal {
+            () => {
+                if !current_literal.is_empty() {
+                    parts.push(ArgumentPart::Literal(std::mem::take(&mut current_literal)));
+                }
+            };
+        }
+
+        while i < len {
+            let c = chars[i];
+
+            match c {
+                '\\' if i + 1 < len => {
+                    let next = chars[i + 1];
+                    match next {
+                        '"' | '\\' | '$' | '`' => {
+                            // Recognized escape: emit the escaped character as literal
+                            current_literal.push(next);
+                            i += 2;
+                        }
+                        '\n' => {
+                            // Line continuation: skip backslash and newline
+                            i += 2;
+                        }
+                        _ => {
+                            // POSIX: unrecognized escape — preserve backslash
+                            current_literal.push('\\');
+                            // Don't consume next; it will be handled in the next iteration
+                            i += 1;
+                        }
+                    }
+                }
+                '\\' => {
+                    // Trailing backslash at end of string
+                    current_literal.push('\\');
+                    i += 1;
+                }
+                '$' if i + 1 < len => {
+                    let next = chars[i + 1];
+                    if next == '(' {
+                        // Command substitution $(...) — count paren depth
+                        flush_literal!();
+                        let start = i; // include the '$'
+                        i += 2; // skip '$' and '('
+                        let mut depth = 1usize;
+                        while i < len && depth > 0 {
+                            match chars[i] {
+                                '(' => {
+                                    depth += 1;
+                                    i += 1;
+                                }
+                                ')' => {
+                                    depth -= 1;
+                                    i += 1;
+                                }
+                                '\\' if i + 1 < len => {
+                                    i += 2;
+                                } // skip escaped char inside
+                                '\'' => {
+                                    // skip single-quoted span
+                                    i += 1;
+                                    while i < len && chars[i] != '\'' {
+                                        i += 1;
+                                    }
+                                    if i < len {
+                                        i += 1;
+                                    }
+                                }
+                                '"' => {
+                                    // skip double-quoted span (simple, no deep nesting)
+                                    i += 1;
+                                    while i < len && chars[i] != '"' {
+                                        if chars[i] == '\\' {
+                                            i += 1;
+                                        }
+                                        i += 1;
+                                    }
+                                    if i < len {
+                                        i += 1;
+                                    }
+                                }
+                                _ => {
+                                    i += 1;
+                                }
+                            }
+                        }
+                        let cmd_sub: String = chars[start..i].iter().collect();
+                        parts.push(ArgumentPart::CommandSubstitution(cmd_sub));
+                    } else if next == '{' {
+                        // Braced variable ${...}
+                        flush_literal!();
+                        let start = i;
+                        i += 2; // skip '$' and '{'
+                        while i < len && chars[i] != '}' {
+                            i += 1;
+                        }
+                        if i < len {
+                            i += 1;
+                        } // consume '}'
+                        let braced: String = chars[start..i].iter().collect();
+                        parts.push(ArgumentPart::BracedVariable(braced));
+                    } else if next.is_ascii_alphabetic() || next == '_' {
+                        // Regular variable $NAME
+                        flush_literal!();
+                        let start = i;
+                        i += 1; // skip '$'
+                        while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+                            i += 1;
+                        }
+                        let var: String = chars[start..i].iter().collect();
+                        parts.push(ArgumentPart::Variable(var));
+                    } else if "?!$#@*-_0123456789".contains(next) {
+                        // Special variable $?, $!, $$, etc.
+                        flush_literal!();
+                        let var: String = chars[i..i + 2].iter().collect();
+                        parts.push(ArgumentPart::Variable(var));
+                        i += 2;
+                    } else {
+                        // Bare '$' not followed by a special char — treat as literal
+                        current_literal.push('$');
+                        i += 1;
+                    }
+                }
+                '$' => {
+                    // '$' at end of string — literal
+                    current_literal.push('$');
+                    i += 1;
+                }
+                '`' => {
+                    // Backtick command substitution `cmd`
+                    flush_literal!();
+                    i += 1; // skip opening backtick
+                    let mut cmd = String::new();
+                    while i < len && chars[i] != '`' {
+                        if chars[i] == '\\' && i + 1 < len {
+                            cmd.push('\\');
+                            cmd.push(chars[i + 1]);
+                            i += 2;
+                        } else {
+                            cmd.push(chars[i]);
+                            i += 1;
+                        }
+                    }
+                    if i < len {
+                        i += 1;
+                    } // skip closing backtick
+                    parts.push(ArgumentPart::CommandSubstitution(cmd));
+                }
+                _ => {
+                    current_literal.push(c);
+                    i += 1;
+                }
+            }
+        }
+
+        flush_literal!();
+        parts
     }
 
     /// Process escape sequences in double-quoted strings.
