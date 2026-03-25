@@ -611,7 +611,12 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
     match arg {
         Argument::Literal(s) => {
             if s.contains("$(") || s.contains('`') {
-                super::expand_command_substitutions_in_string_static(s, runtime)
+                super::expand_command_substitutions_in_string_static(
+                    s,
+                    runtime,
+                    &Builtins::new(),
+                    &crate::correction::Corrector::new(),
+                )
             } else {
                 s.clone()
             }

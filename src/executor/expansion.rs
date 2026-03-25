@@ -907,11 +907,16 @@ pub fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
-pub(crate) fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
+pub(crate) fn resolve_argument_static(
+    arg: &Argument,
+    runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
+) -> String {
     match arg {
         Argument::Literal(s) => {
             if s.contains("$(") || s.contains('`') {
-                expand_command_substitutions_in_string_static(s, runtime)
+                expand_command_substitutions_in_string_static(s, runtime, builtins, corrector)
             } else {
                 s.clone()
             }
@@ -956,8 +961,8 @@ pub(crate) fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> Stri
                 if let Ok(statements) = parser.parse() {
                     let mut sub_executor = Executor {
                         runtime: runtime.clone(),
-                        builtins: Builtins::new(),
-                        corrector: Corrector::new(),
+                        builtins: builtins.clone(),
+                        corrector: corrector.clone(),
                         suggestion_engine: SuggestionEngine::new(),
                         signal_handler: None,
                         show_progress: false,
@@ -988,7 +993,12 @@ pub(crate) fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> Stri
 }
 
 // Helper function for parallel execution with glob expansion
-pub(crate) fn expand_and_resolve_arguments_static(args: &[Argument], runtime: &Runtime) -> Result<Vec<String>> {
+pub(crate) fn expand_and_resolve_arguments_static(
+    args: &[Argument],
+    runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
+) -> Result<Vec<String>> {
     let mut expanded_args = Vec::new();
 
     for arg in args {
@@ -999,7 +1009,7 @@ pub(crate) fn expand_and_resolve_arguments_static(args: &[Argument], runtime: &R
             Argument::Glob(_) | Argument::Path(_) | Argument::Variable(_) | Argument::BracedVariable(_) | Argument::CommandSubstitution(_)
         );
 
-        let resolved = resolve_argument_static(arg, runtime);
+        let resolved = resolve_argument_static(arg, runtime, builtins, corrector);
 
         if should_expand && glob_expansion::should_expand_glob(&resolved) {
             match glob_expansion::expand_globs(&resolved, runtime.get_cwd()) {
@@ -1020,7 +1030,12 @@ pub(crate) fn expand_and_resolve_arguments_static(args: &[Argument], runtime: &R
 }
 
 /// Static version of command substitution expansion for use outside &mut self methods.
-pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime: &Runtime) -> String {
+pub(crate) fn expand_command_substitutions_in_string_static(
+    input: &str,
+    runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
+) -> String {
     let mut result = String::with_capacity(input.len());
     let bytes = input.as_bytes();
     let len = bytes.len();
@@ -1062,8 +1077,8 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
                     if let Ok(statements) = parser.parse() {
                         let mut sub_executor = Executor {
                             runtime: runtime.clone(),
-                            builtins: Builtins::new(),
-                            corrector: Corrector::new(),
+                            builtins: builtins.clone(),
+                            corrector: corrector.clone(),
                             suggestion_engine: SuggestionEngine::new(),
                             signal_handler: None,
                             show_progress: false,
@@ -1104,8 +1119,8 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
                     if let Ok(statements) = parser.parse() {
                         let mut sub_executor = Executor {
                             runtime: runtime.clone(),
-                            builtins: Builtins::new(),
-                            corrector: Corrector::new(),
+                            builtins: builtins.clone(),
+                            corrector: corrector.clone(),
                             suggestion_engine: SuggestionEngine::new(),
                             signal_handler: None,
                             show_progress: false,

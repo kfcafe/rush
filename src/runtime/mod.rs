@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Shell options that control execution behavior
 #[derive(Clone, Default)]
@@ -26,13 +27,13 @@ pub struct ShellOptions {
 pub struct Runtime {
     variables: HashMap<String, String>,
     readonly_vars: HashSet<String>, // Track readonly variables
-    functions: HashMap<String, FunctionDef>,
+    functions: Arc<HashMap<String, FunctionDef>>,
     aliases: HashMap<String, String>,
     cwd: PathBuf,
     scopes: Vec<HashMap<String, String>>,
     call_stack: Vec<String>,
     max_call_depth: usize,
-    history: Option<History>,          // Lazy initialization
+    history: Option<Arc<History>>,     // Lazy initialization
     undo_manager: Option<UndoManager>, // Lazy initialization
     job_manager: JobManager,
     pub options: ShellOptions,
@@ -69,7 +70,7 @@ impl Runtime {
         let mut runtime = Self {
             variables: HashMap::new(),
             readonly_vars: HashSet::new(),
-            functions: HashMap::new(),
+            functions: Arc::new(HashMap::new()),
             aliases: HashMap::new(),
             cwd,
             scopes: Vec::new(),
@@ -246,7 +247,7 @@ impl Runtime {
     }
 
     pub fn define_function(&mut self, func: FunctionDef) {
-        self.functions.insert(func.name.clone(), func);
+        Arc::make_mut(&mut self.functions).insert(func.name.clone(), func);
     }
 
     pub fn get_function(&self, name: &str) -> Option<&FunctionDef> {
@@ -261,7 +262,7 @@ impl Runtime {
     /// Remove a function definition
     /// Returns true if the function was found and removed
     pub fn remove_function(&mut self, name: &str) -> bool {
-        self.functions.remove(name).is_some()
+        Arc::make_mut(&mut self.functions).remove(name).is_some()
     }
 
     // Alias management
@@ -419,27 +420,23 @@ impl Runtime {
     // History management
     pub fn history(&mut self) -> &History {
         if self.history.is_none() {
-            self.history = Some(History::default());
+            self.history = Some(Arc::new(History::default()));
         }
-        self.history.as_ref().unwrap()
+        self.history.as_deref().unwrap()
     }
 
     pub fn history_mut(&mut self) -> &mut History {
-        if self.history.is_none() {
-            self.history = Some(History::default());
-        }
-        self.history.as_mut().unwrap()
+        let arc = self
+            .history
+            .get_or_insert_with(|| Arc::new(History::default()));
+        Arc::make_mut(arc)
     }
 
     pub fn load_history(&mut self) -> Result<(), String> {
-        if self.history.is_none() {
-            self.history = Some(History::default());
-        }
-        self.history
-            .as_mut()
-            .unwrap()
-            .load()
-            .map_err(|e| e.to_string())
+        let arc = self
+            .history
+            .get_or_insert_with(|| Arc::new(History::default()));
+        Arc::make_mut(arc).load().map_err(|e| e.to_string())
     }
 
     pub fn add_to_history(&mut self, command: String) -> Result<(), String> {
@@ -874,7 +871,7 @@ impl Runtime {
         self.readonly_vars.clear();
 
         // Clear functions and aliases
-        self.functions.clear();
+        Arc::make_mut(&mut self.functions).clear();
         self.aliases.clear();
 
         // Reset scopes and call stack

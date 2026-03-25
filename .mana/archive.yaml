@@ -991,11 +991,11 @@ units:
   attempts: 0
   feature: false
 - id: '17'
-  title: 'docs: Add module-level documentation to all public modules'
+  title: 'Memory audit fixes: cap unbounded buffers, reduce clone weight, limit agent history'
   status: closed
   priority: 2
-  updated_at: '2026-03-02T02:31:35.270727Z'
-  has_verify: false
+  updated_at: '2026-03-25T03:18:52.041991Z'
+  has_verify: true
   attempts: 0
   feature: false
 - id: '17.1'
@@ -1017,6 +1017,18 @@ units:
   claimed_by: pi-agent
   attempts: 0
   feature: false
+- id: '17.3'
+  title: Make Runtime clone lightweight by wrapping history and functions in Arc
+  status: closed
+  priority: 2
+  parent: '17'
+  dependencies:
+  - '17.1'
+  updated_at: '2026-03-25T03:18:51.504586Z'
+  has_verify: true
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
 - id: '17.4'
   title: Cap accumulated_stdout in execute() for non-interactive contexts
   status: closed
@@ -1027,6 +1039,27 @@ units:
   updated_at: '2026-03-25T01:56:55.377131Z'
   has_verify: true
   claimed_by: pi-agent
+  attempts: 0
+  feature: false
+- id: '17.5'
+  title: Cap agent conversation history to prevent unbounded memory in AI loop
+  status: closed
+  priority: 2
+  parent: '17'
+  updated_at: '2026-03-25T02:19:55.097242Z'
+  has_verify: true
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+- id: '17.6'
+  title: Eliminate needless Builtins/Corrector/SuggestionEngine allocation in static command substitution paths
+  status: closed
+  priority: 2
+  parent: '17'
+  dependencies:
+  - '17.3'
+  updated_at: '2026-03-25T03:18:51.798453Z'
+  has_verify: true
   attempts: 0
   feature: false
 - id: '18'

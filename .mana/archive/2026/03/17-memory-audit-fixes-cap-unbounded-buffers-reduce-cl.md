@@ -2,11 +2,14 @@
 id: '17'
 title: 'Memory audit fixes: cap unbounded buffers, reduce clone weight, limit agent history'
 slug: memory-audit-fixes-cap-unbounded-buffers-reduce-cl
-status: open
+status: closed
 priority: 2
 created_at: '2026-03-25T01:39:44.855043Z'
-updated_at: '2026-03-25T01:39:44.855043Z'
+updated_at: '2026-03-25T03:18:52.041991Z'
+closed_at: '2026-03-25T03:18:52.041991Z'
+close_reason: 'Auto-closed: all children completed'
 verify: echo "feature"
+is_archived: true
 ---
 
 Parent feature for all memory/resource audit fixes found in the March 2025 audit.

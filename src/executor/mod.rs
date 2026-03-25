@@ -1,4 +1,5 @@
 pub mod error_formatter;
+mod flow_signals;
 pub mod pipeline;
 pub mod profile;
 pub mod stack;
@@ -498,16 +499,14 @@ impl Executor {
             let piped_stdin = self.runtime.get_piped_stdin().map(|s| s.to_vec());
 
             // Helper to convert builtin errors to stderr in result (for redirect handling).
-            // ExitSignal is re-raised so callers can propagate the exit code correctly.
+            // Flow-control signals must propagate so loops, functions, and exit handling can
+            // catch them instead of treating them as ordinary command failures.
             let builtin_result_to_stderr =
                 |res: Result<ExecutionResult>, cmd_name: &str| -> Result<ExecutionResult> {
                     match res {
                         Ok(r) => Ok(r),
                         Err(e) => {
-                            // ExitSignal must propagate — don't swallow it into stderr.
-                            if e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>()
-                                .is_some()
-                            {
+                            if crate::executor::flow_signals::is_flow_control_signal(&e) {
                                 return Err(e);
                             }
                             Ok(ExecutionResult::error(format!("{}: {}\n", cmd_name, e)))
@@ -1558,8 +1557,12 @@ impl Executor {
             let handle = thread::spawn(move || {
                 let result = if builtins.is_builtin(&command.name) {
                     // Execute builtin
-                    let args =
-                        expand_and_resolve_arguments_static(&command.args, &runtime_snapshot)?;
+                    let args = expand_and_resolve_arguments_static(
+                        &command.args,
+                        &runtime_snapshot,
+                        &builtins,
+                        &corrector,
+                    )?;
 
                     // We need a mutable runtime, but we can't safely share it across threads
                     // For now, create a temporary runtime for builtins in parallel execution
@@ -1567,8 +1570,12 @@ impl Executor {
                     builtins.execute(&command.name, args, &mut temp_runtime)
                 } else {
                     // Execute external command
-                    let args =
-                        expand_and_resolve_arguments_static(&command.args, &runtime_snapshot)?;
+                    let args = expand_and_resolve_arguments_static(
+                        &command.args,
+                        &runtime_snapshot,
+                        &builtins,
+                        &corrector,
+                    )?;
 
                     match StdCommand::new(&command.name)
                         .args(&args)
@@ -3153,11 +3160,16 @@ pub fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
-fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
+fn resolve_argument_static(
+    arg: &Argument,
+    runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
+) -> String {
     match arg {
         Argument::Literal(s) => {
             if s.contains("$(") || s.contains('`') {
-                expand_command_substitutions_in_string_static(s, runtime)
+                expand_command_substitutions_in_string_static(s, runtime, builtins, corrector)
             } else {
                 s.clone()
             }
@@ -3200,8 +3212,8 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
                 if let Ok(statements) = parser.parse() {
                     let mut sub_executor = Executor {
                         runtime: runtime.clone(),
-                        builtins: Builtins::new(),
-                        corrector: Corrector::new(),
+                        builtins: builtins.clone(),
+                        corrector: corrector.clone(),
                         suggestion_engine: SuggestionEngine::new(),
                         signal_handler: None,
                         show_progress: false,
@@ -3244,18 +3256,24 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
                         result.push_str(&resolve_argument_static(
                             &Argument::Variable(v.clone()),
                             runtime,
+                            builtins,
+                            corrector,
                         ));
                     }
                     ArgumentPart::BracedVariable(v) => {
                         result.push_str(&resolve_argument_static(
                             &Argument::BracedVariable(v.clone()),
                             runtime,
+                            builtins,
+                            corrector,
                         ));
                     }
                     ArgumentPart::CommandSubstitution(c) => {
                         result.push_str(&resolve_argument_static(
                             &Argument::CommandSubstitution(c.clone()),
                             runtime,
+                            builtins,
+                            corrector,
                         ));
                     }
                 }
@@ -3269,6 +3287,8 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
 fn expand_and_resolve_arguments_static(
     args: &[Argument],
     runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
 ) -> Result<Vec<String>> {
     let mut expanded_args = Vec::new();
 
@@ -3284,7 +3304,7 @@ fn expand_and_resolve_arguments_static(
                 | Argument::CommandSubstitution(_)
         );
 
-        let resolved = resolve_argument_static(arg, runtime);
+        let resolved = resolve_argument_static(arg, runtime, builtins, corrector);
 
         if should_expand && glob_expansion::should_expand_glob(&resolved) {
             match glob_expansion::expand_globs(&resolved, runtime.get_cwd()) {
@@ -3308,6 +3328,8 @@ fn expand_and_resolve_arguments_static(
 pub(crate) fn expand_command_substitutions_in_string_static(
     input: &str,
     runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
 ) -> String {
     let mut result = String::with_capacity(input.len());
     let bytes = input.as_bytes();
@@ -3366,8 +3388,8 @@ pub(crate) fn expand_command_substitutions_in_string_static(
                     if let Ok(statements) = parser.parse() {
                         let mut sub_executor = Executor {
                             runtime: runtime.clone(),
-                            builtins: Builtins::new(),
-                            corrector: Corrector::new(),
+                            builtins: builtins.clone(),
+                            corrector: corrector.clone(),
                             suggestion_engine: SuggestionEngine::new(),
                             signal_handler: None,
                             show_progress: false,
@@ -3418,8 +3440,8 @@ pub(crate) fn expand_command_substitutions_in_string_static(
                     if let Ok(statements) = parser.parse() {
                         let mut sub_executor = Executor {
                             runtime: runtime.clone(),
-                            builtins: Builtins::new(),
-                            corrector: Corrector::new(),
+                            builtins: builtins.clone(),
+                            corrector: corrector.clone(),
                             suggestion_engine: SuggestionEngine::new(),
                             signal_handler: None,
                             show_progress: false,

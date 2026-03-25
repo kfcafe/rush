@@ -215,11 +215,7 @@ impl Executor {
                     Ok(r) => Ok(r),
                     Err(e) => {
                         // Propagate flow-control signals so loops/functions/exit can catch them
-                        if e.downcast_ref::<crate::builtins::break_builtin::BreakSignal>().is_some()
-                            || e.downcast_ref::<crate::builtins::continue_builtin::ContinueSignal>().is_some()
-                            || e.downcast_ref::<crate::builtins::return_builtin::ReturnSignal>().is_some()
-                            || e.downcast_ref::<crate::builtins::exit_builtin::ExitSignal>().is_some()
-                        {
+                        if crate::executor::flow_signals::is_flow_control_signal(&e) {
                             Err(e)
                         } else {
                             Ok(ExecutionResult::error(format!("{}: {}\n", cmd_name, e)))
