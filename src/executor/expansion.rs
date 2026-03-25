@@ -14,6 +14,30 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// Counter for generating unique process substitution FIFO paths
 static PROC_SUB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Maximum bytes captured from a command substitution before truncation.
+/// Configurable via RUSH_MAX_SUBST_OUTPUT env var. Default: 50MB.
+const DEFAULT_MAX_SUBSTITUTION_OUTPUT: usize = 50 * 1024 * 1024;
+
+fn max_substitution_output() -> usize {
+    std::env::var("RUSH_MAX_SUBST_OUTPUT")
+        .ok()
+        .and_then(|s| crate::run_api::parse_max_output(&s))
+        .unwrap_or(DEFAULT_MAX_SUBSTITUTION_OUTPUT)
+}
+
+/// Truncate a string to `max` bytes at a UTF-8 boundary, returning whether truncation occurred.
+fn truncate_output(output: &mut String, max: usize) -> bool {
+    if output.len() <= max {
+        return false;
+    }
+    output.truncate(max);
+    // Back up to a UTF-8 char boundary
+    while !output.is_char_boundary(output.len()) {
+        output.pop();
+    }
+    true
+}
+
 impl Executor {
     /// Expand a string value that may contain variable references ($VAR, ${VAR}, etc.)
     pub(crate) fn expand_string_value(&self, value: &str) -> Result<String> {
@@ -362,7 +386,12 @@ impl Executor {
         let mut parser = Parser::new(tokens);
         let stmts = parser.parse()?;
         let result = self.execute(stmts)?;
-        Ok(result.stdout())
+        let mut output = result.stdout();
+        let max = max_substitution_output();
+        if truncate_output(&mut output, max) {
+            eprintln!("rush: warning: command substitution output truncated at {} bytes", max);
+        }
+        Ok(output)
     }
 
     /// Resolve a special shell variable by name. Returns `Some(value)` for
@@ -736,7 +765,12 @@ impl Executor {
         let result = sub_executor.execute(statements)?;
 
         // Return stdout with trailing newlines trimmed (bash behavior)
-        Ok(result.stdout().trim_end().to_string())
+        let mut output = result.stdout().trim_end().to_string();
+        let max = max_substitution_output();
+        if truncate_output(&mut output, max) {
+            eprintln!("rush: warning: command substitution output truncated at {} bytes", max);
+        }
+        Ok(output)
     }
 
     /// Expand all command substitution sequences ($(...) and `...`) within a string.
@@ -935,7 +969,9 @@ pub(crate) fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> Stri
             hook_manager: Default::default(),
                     };
                     if let Ok(exec_result) = sub_executor.execute(statements) {
-                        return exec_result.stdout().trim_end().to_string();
+                        let mut out = exec_result.stdout().trim_end().to_string();
+                        truncate_output(&mut out, max_substitution_output());
+                        return out;
                     }
                 }
             }
@@ -1039,7 +1075,9 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
             hook_manager: Default::default(),
                         };
                         if let Ok(exec_result) = sub_executor.execute(statements) {
-                            result.push_str(exec_result.stdout().trim_end());
+                            let mut out = exec_result.stdout().trim_end().to_string();
+                            truncate_output(&mut out, max_substitution_output());
+                            result.push_str(&out);
                             i = j;
                             continue;
                         }
@@ -1079,7 +1117,9 @@ pub(crate) fn expand_command_substitutions_in_string_static(input: &str, runtime
             hook_manager: Default::default(),
                         };
                         if let Ok(exec_result) = sub_executor.execute(statements) {
-                            result.push_str(exec_result.stdout().trim_end());
+                            let mut out = exec_result.stdout().trim_end().to_string();
+                            truncate_output(&mut out, max_substitution_output());
+                            result.push_str(&out);
                             i = j;
                             continue;
                         }
@@ -1201,5 +1241,43 @@ fn pattern_matches_helper(pattern: &[char], text: &[char]) -> bool {
                 pattern_matches_helper(&pattern[1..], &text[1..])
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod substitution_cap_tests {
+    use super::*;
+
+    #[test]
+    fn test_command_substitution_output_cap_defaults() {
+        assert!(DEFAULT_MAX_SUBSTITUTION_OUTPUT >= 1024 * 1024);
+        assert!(DEFAULT_MAX_SUBSTITUTION_OUTPUT <= 100 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_command_substitution_output_cap_env() {
+        std::env::set_var("RUSH_MAX_SUBST_OUTPUT", "1KB");
+        assert_eq!(max_substitution_output(), 1024);
+        std::env::remove_var("RUSH_MAX_SUBST_OUTPUT");
+    }
+
+    #[test]
+    fn test_truncate_output() {
+        let mut s = "hello world".to_string();
+        assert!(!truncate_output(&mut s, 100));
+        assert_eq!(s, "hello world");
+
+        let mut s = "hello world".to_string();
+        assert!(truncate_output(&mut s, 5));
+        assert_eq!(s, "hello");
+    }
+
+    #[test]
+    fn test_truncate_output_utf8_boundary() {
+        // "café" is 5 bytes (é = 2 bytes in UTF-8)
+        let mut s = "café".to_string();
+        assert!(truncate_output(&mut s, 4));
+        // Should truncate to "caf" (3 bytes), not split the é
+        assert_eq!(s, "caf");
     }
 }

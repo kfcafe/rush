@@ -1,19 +1,4 @@
 units:
-- id: '6'
-  title: 'goal: Rush daily-driver readiness'
-  status: open
-  priority: 0
-  labels:
-  - shell
-  - daily-driver
-  - circuit-breaker
-  updated_at: '2026-03-24T17:37:00.200119Z'
-  has_verify: true
-  verify: cargo test --test quoting_tests 2>&1 | grep -q "0 failed"
-  created_at: '2026-03-17T05:54:52.686692Z'
-  attempts: 5
-  feature: false
-  has_decisions: false
 - id: '6.3'
   title: 'tier-3: Pipeline hardening'
   status: open
@@ -25,13 +10,10 @@ units:
   - executor
   - pipeline
   - circuit-breaker
-  updated_at: '2026-03-24T17:37:00.421615Z'
+  updated_at: '2026-03-25T00:04:54.639537Z'
   has_verify: true
-  verify: echo "echo hello | cat | cat | wc -l" | cargo run --quiet 2>/dev/null | grep -q "1"
-  created_at: '2026-03-17T05:56:25.688346Z'
-  attempts: 5
+  attempts: 6
   feature: false
-  has_decisions: false
 - id: '6.4'
   title: 'tier-4: Non-interactive mode'
   status: open
@@ -43,27 +25,10 @@ units:
   - main
   - executor
   - circuit-breaker
-  updated_at: '2026-03-24T17:37:00.590749Z'
+  updated_at: '2026-03-25T00:04:54.843424Z'
   has_verify: true
-  verify: echo "echo hello" | cargo run --quiet 2>/dev/null | grep -q "hello"
-  created_at: '2026-03-17T05:56:34.700683Z'
-  attempts: 5
+  attempts: 6
   feature: false
-  has_decisions: false
-- id: '6.5'
-  title: 'tier-1: Double-quote expansion'
-  status: open
-  priority: 0
-  parent: '6'
-  labels:
-  - circuit-breaker
-  updated_at: '2026-03-24T17:37:01.143155Z'
-  has_verify: true
-  verify: cargo test --test quoting_tests 2>&1 | grep -q "0 failed"
-  created_at: '2026-03-17T06:38:05.421228Z'
-  attempts: 5
-  feature: false
-  has_decisions: false
 - id: '6.5.3'
   title: Parse double-quoted strings into DoubleQuoted parts
   status: open
@@ -73,35 +38,13 @@ units:
   - '6.5.1'
   labels:
   - circuit-breaker
-  updated_at: '2026-03-24T18:20:53.911699Z'
+  updated_at: '2026-03-25T00:04:55.431089Z'
   requires:
   - ArgumentPart
   - DoubleQuoted
   has_verify: true
-  verify: cargo test --test quoting_tests test_double_quotes_escape_dollar test_double_quotes_escape_backtick test_quote_escaping_with_variable test_nested_command_substitution_with_quotes 2>&1 | grep -q "4 passed; 0 failed"
-  created_at: '2026-03-17T06:39:17.769012Z'
-  attempts: 5
+  attempts: 6
   feature: false
-  has_decisions: false
-- id: '6.5.4'
-  title: Adjacent quoted string concatenation
-  status: open
-  priority: 0
-  parent: '6.5'
-  dependencies:
-  - '6.5.1'
-  labels:
-  - circuit-breaker
-  updated_at: '2026-03-24T18:20:53.915817Z'
-  requires:
-  - DoubleQuoted
-  - SingleQuoted
-  has_verify: true
-  verify: cargo test --test quoting_tests test_adjacent_quoted_strings 2>&1 | grep -q "1 passed; 0 failed"
-  created_at: '2026-03-17T06:39:30.917223Z'
-  attempts: 5
-  feature: false
-  has_decisions: false
 - id: '10'
   title: 'bug: grep -q (quiet mode) not supported'
   status: in_progress
@@ -111,12 +54,9 @@ units:
   - grep
   updated_at: '2026-03-24T16:36:05.079051Z'
   has_verify: true
-  verify: echo "hello" | ~/bin/rush -c 'grep -q hello' && echo pass
-  created_at: '2026-03-24T02:40:45.241087Z'
   claimed_by: pi-agent
   attempts: 2
   feature: false
-  has_decisions: false
 - id: '11'
   title: 'bug: semicolon sequencing fails after non-builtin commands'
   status: in_progress
@@ -127,9 +67,46 @@ units:
   - critical
   updated_at: '2026-03-24T16:36:05.070308Z'
   has_verify: true
-  verify: ~/bin/rush -c 'sleep 0; echo done' 2>&1 | grep -v "Expected command name" | grep done
-  created_at: '2026-03-24T02:43:58.753579Z'
   claimed_by: pi-agent
   attempts: 2
   feature: false
-  has_decisions: false
+- id: '17'
+  title: 'Memory audit fixes: cap unbounded buffers, reduce clone weight, limit agent history'
+  status: open
+  priority: 2
+  updated_at: '2026-03-25T01:39:44.855043Z'
+  has_verify: true
+  attempts: 0
+  feature: false
+- id: '17.3'
+  title: Make Runtime clone lightweight by wrapping history and functions in Arc
+  status: open
+  priority: 2
+  parent: '17'
+  dependencies:
+  - '17.1'
+  updated_at: '2026-03-25T01:41:08.016896Z'
+  has_verify: true
+  attempts: 0
+  feature: false
+- id: '17.5'
+  title: Cap agent conversation history to prevent unbounded memory in AI loop
+  status: in_progress
+  priority: 2
+  parent: '17'
+  updated_at: '2026-03-25T01:54:34.791793Z'
+  has_verify: true
+  claimed_by: pi-agent
+  attempts: 0
+  feature: false
+- id: '17.6'
+  title: Eliminate needless Builtins/Corrector/SuggestionEngine allocation in static command substitution paths
+  status: open
+  priority: 2
+  parent: '17'
+  dependencies:
+  - '17.3'
+  updated_at: '2026-03-25T01:53:26.924561Z'
+  has_verify: true
+  attempts: 0
+  feature: false

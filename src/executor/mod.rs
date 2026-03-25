@@ -12,6 +12,17 @@ pub use stack::CallStack;
 pub use suggestions::{SuggestionConfig, SuggestionEngine};
 
 use crate::ai::client::{LlmClient, Message, Response};
+
+/// Maximum bytes captured from a command substitution before truncation.
+/// Configurable via RUSH_MAX_SUBST_OUTPUT env var. Default: 50MB.
+const DEFAULT_MAX_SUBSTITUTION_OUTPUT: usize = 50 * 1024 * 1024;
+
+fn max_substitution_output() -> usize {
+    std::env::var("RUSH_MAX_SUBST_OUTPUT")
+        .ok()
+        .and_then(|s| crate::run_api::parse_max_output(&s))
+        .unwrap_or(DEFAULT_MAX_SUBSTITUTION_OUTPUT)
+}
 use crate::arithmetic;
 use crate::builtins::Builtins;
 use crate::correction::Corrector;
@@ -167,6 +178,24 @@ impl Executor {
             accumulated_stderr.push_str(&result.stderr);
             last_exit_code = result.exit_code;
             last_output = result.output;
+
+            // Cap accumulated output to prevent unbounded memory growth.
+            // This matters most in command substitution contexts where all
+            // output is captured into a String.
+            const MAX_ACCUMULATED: usize = 50 * 1024 * 1024; // 50MB
+            if accumulated_stdout.len() > MAX_ACCUMULATED {
+                accumulated_stdout.truncate(MAX_ACCUMULATED);
+                // Ensure we're at a UTF-8 boundary
+                while !accumulated_stdout.is_char_boundary(accumulated_stdout.len()) {
+                    accumulated_stdout.pop();
+                }
+                // Only warn once
+                if accumulated_stderr.is_empty() || !accumulated_stderr.contains("output truncated")
+                {
+                    accumulated_stderr
+                        .push_str("rush: warning: accumulated output truncated at 50MB\n");
+                }
+            }
 
             // Update $? after each statement
             self.runtime.set_last_exit_code(last_exit_code);
@@ -1490,7 +1519,19 @@ impl Executor {
         let mut parser = Parser::new(tokens);
         let stmts = parser.parse()?;
         let result = self.execute(stmts)?;
-        Ok(result.stdout())
+        let mut output = result.stdout();
+        let max = max_substitution_output();
+        if output.len() > max {
+            output.truncate(max);
+            while !output.is_char_boundary(output.len()) {
+                output.pop();
+            }
+            eprintln!(
+                "rush: warning: command substitution output truncated at {} bytes",
+                max
+            );
+        }
+        Ok(output)
     }
 
     fn execute_pipeline(&mut self, pipeline: Pipeline) -> Result<ExecutionResult> {
@@ -2829,9 +2870,21 @@ impl Executor {
 
         // Execute the command and capture output
         let result = sub_executor.execute(statements)?;
+        let mut output = result.stdout();
+        let max = max_substitution_output();
+        if output.len() > max {
+            output.truncate(max);
+            while !output.is_char_boundary(output.len()) {
+                output.pop();
+            }
+            eprintln!(
+                "rush: warning: command substitution output truncated at {} bytes",
+                max
+            );
+        }
 
         // Return stdout with trailing newlines trimmed (bash behavior)
-        Ok(result.stdout().trim_end().to_string())
+        Ok(output.trim_end().to_string())
     }
 
     /// Expand all command substitution sequences ($(...) and `...`) within a string.
@@ -3158,7 +3211,19 @@ fn resolve_argument_static(arg: &Argument, runtime: &Runtime) -> String {
                         enable_profiling: false,
                     };
                     if let Ok(exec_result) = sub_executor.execute(statements) {
-                        return exec_result.stdout().trim_end().to_string();
+                        let mut out = exec_result.stdout();
+                        let max = max_substitution_output();
+                        if out.len() > max {
+                            out.truncate(max);
+                            while !out.is_char_boundary(out.len()) {
+                                out.pop();
+                            }
+                            eprintln!(
+                                "rush: warning: command substitution output truncated at {} bytes",
+                                max
+                            );
+                        }
+                        return out.trim_end().to_string();
                     }
                 }
             }
@@ -3312,7 +3377,16 @@ pub(crate) fn expand_command_substitutions_in_string_static(
                             enable_profiling: false,
                         };
                         if let Ok(exec_result) = sub_executor.execute(statements) {
-                            result.push_str(exec_result.stdout().trim_end());
+                            let mut out = exec_result.stdout();
+                            let max = max_substitution_output();
+                            if out.len() > max {
+                                out.truncate(max);
+                                while !out.is_char_boundary(out.len()) {
+                                    out.pop();
+                                }
+                                eprintln!("rush: warning: command substitution output truncated at {} bytes", max);
+                            }
+                            result.push_str(out.trim_end());
                             i = j;
                             continue;
                         }
@@ -3355,7 +3429,16 @@ pub(crate) fn expand_command_substitutions_in_string_static(
                             enable_profiling: false,
                         };
                         if let Ok(exec_result) = sub_executor.execute(statements) {
-                            result.push_str(exec_result.stdout().trim_end());
+                            let mut out = exec_result.stdout();
+                            let max = max_substitution_output();
+                            if out.len() > max {
+                                out.truncate(max);
+                                while !out.is_char_boundary(out.len()) {
+                                    out.pop();
+                                }
+                                eprintln!("rush: warning: command substitution output truncated at {} bytes", max);
+                            }
+                            result.push_str(out.trim_end());
                             i = j;
                             continue;
                         }
@@ -3794,7 +3877,15 @@ pub(crate) fn expand_redirect_target(input: &str, runtime: &Runtime) -> String {
                                         enable_profiling: false,
                                     };
                                     if let Ok(exec_result) = sub_executor.execute(statements) {
-                                        let out = exec_result.stdout();
+                                        let mut out = exec_result.stdout();
+                                        let max = max_substitution_output();
+                                        if out.len() > max {
+                                            out.truncate(max);
+                                            while !out.is_char_boundary(out.len()) {
+                                                out.pop();
+                                            }
+                                            eprintln!("rush: warning: command substitution output truncated at {} bytes", max);
+                                        }
                                         result.push_str(out.trim_end());
                                         i = j + 1;
                                         continue;
@@ -4465,5 +4556,25 @@ VAR_AFTER_ERROR=should_be_set
             executor.runtime_mut().get_variable("VAR_AFTER_ERROR"),
             Some("should_be_set".to_string())
         );
+    }
+}
+
+#[cfg(test)]
+mod substitution_cap_tests {
+    use super::*;
+
+    #[test]
+    fn test_command_substitution_output_cap() {
+        // Verify the constant exists and has a reasonable default
+        assert!(DEFAULT_MAX_SUBSTITUTION_OUTPUT >= 1024 * 1024); // at least 1MB
+        assert!(DEFAULT_MAX_SUBSTITUTION_OUTPUT <= 100 * 1024 * 1024); // at most 100MB
+
+        // Verify the function respects the env var
+        std::env::set_var("RUSH_MAX_SUBST_OUTPUT", "1KB");
+        assert_eq!(max_substitution_output(), 1024);
+        std::env::remove_var("RUSH_MAX_SUBST_OUTPUT");
+
+        // After removing, should return the default
+        assert_eq!(max_substitution_output(), DEFAULT_MAX_SUBSTITUTION_OUTPUT);
     }
 }

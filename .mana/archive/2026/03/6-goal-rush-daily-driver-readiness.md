@@ -2,10 +2,10 @@
 id: '6'
 title: 'goal: Rush daily-driver readiness'
 slug: goal-rush-daily-driver-readiness
-status: open
+status: closed
 priority: 0
 created_at: '2026-03-17T05:54:52.686692Z'
-updated_at: '2026-03-24T17:37:00.200119Z'
+updated_at: '2026-03-25T00:04:54.475081Z'
 notes: |2
 
   ## Attempt 1 — 2026-03-24T16:34:56Z
@@ -46,8 +46,11 @@ labels:
 - shell
 - daily-driver
 - circuit-breaker
+closed_at: '2026-03-25T00:04:54.475081Z'
+close_reason: verify passed (tidy sweep)
 verify: cargo test --test quoting_tests 2>&1 | grep -q "0 failed"
 attempts: 5
+is_archived: true
 history:
 - attempt: 1
   started_at: '2026-03-24T16:34:40.026718Z'
@@ -79,6 +82,12 @@ history:
   duration_secs: 5.899
   result: fail
   exit_code: 1
+- attempt: 6
+  started_at: '2026-03-25T00:04:53.894428Z'
+  finished_at: '2026-03-25T00:04:54.436047Z'
+  duration_secs: 0.541
+  result: pass
+  exit_code: 0
 ---
 
 ## Problem

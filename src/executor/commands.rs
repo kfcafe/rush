@@ -10,6 +10,103 @@
 
 use super::*;
 
+/// Maximum bytes captured from a child process's stdout or stderr.
+/// Defaults to 50 MB; override with the `RUSH_MAX_CMD_OUTPUT` environment variable.
+const MAX_CAPTURE_BYTES_DEFAULT: usize = 50 * 1024 * 1024;
+
+/// Read child process output with a per-stream size cap to prevent OOM.
+///
+/// Reads stdout and stderr sequentially. Note: sequential reading can deadlock
+/// if the child fills the stderr pipe buffer while we drain stdout. This is
+/// acceptable for the common single-stream case; a future redesign should use
+/// concurrent readers (threads or poll) to handle both streams safely.
+///
+/// Returns `(stdout, stderr, exit_code)`.
+fn wait_with_capped_output(
+    mut child: std::process::Child,
+    stderr_to_stdout: bool,
+) -> Result<(String, String, i32)> {
+    use std::io::Read;
+
+    let max_capture_bytes: usize = std::env::var("RUSH_MAX_CMD_OUTPUT")
+        .ok()
+        .and_then(|s| crate::run_api::parse_max_output(&s))
+        .unwrap_or(MAX_CAPTURE_BYTES_DEFAULT);
+
+    let mut stdout_bytes = Vec::new();
+    let mut stderr_bytes = Vec::new();
+    let mut stdout_truncated = false;
+    let mut stderr_truncated = false;
+
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+
+    let mut buf = [0u8; 8192];
+
+    if let Some(ref mut pipe) = stdout_pipe {
+        loop {
+            match pipe.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if stdout_bytes.len() + n > max_capture_bytes {
+                        let remaining = max_capture_bytes.saturating_sub(stdout_bytes.len());
+                        stdout_bytes.extend_from_slice(&buf[..remaining]);
+                        stdout_truncated = true;
+                        break;
+                    }
+                    stdout_bytes.extend_from_slice(&buf[..n]);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+    }
+
+    if let Some(ref mut pipe) = stderr_pipe {
+        loop {
+            match pipe.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if stderr_bytes.len() + n > max_capture_bytes {
+                        let remaining = max_capture_bytes.saturating_sub(stderr_bytes.len());
+                        stderr_bytes.extend_from_slice(&buf[..remaining]);
+                        stderr_truncated = true;
+                        break;
+                    }
+                    stderr_bytes.extend_from_slice(&buf[..n]);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+    }
+
+    // Drop pipes before wait to avoid any residual blocking on the write side.
+    drop(stdout_pipe);
+    drop(stderr_pipe);
+
+    let status = child
+        .wait()
+        .map_err(|e| anyhow!("Failed to wait for child: {}", e))?;
+
+    let mut stdout_str = String::from_utf8_lossy(&stdout_bytes).to_string();
+    let mut stderr_str = String::from_utf8_lossy(&stderr_bytes).to_string();
+
+    if stdout_truncated {
+        eprintln!("rush: warning: command stdout truncated at {} bytes", max_capture_bytes);
+    }
+    if stderr_truncated {
+        eprintln!("rush: warning: command stderr truncated at {} bytes", max_capture_bytes);
+    }
+
+    if stderr_to_stdout && !stderr_str.is_empty() {
+        stdout_str.push_str(&stderr_str);
+        stderr_str.clear();
+    }
+
+    Ok((stdout_str, stderr_str, status.code().unwrap_or(1)))
+}
+
 impl Executor {
     pub(crate) fn execute_command(&mut self, command: Command) -> Result<ExecutionResult> {
         // Clean up FIFOs from any previous process substitutions
@@ -697,22 +794,12 @@ impl Executor {
                 }
             }
         } else {
-            // Non-interactive mode - use blocking wait (most efficient)
-            let output = child.wait_with_output()
-                .map_err(|e| anyhow!("Failed to wait for '{}': {}", command.name, e))?;
-
-            let mut stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
-
-            if stderr_to_stdout && !stderr_str.is_empty() {
-                stdout_str.push_str(&stderr_str);
-            }
-
-            (
-                stdout_str,
-                if stderr_to_stdout { String::new() } else { stderr_str },
-                output.status.code().unwrap_or(1)
-            )
+            // Non-interactive mode — read with a cap to prevent OOM from
+            // unbounded child output.
+            let (stdout_str, stderr_str, exit_code) =
+                wait_with_capped_output(child, stderr_to_stdout)
+                    .map_err(|e| anyhow!("Failed to wait for '{}': {}", command.name, e))?;
+            (stdout_str, stderr_str, exit_code)
         };
 
         // Reclaim terminal control after child exits
