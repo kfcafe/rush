@@ -754,15 +754,37 @@ fn run_interactive_with_reedline(
     let mut command_history: Vec<String> = Vec::new();
     const MAX_HISTORY_FOR_CONTEXT: usize = 20;
 
+    // Rapid-return detection: if reedline returns many times in quick
+    // succession (< 50ms each) the PTY is almost certainly dead.  This
+    // catches the case where isatty() still returns 1 on macOS revoked PTYs
+    // and reedline spins returning CtrlC / empty Success instead of an error.
+    let mut rapid_return_count: u32 = 0;
+    const RAPID_RETURN_LIMIT: u32 = 20;
     loop {
-        // Check if stdin is still a valid terminal.
-        // On macOS, closing a terminal tab "revokes" the PTY, leaving the
-        // shell process alive with dead file descriptors.  Without this
-        // guard, reedline enters a tight poll/read error loop and the
-        // process never exits — accumulating CPU time and inflating
-        // Activity Monitor memory counts.
+        // ── PTY health checks ──────────────────────────────────────────
+        // 1. isatty: catches clean tab-close (PTY fd becomes a pipe/closed)
         if unsafe { libc::isatty(libc::STDIN_FILENO) } == 0 {
             break;
+        }
+
+        // 2. Try a non-blocking read of zero bytes — EIO/ENXIO means the
+        //    PTY master is gone (Ghostty force-quit).  poll() with a 0ms
+        //    timeout is the cheapest way to detect a revoked PTY on macOS.
+        {
+            let mut pfd = libc::pollfd {
+                fd: libc::STDIN_FILENO,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let ret = unsafe { libc::poll(&mut pfd, 1, 0) };
+            if ret < 0 {
+                // poll itself failed — fd is dead
+                break;
+            }
+            if pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+                // PTY master closed / revoked
+                break;
+            }
         }
 
         // Check for signals before reading next line
@@ -803,7 +825,27 @@ fn run_interactive_with_reedline(
         terminal::emit_osc7_cwd();
         terminal::set_terminal_title_to_cwd();
 
+        let read_start = std::time::Instant::now();
         let sig = line_editor.read_line(&prompt);
+
+        // ── Rapid-return detection ──────────────────────────────────
+        // Normal interactive input takes >= 100ms (human typing).
+        // If reedline returns in < 50ms repeatedly, the PTY is dead and
+        // reedline is spinning.  Exit before we eat all RAM.
+        let read_elapsed = read_start.elapsed();
+        if read_elapsed < std::time::Duration::from_millis(50) {
+            rapid_return_count += 1;
+            if rapid_return_count >= RAPID_RETURN_LIMIT {
+                // PTY is dead — exit cleanly
+                let _ = std::io::Write::write_all(
+                    &mut std::io::stderr(),
+                    b"rush: terminal lost, exiting\n",
+                );
+                break;
+            }
+        } else {
+            rapid_return_count = 0;
+        }
 
         match sig {
             Ok(Signal::Success(buffer)) => {
@@ -812,6 +854,9 @@ fn run_interactive_with_reedline(
                 if line.is_empty() {
                     continue;
                 }
+
+                // Reset rapid-return counter — user gave real input
+                rapid_return_count = 0;
 
                 // Check for intent query (? prefix)
                 if intent::is_intent_query(line) {
