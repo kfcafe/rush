@@ -1,5 +1,6 @@
 use super::{structured_to_text_lines, CallStack, ExecutionResult, Executor, Output};
 use crate::builtins::Builtins;
+use crate::correction::Corrector;
 use crate::executor::structured_ops::execute_structured_op;
 use crate::executor::suggestions::SuggestionEngine;
 use crate::glob_expansion;
@@ -431,7 +432,8 @@ fn execute_pipeline_command(
 
     // Check if it's a builtin
     let mut result = if builtins.is_builtin(&cmd_name) {
-        let args = resolve_and_expand_arguments(&combined_args, runtime);
+        let corrector = Corrector::new();
+        let args = resolve_and_expand_arguments(&combined_args, runtime, builtins, &corrector);
 
         // Use execute_with_stdin to properly handle piped input
         builtins.execute_with_stdin(&cmd_name, args, runtime, stdin)?
@@ -549,7 +551,9 @@ fn execute_external_pipeline_command(
     runtime: &Runtime,
     stdin: Option<&[u8]>,
 ) -> Result<ExecutionResult> {
-    let args = resolve_and_expand_arguments(&command.args, runtime);
+    let builtins = Builtins::new();
+    let corrector = Corrector::new();
+    let args = resolve_and_expand_arguments(&command.args, runtime, &builtins, &corrector);
 
     let mut cmd = StdCommand::new(&command.name);
     cmd.args(&args)
@@ -607,15 +611,20 @@ fn execute_single_command(
     execute_pipeline_command(command, runtime, builtins, None)
 }
 
-fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
+fn resolve_argument(
+    arg: &Argument,
+    runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
+) -> String {
     match arg {
         Argument::Literal(s) => {
             if s.contains("$(") || s.contains('`') {
                 super::expand_command_substitutions_in_string_static(
                     s,
                     runtime,
-                    &Builtins::new(),
-                    &crate::correction::Corrector::new(),
+                    builtins,
+                    corrector,
                 )
             } else {
                 s.clone()
@@ -657,8 +666,8 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
                 if let Ok(statements) = parser.parse() {
                     let mut sub_executor = Executor {
                         runtime: runtime.clone(),
-                        builtins: Builtins::new(),
-                        corrector: Corrector::new(),
+                        builtins: builtins.clone(),
+                        corrector: corrector.clone(),
                         suggestion_engine: SuggestionEngine::new(),
                         signal_handler: None,
                         terminal_control: crate::terminal::TerminalControl::new(),
@@ -686,18 +695,27 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
                 match part {
                     ArgumentPart::Literal(s) => result.push_str(s),
                     ArgumentPart::Variable(v) => {
-                        result.push_str(&resolve_argument(&Argument::Variable(v.clone()), runtime));
+                        result.push_str(&resolve_argument(
+                            &Argument::Variable(v.clone()),
+                            runtime,
+                            builtins,
+                            corrector,
+                        ));
                     }
                     ArgumentPart::BracedVariable(v) => {
                         result.push_str(&resolve_argument(
                             &Argument::BracedVariable(v.clone()),
                             runtime,
+                            builtins,
+                            corrector,
                         ));
                     }
                     ArgumentPart::CommandSubstitution(c) => {
                         result.push_str(&resolve_argument(
                             &Argument::CommandSubstitution(c.clone()),
                             runtime,
+                            builtins,
+                            corrector,
                         ));
                     }
                 }
@@ -709,7 +727,12 @@ fn resolve_argument(arg: &Argument, runtime: &Runtime) -> String {
 
 /// Resolve arguments and expand globs for pipeline commands.
 /// This ensures glob expansion works in pipeline stages just like in regular commands.
-fn resolve_and_expand_arguments(args: &[Argument], runtime: &Runtime) -> Vec<String> {
+fn resolve_and_expand_arguments(
+    args: &[Argument],
+    runtime: &Runtime,
+    builtins: &Builtins,
+    corrector: &Corrector,
+) -> Vec<String> {
     let mut expanded = Vec::new();
     for arg in args {
         let should_expand = matches!(
@@ -720,7 +743,7 @@ fn resolve_and_expand_arguments(args: &[Argument], runtime: &Runtime) -> Vec<Str
                 | Argument::BracedVariable(_)
                 | Argument::CommandSubstitution(_)
         );
-        let resolved = resolve_argument(arg, runtime);
+        let resolved = resolve_argument(arg, runtime, builtins, corrector);
         if should_expand && glob_expansion::should_expand_glob(&resolved) {
             match glob_expansion::expand_globs(&resolved, runtime.get_cwd()) {
                 Ok(matches) => expanded.extend(matches),
