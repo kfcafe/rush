@@ -475,10 +475,8 @@ fn parse_double_quoted_string(lex: &mut logos::Lexer<Token>) -> Option<String> {
         }
     }
 
-    // Unterminated string — return what we have
-    let result = input[start..pos].to_string();
-    lex.bump(pos - lex.span().end);
-    Some(result)
+    // Unterminated string — report a lexer error instead of silently accepting it.
+    None
 }
 
 // Custom parser for $(...) that handles nesting
@@ -1096,6 +1094,13 @@ mod tests {
         } else {
             panic!("Expected String token, got {:?}", tokens[1]);
         }
+    }
+
+    #[test]
+    fn test_unterminated_double_string_errors() {
+        let err = Lexer::tokenize("echo \"unterminated").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid token"), "Unexpected lexer error: {msg}");
     }
 
     #[test]

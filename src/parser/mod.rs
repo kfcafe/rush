@@ -2725,7 +2725,16 @@ mod tests {
                     Argument::Literal(s) => {
                         assert_eq!(s, "test\"", "Expected 'test\"', got '{}'", s);
                     }
-                    other => panic!("Expected Literal argument, got {:?}", other),
+                    Argument::DoubleQuoted(parts) => {
+                        assert_eq!(parts.len(), 1, "Expected 1 quoted part, got {:?}", parts);
+                        match &parts[0] {
+                            ArgumentPart::Literal(s) => {
+                                assert_eq!(s, "test\"", "Expected 'test\"', got '{}'", s);
+                            }
+                            other => panic!("Expected Literal quoted part, got {:?}", other),
+                        }
+                    }
+                    other => panic!("Expected Literal or DoubleQuoted argument, got {:?}", other),
                 }
             }
             other => panic!("Expected Command, got {:?}", other),

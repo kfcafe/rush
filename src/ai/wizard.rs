@@ -307,12 +307,17 @@ fn recommended_model(models: &[String]) -> String {
 /// Human-readable model summary: `qwen2.5-coder:7b` → `qwen2.5-coder (7B)`
 fn summarise_model(name: &str) -> String {
     if let Some((base, tag)) = name.split_once(':') {
-        let tag_upper = tag.to_uppercase();
-        // Only append tag if it looks like a size suffix (e.g. "7b", "13b", "latest")
-        if tag_upper.ends_with('B') || tag == "latest" {
-            format!("{} ({})", base, tag_upper)
+        // Preserve the special `latest` tag as lowercase, but normalize size
+        // suffixes like `7b`/`13b` for nicer display.
+        if tag.eq_ignore_ascii_case("latest") {
+            format!("{} (latest)", base)
         } else {
-            name.to_string()
+            let tag_upper = tag.to_uppercase();
+            if tag_upper.ends_with('B') {
+                format!("{} ({})", base, tag_upper)
+            } else {
+                name.to_string()
+            }
         }
     } else {
         name.to_string()

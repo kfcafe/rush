@@ -121,7 +121,7 @@ pub struct BannerConfig {
 impl Default for BannerConfig {
     fn default() -> Self {
         Self {
-            style: BannerStyle::None,
+            style: BannerStyle::Block,
             color: BannerColor::Cyan,
             show: BannerShow::Always,
             stats: Vec::new(),
