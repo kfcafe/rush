@@ -685,9 +685,9 @@ mod tests {
         )
         .unwrap();
 
-        // Should have non-zero exit code
+        // Should have non-zero exit code and report the problem on stderr.
         assert_eq!(result.exit_code, 1);
-        assert!(result.stdout().contains("cannot access"));
+        assert!(result.stderr.contains("cannot access"));
     }
 
     #[test]
